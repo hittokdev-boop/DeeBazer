@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -20,160 +20,219 @@ import AllColors from '../Constants/Color';
 
 import CommonLoginModal from './../Common/Login';
 import { useNavigation } from '@react-navigation/native';
-import { getuserId } from '../Api/Api';
+import { BASE_URL, getToken, getuserId,  } from '../Api/Api';
 import Toast from 'react-native-toast-message';
 import Swiper from 'react-native-swiper';
 // import Feather from 'react-native-vector-icons/Feather'
 const { width } = Dimensions.get('window');
 import Ionicons from 'react-native-vector-icons/Ionicons';
 export default function DashBoard() {
-  const [selected, setSelected] = useState('1');
+  
   const [id,setId]=useState('')
   const [open,setOpen]=useState(false)
-  const images = [
-  {
-    id: 1,
-    image: 'http://ordinaree.com/cdn/shop/files/SPW_3220_5d1d71ef-0699-4de2-84fc-195e1f064aef.jpg?v=1756703234',
-  },
-  {
-    id: 2,
-    image: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRxqp0vUxznXRs0QZSC2bQD1fwgPkKuRhOnDg&s',
-  },
-  {
-    id: 3,
-    image: 'https://img.drz.lazcdn.com/static/bd/p/97fc6d72eb86bddb1f11dc9d72efbc8f.jpg_720x720q80.jpg_.webp',
-  },
-];
+  const [catagories,setCategories]=useState([])
+  const [slug,setSlug]=useState('')
+  const [catagoriesId,setCategoriesId]=useState('all')
+  const [product,setProduct]=useState([])
+  const [dealOfTheDay,setDealOfTheDay]=useState([])
+  const [latestproducts,setLatestproducts]=useState([])
+  const [featuredproducts,setFeaturedproducts]=useState([])
+  const [bestsellingProduct,setBestsellingProduct]=useState([])
+  const [popularProduct,setPopularProduct]=useState([])
+ 
 
-  const categories = [
-    { id: '1', title: 'Trending',icon:'trending-up'},
-    { id: '2', title: 'Seasonal' ,icon:'sun'},
-    { id: '3', title: 'New Arrivals',icon:"headphones" },
-    { id: '4', title: 'Popular', icon:'zap'},
-    { id: '5', title: 'Best Seller',icon:'eye' },
-  ];
-
-const products = [
-  {
-    id: '1',
-    title: 'Running Shoes',
-    subtitle: 'Nike Air Max',
-    price: '₹1499',
-    oldPrice: '₹1999',
-    discount: '25% OFF',
-    rating: 4.8,
-    reviews: 245,
-    stock: 'In Stock',
-    delivery: 'Free Delivery',
-    category: 'Trending',
-    icon: 'flame',
-    favorite: true,
-    image:
-      'https://images.unsplash.com/photo-1542291026-7eec264c27ff',
-    bg: '#FDEFF1',
-  },
-
-  {
-    id: '2',
-    title: 'Smart Watch',
-    subtitle: 'Apple Series 8',
-    price: '₹2999',
-    oldPrice: '₹3999',
-    discount: '40% OFF',
-    rating: 4.9,
-    reviews: 540,
-    stock: 'Only 3 Left',
-    delivery: 'Fast Delivery',
-    category: 'Best Seller',
-    icon: 'trophy',
-    favorite: false,
-    image:
-      'https://images.unsplash.com/photo-1523275335684-37898b6baf30',
-    bg: '#FFF6E9',
-  },
-
-  {
-    id: '3',
-    title: 'Oversized T-Shirt',
-    subtitle: 'Summer Collection',
-    price: '₹499',
-    oldPrice: '₹799',
-    discount: '35% OFF',
-    rating: 4.5,
-    reviews: 120,
-    stock: 'In Stock',
-    delivery: 'Free Delivery',
-    category: 'New Arrival',
-    icon: 'sparkles',
-    favorite: true,
-    image:
-      'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab',
-    bg: '#EEF9FB',
-  },
-
-  {
-    id: '4',
-    title: 'Leather Backpack',
-    subtitle: 'Travel Edition',
-    price: '₹1299',
-    oldPrice: '₹1899',
-    discount: '20% OFF',
-    rating: 4.7,
-    reviews: 310,
-    stock: 'Limited Stock',
-    delivery: 'Express Delivery',
-    category: 'Popular',
-    icon: 'heart',
-    favorite: false,
-    image:
-      'https://images.unsplash.com/photo-1553062407-98eeb64c6a62',
-    bg: '#F7EEFF',
-  },
-];
-const banners = [
-  {
-    id: '1',
-    title: 'Top Products',
-    subtitle: 'Great Prices!',
-    desc: 'Shop latest trends now',
-    image:
-      'https://cdn-icons-png.flaticon.com/512/3514/3514491.png',
-  },
-  {
-    id: '2',
-    title: 'Mega Sale',
-    subtitle: 'Up To 70% OFF',
-    desc: 'Best collection for you',
-    image:
-      'https://cdn-icons-png.flaticon.com/512/3081/3081985.png',
-  },
-  {
-    id: '3',
-    title: 'Fashion Week',
-    subtitle: 'New Arrivals',
-    desc: 'Trending styles available',
-    image:
-      'https://cdn-icons-png.flaticon.com/512/892/892458.png',
-  },
-];
 const Navigation=useNavigation()
-const gotoCart = async () => {
-  const userid = await getuserId();
+// const gotoCart = async () => {
+//   const token = await getToken();
 
-  // console.log(userid);
+//   // console.log(token);
 
-  setId(userid);
+//   setId(token);
 
-  if (!userid || userid === '') {
-    Navigation.navigate('Login');
-  } else {
-    ToastAndroid.show(
-      'Added to cart',
-      ToastAndroid.SHORT,
-    );
+//   if (!token || token === '') {
+//     Navigation.navigate('Login');
+//   } else {
+//     ToastAndroid.show(
+//       'Added to cart',
+//       ToastAndroid.SHORT,
+//     );
 
+//   }
+// };
+const getCatagory= async()=>{
+try {
+    const response = await fetch(`${BASE_URL}categories`, {
+      method: 'GET',
+      
+    });
+
+    const data = await response.json();
+
+   
+   if(data.data){ 
+    setCategories(data.data)
+  };
+  } catch (error) {
+    console.error('Error:', error);
   }
+  }
+useEffect(()=>{
+  getCatagory()
+  getAllPrduct()
+  getpopularPoduct()
+  getDealOfTheDay()
+  getlatestProduct()
+  getfeaturedProducts()
+  getbestsellingProducts()
+},[])
+const gotoProductDetails = (item) => {
+  
+  Navigation.navigate('ProductDetails', {
+    id: item.id,
+  });
 };
+const getcategoriesProduct=(item)=>{
+  // console.log(item.id)
+  setCategoriesId(item.id)
+   setSlug(item.slug)
+  
+   getAllPrduct()
+  // getCategorybySlug()
+}
+// const getCategorybySlug= async ()=>{
+//   // console.log(`${BASE_URL}categories/${slug}`)
+// // try {
+// //     const response = await fetch(`${BASE_URL}categories/${slug}`, {
+// //       method: 'GET',
+      
+// //     });
+
+// //     const data = await response.json();
+
+// //    console.log(';hdkjhkfjh',data)
+// //   //  if(data.data){ 
+
+// //   //   // setCategories(data.data)
+// //   // };
+// //   } catch (error) {
+// //     console.error('Error:', error);
+// //   }
+// }
+const getAllPrduct =async  ()=>{
+  const formData = new FormData(); 
+//   "page": 1
+    formData.append('category_id', catagoriesId);
+     formData.append("per_page", 12); 
+     formData.append( "page",1);
+          try {
+    const response = await fetch(`${BASE_URL}product`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const data = await response.json();
+
+
+   if(data.data){ 
+
+    setProduct(data.data)
+  };
+  } catch (error) {
+    console.error('Error:', error);
+  }   
+}
+const getSearchText=(value)=>{
+  console.log(value)
+}
+const getpopularPoduct=async ()=>{
+  const userid=await getuserId()
+  
+     try {
+    const response = await fetch(`${BASE_URL}popular-products`, {
+      method: 'GET',
+      
+    });
+
+    const data = await response.json();
+
+  //  console.log('data1',data)
+   if(data.data){ 
+
+    setPopularProduct(data.data)
+  };
+  } catch (error) {
+    console.log('Error:', error);
+  }
+}
+const getlatestProduct=async ()=>{
+
+  //    try {
+  //   const response = await fetch(`${BASE_URL}latest-products`, {
+  //     method: 'GET',
+      
+  //   });
+
+  //   const data = await response.json();
+
+  //  console.log('data1',data)
+  //  if(data.data){ 
+
+  //   setLatestproducts(data.data)
+  // };
+  // } catch (error) {
+  //   console.log('Error:', error);
+  // }
+}
+const getDealOfTheDay=async ()=>{
+     try {
+    const response = await fetch(`${BASE_URL}deal-of-the-day?limit=4`, {
+      method: 'GET',
+      
+    });
+
+    const data = await response.json();
+
+   if(data.data){
+    console.log(data)
+    setDealOfTheDay(data.data)
+   }
+    } catch (error) {
+    console.log('Error1:', error);
+  }
+}
+const getfeaturedProducts= async ()=>{
+     try {
+    const response = await fetch(`${BASE_URL}featured-products`, {
+      method: 'GET',
+      
+    });
+
+    const data = await response.json();
+
+   if(data.data){
+    setFeaturedproducts(data.data)
+   }
+    } catch (error) {
+    console.log('Error1:', error);
+  }
+}
+const getbestsellingProducts=  async ()=>{
+     try {
+    const response = await fetch(`${BASE_URL}featured-products`, {
+      method: 'GET',
+      
+    });
+
+    const data = await response.json();
+
+
+   if(data.data){
+    setBestsellingProduct(data.data)
+   }
+    } catch (error) {
+    console.log('Error1:', error);
+  }
+}
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -222,6 +281,7 @@ const gotoCart = async () => {
                 placeholder="Search your need"
                 placeholderTextColor="#777"
                 style={styles.input}
+                onChangeText={(value)=>{getSearchText(value)}}
               />
             </View>
 
@@ -237,98 +297,54 @@ const gotoCart = async () => {
 
         {/* CATEGORY */}
 
-        <FlatList
-          data={categories}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{
-            paddingHorizontal: 10,
-            // marginTop: 15,
-          }}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              onPress={() => setSelected(item.id)}
-              style={[
-                styles.categoryBtn,
-                selected === item.id &&
-                  styles.activeCategory,
-              ]}
-            >
-              <Feather name={item.icon} size={20} color={AllColors.black}/>
-              <Text
-                style={{
-                  color:AllColors.black,
-                    
-                  fontWeight: '600',
-                }}
-              >
-                {item.title}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
+      <FlatList
+  data={catagories}
+  horizontal
+  showsHorizontalScrollIndicator={false}
+  keyExtractor={(item) => item.id.toString()}
+  contentContainerStyle={{
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  }}
+  nestedScrollEnabled={true}
+  directionalLockEnabled={true}
+  bounces={false}
+  scrollEventThrottle={16}
+  renderItem={({ item }) => (
+    <TouchableOpacity
+      onPress={() => getcategoriesProduct(item)}
+      style={[
+        styles.categoryBtn,
+        catagoriesId === item.id && styles.activeCategory,
+      ]}
+    >
+      <Image
+        source={{ uri: item.image }}
+        style={{
+          width: 24,
+          height: 24,
+          marginRight: 8,
+        }}
+        resizeMode="contain"
+      />
+
+      <Text
+        style={{
+          color: '#000',
+          fontWeight: '600',
+        }}
+      >
+        {item.name} 
+      </Text>
+    </TouchableOpacity>
+  )}
+/>
         <View style={{height:10}}/>
 {/* carousel */}
 
-      
-
-<View style={{height:10}}/>
-        <FlatList
-  data={products}
-  numColumns={2}
-  scrollEnabled={false}
-  keyExtractor={(item) => item.id}
-  contentContainerStyle={{
-    paddingHorizontal: 10,
-    paddingBottom: 100,
-  }}
-  renderItem={({ item }) => (
-    <TouchableOpacity activeOpacity={0.9} style={styles.card}>
-      
-      {/* Top Row */}
-      <View style={styles.topRow}>
-        
-        {/* Category */}
-        
-
-        {/* Heart */}
-        <TouchableOpacity style={styles.heart}>
-          <AntDesign
-            name={ 'hearto'}
-            size={18}
-            color={AllColors.black}
-          />
-        </TouchableOpacity>
-      </View>
-<Swiper
-  autoplay
-  autoplayTimeout={3}
-  showsPagination={true}
-  loop={true}
-
-  // Dot Style
-  dotStyle={{
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginHorizontal: 5,
-  }}
-
-  // Active Dot Style
-  activeDotStyle={{
-    width: 22,
-    height: 10,
-    borderRadius: 5,
-    marginHorizontal: 5,
-  }}
-
-  height={250}
->
-  {images.map((item, index) => (
-    <Image
-      key={index}
-      source={{uri: item.image}}
+ <Image
+    
+      source={{uri: 'http://ordinaree.com/cdn/shop/files/SPW_3220_5d1d71ef-0699-4de2-84fc-195e1f064aef.jpg?v=1756703234'}}
       style={{
         width: '100%',
         height: 250,
@@ -336,8 +352,26 @@ const gotoCart = async () => {
       }}
       resizeMode="cover"
     />
-  ))}
-</Swiper>
+
+<View style={{height:10}}/>
+{/* product */}
+        <FlatList
+  data={product}
+  numColumns={2}
+  scrollEnabled={false}
+  keyExtractor={(item) => item.id}
+  contentContainerStyle={{
+    paddingHorizontal: 10,
+    // paddingBottom: 100,
+  }}
+  columnWrapperStyle={{
+  justifyContent: 'space-between',
+}}
+  renderItem={({ item }) => (
+    <TouchableOpacity activeOpacity={0.9} style={styles.card} onPress={() => gotoProductDetails(item)}>
+      
+     
+
       {/* Product Image */}
       <View
         style={[
@@ -362,71 +396,195 @@ const gotoCart = async () => {
       <View style={{ marginTop: 10 }}>
         
         <Text style={styles.productTitle}>
-          {item.title}
+          {item.name}
         </Text>
 
         <Text style={styles.subTitle}>
           {item.subtitle}
         </Text>
 
-        {/* Rating */}
-        <View style={styles.ratingRow}>
-          <AntDesign
-            name="star"
-            size={14}
-            color="#FFC107"
-          />
-
-          <Text style={styles.ratingText}>
-            {item.rating}
-          </Text>
-
-          <Text style={styles.reviewText}>
-            ({item.reviews})
-          </Text>
-        </View>
+     
 
         {/* Price Row */}
         <View style={styles.priceRow}>
           <Text style={styles.price}>
-            {item.price}
+            {item.actual_price}
           </Text>
 
           <Text style={styles.oldPrice}>
-            {item.oldPrice}
+            {item.discount_price}
           </Text>
         </View>
 
-        {/* Delivery */}
-        {/* <Text style={styles.delivery}>
-          🚚 {item.delivery}
-        </Text> */}
       </View>
 
-      {/* Bottom */}
-      <View style={styles.bottomRow}>
-       
+      
+    </TouchableOpacity>
+  )}
+/>
+{/* DEAL OF THE DAY */}
+ <>
 
-        <TouchableOpacity
-          style={styles.cartBtn}
-          onPress={() => gotoCart()}
-        >
-          <Feather
-            name="shopping-cart"
-            size={18}
-            color={AllColors.black}
-          />
-        </TouchableOpacity>
+ <Text style={styles.productHeader}>
+  Deal of The Day
+ </Text>
+  <TouchableOpacity>
+    <Text style={styles.ViewAll}>View all</Text>
+  </TouchableOpacity>
+
+<FlatList
+  horizontal
+  showsHorizontalScrollIndicator={false}
+  data={dealOfTheDay}
+  keyExtractor={(item) => item.id.toString()}
+  contentContainerStyle={{ paddingHorizontal: 10 }}
+  renderItem={({ item }) => (
+    <TouchableOpacity style={styles.dealCard}>
+      <Image
+        source={{ uri: item.image }}
+        style={styles.dealImage}
+      />
+
+      <Text numberOfLines={2} style={styles.productName}>
+        {item.product_name}
+      </Text>
+
+      <Text style={styles.price}>₹{item.originalPrice}</Text>
+
+      <View style={styles.priceRow}>
+        <Text style={styles.oldPrice}>₹{item.price}</Text>
+        <Text style={styles.offer}>
+          {item.discount}% OFF
+        </Text>
       </View>
     </TouchableOpacity>
   )}
 />
+ </>
+
+ {/* popular product*/}
+ <>
+
+ <Text style={styles.productHeader}>Popular product for you</Text>
+  <TouchableOpacity>
+    <Text style={styles.ViewAll}>View all</Text>
+  </TouchableOpacity>
+
+<FlatList
+  horizontal
+  showsHorizontalScrollIndicator={false}
+  data={popularProduct}
+  keyExtractor={(item) => item.id.toString()}
+  contentContainerStyle={{ paddingHorizontal: 10 }}
+  renderItem={({ item }) => (
+    <TouchableOpacity style={styles.dealCard}>
+      <Image
+        source={{ uri: item.image }}
+        style={styles.dealImage}
+      />
+
+      <Text numberOfLines={2} style={styles.productName}>
+        {item.product_name}
+      </Text>
+
+      <Text style={styles.price}>₹{item.originalPrice}</Text>
+
+      <View style={styles.priceRow}>
+        <Text style={styles.oldPrice}>₹{item.price}</Text>
+        <Text style={styles.offer}>
+          {item.discount}% OFF
+        </Text>
+      </View>
+    </TouchableOpacity>
+  )}
+/>
+ </>
+ {/* best Selling product */}
+   <>
+
+ <Text style={styles.productHeader}>bests selling Product</Text>
+  <TouchableOpacity>
+    <Text style={styles.ViewAll}>View all</Text>
+  </TouchableOpacity>
+
+<FlatList
+  horizontal
+  showsHorizontalScrollIndicator={false}
+  data={bestsellingProduct}
+  keyExtractor={(item) => item.id.toString()}
+  contentContainerStyle={{ paddingHorizontal: 10 }}
+  renderItem={({ item }) => (
+    <TouchableOpacity style={styles.dealCard}>
+      <Image
+        source={{ uri: item.image }}
+        style={styles.dealImage}
+      />
+
+      <Text numberOfLines={2} style={styles.productName}>
+        {item.product_name}
+      </Text>
+
+      <Text style={styles.price}>₹{item.originalPrice}</Text>
+
+      <View style={styles.priceRow}>
+        <Text style={styles.oldPrice}>₹{item.price}</Text>
+        <Text style={styles.offer}>
+          {item.discount}% OFF
+        </Text>
+      </View>
+    </TouchableOpacity>
+  )}
+/>
+ </>
+ {/* featured Product */}
+       <>
+
+ <Text style={styles.productHeader}>featured Product</Text>
+  <TouchableOpacity>
+    <Text style={styles.ViewAll}>View all</Text>
+  </TouchableOpacity>
+
+<FlatList
+  horizontal
+  showsHorizontalScrollIndicator={false}
+  data={featuredproducts}
+  keyExtractor={(item) => item.id.toString()}
+  contentContainerStyle={{ paddingHorizontal: 10 }}
+  renderItem={({ item }) => (
+    <TouchableOpacity style={styles.dealCard}>
+      <Image
+        source={{ uri: item.image }}
+        style={styles.dealImage}
+      />
+
+      <Text numberOfLines={2} style={styles.productName}>
+        {item.product_name}
+      </Text>
+
+      <Text style={styles.price}>₹{item.originalPrice}</Text>
+
+      <View style={styles.priceRow}>
+        <Text style={styles.oldPrice}>₹{item.price}</Text>
+        <Text style={styles.offer}>
+          {item.discount}% OFF
+        </Text>
+      </View>
+    </TouchableOpacity>
+  )}
+/>
+
+ </>
+ 
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+
+  
+  
+  
   container: {
     flex: 1,
     backgroundColor:AllColors.lightPink
@@ -446,7 +604,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal:10,
   },
+ productHeader:{
+      fontSize:20,
+      color:AllColors.black,
+      textAlign:"center",
+      marginTop:10,
+      fontWeight:'bold'
 
+ },
+ ViewAll:{
+   color:AllColors.primary,
+   fontSize:16,
+   marginBottom:10,
+   textAlign:"center"
+ },
   logo: {
     width: 40,
     height: 40,
@@ -457,7 +628,7 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#ff2d7a',
+    color: AllColors.primary,
     // marginLeft: 5,
   },
 
@@ -501,7 +672,7 @@ const styles = StyleSheet.create({
   filterBtn: {
     width: 60,
     height: 55,
-    backgroundColor: '#ff2d7a',
+    backgroundColor: AllColors.primary,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
@@ -523,7 +694,7 @@ const styles = StyleSheet.create({
 
   activeCategory: {
     backgroundColor: '#fd83b050',
-    borderColor: '#ff2d7a',
+    borderColor: AllColors.primary,
   },
 
   /* ========================= */
@@ -541,7 +712,7 @@ const styles = StyleSheet.create({
   },
 
   smallText: {
-    color: '#ff2d7a',
+    color: AllColors.primary,
     fontWeight: '600',
     fontSize: 15,
   },
@@ -556,7 +727,7 @@ const styles = StyleSheet.create({
   bigPink: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#ff2d7a',
+    color: AllColors.primary,
   },
 
   desc: {
@@ -568,7 +739,7 @@ const styles = StyleSheet.create({
 
   shopBtn: {
     marginTop: 15,
-    backgroundColor: '#ff2d7a',
+    backgroundColor: AllColors.primary,
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 14,
@@ -590,164 +761,116 @@ const styles = StyleSheet.create({
   /* PRODUCT CARD */
   /* ========================= */
 
-  card: {
-    flex: 1,
-    backgroundColor: '#fff',
-    margin: 8,
-    borderRadius: 25,
-    padding: 12,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#f1f1f1',
-  },
-
-  heart: {
-    position: 'absolute',
-    right: 15,
-    top: 15,
-    zIndex: 1,
-  },
-
-  imageBox: {
-    height: 170,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  productImage: {
-    width: 120,
-    height: 120,
-    resizeMode: 'contain',
-  },
-
-  bottomRow: {
-    marginTop: 5,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-
-  productTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#222',
-  },
-
-  price: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#ff2d7a',
-    marginTop: 5,
-  },
-
-  cartBtn: {
-    width: 50,
-    height: 50,
-    borderRadius: 50,
-    backgroundColor: '#FFF1F7',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },topRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  marginBottom: 10,
+card: {
+  flex: 1,
+  backgroundColor: '#fff',
+  margin: 4,
+  borderRadius: 10,
+  overflow: 'hidden',
+  borderWidth: 0.5,
+  borderColor: '#EAEAEA',
+  elevation: 1,
+  padding: 0,
 },
 
-tag: {
-  flexDirection: 'row',
+imageBox: {
+  width: '100%',
+  height: 150, // আগে 220 ছিল
+  backgroundColor: '#F8F8F8',
+  justifyContent: 'center',
   alignItems: 'center',
-  backgroundColor: '#FFF0F6',
-  paddingHorizontal: 10,
-  paddingVertical: 5,
-  borderRadius: 30,
-  alignSelf: 'flex-start',
+},
+
+productTitle: {
+  fontSize: 13,
+  fontWeight: '700',
+  color: '#111',
+  paddingHorizontal: 6,
+  marginTop: 6,
+},
+productImage: {
+  width: '100%',
+  height: '100%',
+  resizeMode: 'cover',
+},
+subTitle: {
+  fontSize: 11,
+  color: '#777',
+  paddingHorizontal: 6,
+},
+
+price: {
+  fontSize: 16,
+  fontWeight: 'bold',
+  color: '#111',
+},
+
+oldPrice: {
+  fontSize: 11,
+  color: '#999',
+  textDecorationLine: 'line-through',
+  marginLeft: 5,
+},
+
+bottomRow: {
+  paddingHorizontal: 6,
+  paddingBottom: 6,
+},
+
+cartBtn: {
+  width: 32,
+  height: 32,
+  borderRadius: 16,
+  backgroundColor: '#F5F5F5',
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+dealCard: {
+  width: 170,
+  backgroundColor: '#fff',
+  borderRadius: 12,
+  padding: 10,
+  marginRight: 12,
+  elevation: 3,
+},
+
+dealImage: {
+  width: '100%',
+  height: 120,
+  resizeMode: 'contain',
   marginBottom: 8,
 },
 
-tagText: {
-  fontSize: 11,
-  color: '#ff2d7a',
-  marginLeft: 5,
+productName: {
+  fontSize: 14,
   fontWeight: '600',
+  color: '#333',
+  height: 40,
 },
 
-subTitle: {
-  fontSize: 13,
-  color: '#777',
-  marginTop: 4,
-},
-
-ratingRow: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginTop: 7,
-},
-
-ratingText: {
-  fontSize: 12,
+price: {
+  fontSize: 18,
   fontWeight: '700',
-  marginLeft: 4,
-  color: '#222',
-},
-
-reviewText: {
-  fontSize: 11,
-  color: '#999',
-  marginLeft: 4,
+  color: '#e53935',
+  marginTop: 5,
 },
 
 priceRow: {
   flexDirection: 'row',
   alignItems: 'center',
-  // marginTop: 8,
+  marginTop: 4,
 },
 
 oldPrice: {
-  fontSize: 13,
-  color: '#999',
   textDecorationLine: 'line-through',
-  marginLeft: 8,
+  color: '#999',
+  marginRight: 8,
+  fontSize: 12,
 },
 
-delivery: {
-  fontSize: 11,
+offer: {
   color: 'green',
-  marginTop: 7,
-  fontWeight: '600',
-},
-
-discountBox: {
-  position: 'absolute',
-  top: 10,
-  left: 10,
-  backgroundColor: '#ff2d7a',
-  paddingHorizontal: 8,
-  paddingVertical: 4,
-  borderRadius: 30,
-},
-
-discountText: {
-  color: '#fff',
-  fontSize: 10,
   fontWeight: '700',
-},
-
-stock: {
-  fontSize: 11,
-  color: '#444',
-  fontWeight: '600',
-},
-
-card: {
-  flex: 1,
-  backgroundColor: '#fff',
-  margin: 8,
-  borderRadius: 25,
-  padding: 12,
-  elevation: 3,
-  borderWidth: 1,
-  borderColor: '#f3f3f3',
+  fontSize: 12,
 },
 });

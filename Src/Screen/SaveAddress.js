@@ -9,6 +9,7 @@ import {
 } from "react-native";
 
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { BASE_URL, getToken } from "../Api/Api";
 
 
 export default function SaveAddress() {
@@ -19,23 +20,60 @@ export default function SaveAddress() {
   const [landmark, setLandmark] = useState('');
 
 
-  const handleSave = () => {
-    const data = {
-      stateName,
-      city,
-      zipCode,
-      address,
-      landmark,
-      alternativePhone,
-    };
+const handleSave = async () => {
+  const token = await getToken();
+//  console.log(token)
+  try {
+    const response = await fetch(`${BASE_URL}me`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-    console.log("Saved Address:", data);
+    const data = await response.json();
 
-    // API CALL KORTE PARO
-  };
+   
+    console.log('Response:', data);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+};
+const getCurrentLocation  = async () => {
+  const token = await getToken();
+  
+  try {
+    const response = await fetch(`${BASE_URL}user/profile`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: 'John Doe',
+        email: 'john@example.com',
+        mobile: '6289833491',
+        state: 'Karnataka',
+        city: 'Bangalore',
+        zipCode: '560001',
+        address: '123 Main Street',
+        landmark: 'Near Park',
+        alternativePhone: '9876543211',
+      }),
+    });
 
+    const data = await response.json();
 
-
+    if (response.ok) {
+      console.log('Profile Updated:', data);
+    } else {
+      console.log('API Error:', data);
+    }
+  } catch (error) {
+    console.error('Error:', error);
+  }
+};
+ 
 
   return (
     <ScrollView

@@ -16,12 +16,18 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import AllColors from '../Constants/Color';
 import CustomLoader from '../Common/Loader';
-
+import { BASE_URL, getToken, removeToken } from '../Api/Api';
+import CustomAlert from '../Common/Alert';
+import SuccessScreen from './../Common/SuccessScreen'
+import SuccessModal from './../Common/SuccessScreen';
 export default function Account() {
-
+  
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState('');
-
+  const [showAlert, setShowAlert] = useState(false);
+  const [errorText,setErrorText]=useState('')
+  const [isSuccess,setIsSuccess]=useState(false)
+  // You have already logged out
   const Navigation = useNavigation();
 
   useEffect(() => {
@@ -45,7 +51,41 @@ export default function Account() {
   const gotoSaveAddress = () => {
     Navigation.navigate('SaveAddress');
   };
+ const requestForLogout = async () => {
+  const token = await getToken();
+   if (!token || token === null) {
+  setErrorText('You are already logged out.');
+  setShowAlert(true);
+  return;
+ 
+}
 
+  try {
+    const response = await fetch(`${BASE_URL}logout`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+
+    console.log('Logout Response:', data);
+
+   
+      await removeToken();
+      setIsSuccess(true)
+      Navigation.navigate('AppTab')
+   
+    
+  } catch (error) {
+      setErrorText("Something went wrong. Please try again.")
+      setShowAlert(true)
+  }
+  // finally{
+  //    setIsSuccess(false)
+  // }
+};
   return (
     <SafeAreaView style={styles.container}>
 
@@ -62,7 +102,9 @@ export default function Account() {
       >
 
         {/* USER INFO */}
-
+          <TouchableOpacity style={{height:20,backgroundColor:"red"}}>
+            <Text>hello</Text>
+          </TouchableOpacity>
         <View style={styles.content}>
 
           <Text style={styles.userName}>
@@ -258,18 +300,28 @@ export default function Account() {
 
         <View style={styles.logoutContainer}>
 
-          <TouchableOpacity style={styles.logoutBtn}>
+          <TouchableOpacity style={styles.logoutBtn} onPress={requestForLogout}>
 
             <Text style={styles.logoutText}>
               Log Out
             </Text>
 
           </TouchableOpacity>
-
-        </View>
-
+   <CustomAlert
+          visible={showAlert}
+          message={errorText}
+          onClose={() => setShowAlert(false)}
+        />
+    <SuccessModal 
+      visible={isSuccess}
+       title="Logout Successful"
+       message="You have been logged out successfully."
+       onClose={() =>
+       setIsSuccess(false)} />
+         </View>
+             <View style={{height:50,backgroundColor:AllColors.white}}/>
       </ScrollView>
-
+         
     </SafeAreaView>
   );
 }
@@ -279,6 +331,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f2f2f2',
+
   },
 
   header: {
@@ -384,16 +437,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     marginTop: 10,
     padding: 18,
-    marginBottom: 30,
+    marginBottom: 40,
   },
 
   logoutBtn: {
-    height: 55,
+    height: 40,
     borderWidth: 1,
     borderColor: AllColors.primary,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+   
   },
 
   logoutText: {

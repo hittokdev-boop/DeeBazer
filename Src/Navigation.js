@@ -14,7 +14,12 @@ import CommonLoginModal from './Common/Login';
 import TextView from './Screen/Text';
 import EditProfileScreen from './Screen/EditProfile'
 import SaveAddress from './Screen/SaveAddress'
-const Tab = createMaterialTopTabNavigator();
+import ProductDetails from './Screen/ProductDetails'
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import MapScreen from './Screen/MapScreen'
+
+// const Tab = createMaterialTopTabNavigator();
+const Tab=createBottomTabNavigator()
 export default function Navigation(){
     return(
          <NavigationContainer>
@@ -36,6 +41,8 @@ const AppStack=()=>{
         <Stack.Screen name='TextView' component={TextView}/>
         <Stack.Screen name='editProfile' component={EditProfileScreen}/>
         <Stack.Screen name='SaveAddress' component={SaveAddress} />
+        <Stack.Screen name='ProductDetails' component={ProductDetails} />
+          <Stack.Screen name='MapScreen' component={MapScreen} />
       </Stack.Navigator>
     )
 }
@@ -52,21 +59,21 @@ const AppTab=()=>{
 
     tabBarActiveTintColor: AllColors.primary,
     tabBarInactiveTintColor: AllColors.grey,
-
+    headerShown:false,
     tabBarStyle: {
-      position: 'absolute',
-
+      // position: 'absolute',
       bottom: 20,
-      left: 20,
-      right: 20,
-
+      // left: 20,
+      // right: 20,
+     
+         marginLeft:20,
       backgroundColor: '#fff',
-
-      height: 70,
+      
+      height: 50,
       borderRadius: 40,
 
       elevation: 10,
-
+      width:350,
       shadowColor: '#000',
       shadowOpacity: 0.1,
       shadowRadius: 10,

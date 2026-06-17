@@ -1,8 +1,9 @@
-import react,{useState} from 'react';
+import react,{useEffect, useState} from 'react';
 import { View, Text, Modal, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import AllColors from '../Constants/Color';
 import CustomAlert from './Alert';
-import { BASE_URL, getMobile, getNumber, setToken, setuserId } from '../Api/Api';
+import { useNavigation } from '@react-navigation/native';
+import { BASE_URL, getMobile, getNumber, getToken, setToken, setuserId } from '../Api/Api';
 
 
 
@@ -13,14 +14,27 @@ export default function VerifyOTP({visible, onClose}) {
   const [loading, setLoading] = useState(false);
   const [showAlert, setShowAlert] = useState(false);    
   const [Mobile, setMobile] = useState('');
+  const Navigation=useNavigation()
+   useEffect(() => {
+    const checkToken = async () => {
+      const token = await getMobile();
+    
+      if (token) {
+        setMobile(token);
+      }
+
+   
+    };
+
+    checkToken();
+  }, []);
      const handleLogin = async () => {
 
   setLoading(true);
 
+   
   try {
 
-    const mobile = await getMobile();
-         setMobile(mobile)
     const formData = new FormData();
     formData.append('otp', otp);
     formData.append('mobile', Mobile);
@@ -31,11 +45,14 @@ export default function VerifyOTP({visible, onClose}) {
     });
 
     const data = await response.json();
+    console.log(data)  
     if(data.token){
        await setToken(data.token)
+     Navigation.replace('AppTab')
+
     }
   } catch (e) {
-
+   
     console.log(e, 'change');
 
   } finally {
