@@ -820,7 +820,108 @@
 //   ]
 // }
 // ```
+// Debdas  [5:52 PM]
+// ### Add to Cart
+// Add or update product in cart.
 
+// **Endpoint:** `POST /api/cart-to-add`
+
+// **Request Body:**
+// ```json
+// {
+//   "user_id": 1,
+//   "product_id": 1,
+//   "qty": 2
+// }
+// ```
+
+// **Response:**
+// ```json
+// {
+//   "status": 200,
+//   "message": "Add to Cart Successfully"
+// }
+// ```
+
+// ### Remove from Cart
+// Remove a product from cart.
+
+// **Endpoint:** `POST /api/cart-remove`
+
+// **Request Body:**
+// ```json
+// {
+//   "user_id": 1,
+//   "product_id": 1
+// }
+// ```
+
+// **Response:**
+// ```json
+// {
+//   "status": 200,
+//   "message": "Cart Remove Successfully"
+// }
+// ```
+// ## Wishlist
+
+// ### Add to Wishlist
+// Add a product to wishlist.
+
+// **Endpoint:** `POST /api/wishlist-add`
+
+// **Request Body:**
+// ```json
+// {
+//   "user_id": 1,
+//   "product_id": 1
+// }
+// ```
+
+// **Response:**
+// ```json
+// {
+//   "status": 200,
+//   "message": "Add to Wishlist Successfully"
+// }
+// ```
+
+// **Response (Already in wishlist):**
+// ```json
+// {
+//   "status": 200,
+//   "message": "Product already in wishlist"
+// }
+// ```
+
+// ### Remove from Wishlist
+// Remove a product from wishlist.
+
+// **Endpoint:** `POST /api/wishlist-remove`
+
+// **Request Body:**
+// ```json
+// {
+//   "user_id": 1,
+//   "product_id": 1
+// }
+// ```
+
+// **Response:**
+// ```json
+// {
+//   "status": 200,
+//   "message": "Wishlist Remove Successfully"
+// }
+// ```
+
+// **Error Response (Item not found):**
+// ```json
+// {
+//   "status": 404,
+//   "message": "Wishlist item not found"
+// }
+// ```
 // ---
 
 // ## Address Management APIs
@@ -847,6 +948,7 @@
 //   "road_name": "Main Street",
 //   "landmark": "Near Park",
 //   "type": "Home"
+    // status:1
 // }
 // ```
 
@@ -1311,3 +1413,109 @@
 // ```
 
 // ---
+
+
+
+
+//
+// Debdas  [11:35 AM]
+// ## Orders
+
+// ### Create Order (Main App API)
+// **This is the primary order creation API to use for your app.** It automatically uses the authenticated user's cart items and selected address.
+
+// **Endpoint:** `POST /api/orders`
+
+// **Headers:** `Authorization: Bearer {token}`
+
+// **Request Body:**
+// ```json
+// {
+//   "address_id": 1,
+//   "payment_method": "cashfree",
+//   "coupon_code": "SAVE10"
+// }
+// ```
+
+// **Request Parameters:**
+// - `address_id` (required): ID of the saved address to use for shipping
+// - `payment_method` (required): Payment method - "cashfree" for online payment, "cod" for cash on delivery
+// - `coupon_code` (optional): Discount coupon code to apply
+
+// **Response:**
+// ```json
+// {
+//   "status": 200,
+//   "message": "Order created successfully",
+//   "order_id": 123,
+//   "payment_url": "https://payments.cashfree.com/..."
+// }
+// ```
+
+// **Note:** This endpoint:
+// - Automatically fetches the authenticated user's cart items
+// - Uses the provided address_id for shipping
+// - Calculates totals including discounts and delivery charges
+// - For Cashfree payment, returns a payment_url for redirecting to payment gateway
+// - For COD, processes order directly without payment redirect
+
+// ### Get Order List
+// Get list of user's orders for the order history screen.
+
+// **Endpoint:** `POST /api/order-list`
+
+// **Headers:** `Authorization: Bearer {token}`
+
+// **Request Body:**
+// ```json
+// {
+//   "user_id": 1
+// }
+// ```
+
+// **Response:**
+// ```json
+// {
+//   "status": 200,
+//   "message": "Order List",
+//   "data": [
+//     {
+//       "id": 123,
+//       "order_number": "ORD-123",
+//       "total_amount": 5000,
+//       "status": "pending",
+//       "created_at": "2024-01-01T00:00:00.000000Z"
+//     }
+//   ]
+// }
+// ```
+
+// ### Get Order Details
+// Get detailed information about a specific order for the order details screen.
+
+// **Endpoint:** `POST /api/order-details`
+
+// **Headers:** `Authorization: Bearer {token}`
+
+// **Request Body:**
+// ```json
+// {
+//   "order_id": 123
+// }
+// ```
+
+// **Response:**
+// ```json
+// {
+//   "status": 200,
+//   "message": "Order Details",
+//   "data": {
+//     "id": 123,
+//     "order_number": "ORD-123",
+//     "total_amount": 5000,
+//     "status": "pending",
+//     "items": [...],
+//     "shipping_address": {...}
+//   }
+// }
+// ``` 

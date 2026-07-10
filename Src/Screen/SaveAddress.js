@@ -5,75 +5,93 @@ import {
   View,
   Text,
   TouchableOpacity,
-  ScrollView,PermissionsAndroid, Platform
+  ScrollView,PermissionsAndroid, Platform,
+  Alert
 } from "react-native";
 
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { BASE_URL, getToken } from "../Api/Api";
+import { BASE_URL, getToken, getuserId } from "../Api/Api";
+import CustomAlert from "../Common/Alert";
+import SuccessModal from "../Common/SuccessScreen";
+import AllColors from "../Constants/Color";
 
 
 export default function SaveAddress() {
   const [stateName, setStateName] = useState('');
   const [city, setCity] = useState('');
-  const [zipCode, setZipCode] = useState('');
+  const [zipCode, setpinCode] = useState('');
   const [address, setAddress] = useState('');
   const [landmark, setLandmark] = useState('');
-
-
-const handleSave = async () => {
+const [name, setName] = useState('');
+const [mobile, setMobile] = useState('');
+const [houseNo, setHouseNo] = useState('');
+const [roadName, setRoadName] = useState('');
+const [typeType, setTypeType] = useState('Home');
+  const [showAlert, setShowAlert] = useState(false);
+  const [errorText,setErrorText]=useState('')
+ const [isSuccess,setIsSuccess]=useState(false)
+const saveAddress = async () => {
   const token = await getToken();
-//  console.log(token)
-  try {
-    const response = await fetch(`${BASE_URL}me`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+  const ID = await getuserId();
 
-    const data = await response.json();
-
-   
-    console.log('Response:', data);
-  } catch (error) {
-    console.error('Error:', error);
+  if (!name || !mobile || !zipCode || !stateName || !city || !houseNo) {
+    Alert.alert("Validation", "Please fill all required fields.");
+    return;
   }
-};
-const getCurrentLocation  = async () => {
-  const token = await getToken();
-  
+
   try {
-    const response = await fetch(`${BASE_URL}user/profile`, {
-      method: 'PUT',
+    const formData = new FormData();
+
+    formData.append("user_id", String(ID));
+    formData.append("name", name);
+    formData.append("mobile", mobile);
+    formData.append("pin", zipCode);
+    formData.append("state", stateName);
+    formData.append("city", city);
+    formData.append("house_no", houseNo);
+    formData.append("road_name", roadName);
+    formData.append("landmark", landmark);
+    formData.append("address", address);
+    formData.append("type", typeType);
+    formData.append("status", "1");
+
+    console.log("Token :", token);
+
+    const response = await fetch(`${BASE_URL}save-address`, {
+      method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        name: 'John Doe',
-        email: 'john@example.com',
-        mobile: '6289833491',
-        state: 'Karnataka',
-        city: 'Bangalore',
-        zipCode: '560001',
-        address: '123 Main Street',
-        landmark: 'Near Park',
-        alternativePhone: '9876543211',
-      }),
+      body: formData,
     });
 
-    const data = await response.json();
+    const text = await response.text();
 
-    if (response.ok) {
-      console.log('Profile Updated:', data);
+    console.log("HTTP Status :", response.status);
+    console.log("Response :", text);
+
+    let data = {};
+
+    try {
+      data = JSON.parse(text);
+    } catch (e) {}
+
+    if (response.status) {
+      setIsSuccess(true);
     } else {
-      console.log('API Error:', data);
+      Alert.alert(
+        "Error",
+        data.message || "Unable to save address."
+      );
     }
   } catch (error) {
-    console.error('Error:', error);
+    console.log("Save Address Error :", error);
+    Alert.alert("Error", "Something went wrong.");
   }
 };
+const getCurrentLocation = async () => {
  
+};
 
   return (
     <ScrollView
@@ -89,7 +107,100 @@ const getCurrentLocation  = async () => {
             Add your delivery address details
           </Text>
         </View>
-   
+        <View style={styles.inputBox}>
+  <Text style={styles.label}>Name</Text>
+  <View style={styles.inputWrapper}>
+    <TextInput
+      value={name}
+      onChangeText={setName}
+      placeholder="Enter Name"
+      style={styles.input}
+    />
+  </View>
+</View>
+<View style={styles.inputBox}>
+  <Text style={styles.label}>House No</Text>
+  <View style={styles.inputWrapper}>
+    <TextInput
+      value={houseNo}
+      onChangeText={setHouseNo}
+      placeholder="Enter House No"
+      style={styles.input}
+    />
+  </View>
+</View>
+<View style={styles.inputBox}>
+  <Text style={styles.label}>Mobile</Text>
+  <View style={styles.inputWrapper}>
+    <TextInput
+      value={mobile}
+      onChangeText={setMobile}
+      placeholder="Enter Mobile Number"
+      keyboardType="phone-pad"
+      style={styles.input}
+    />
+  </View>
+</View>
+        <View style={styles.inputBox}>
+          <Text style={styles.label}>Landmark</Text>
+
+          <View style={styles.inputWrapper}>
+            <Ionicons
+              name="pin-outline"
+              size={20}
+              color="#777"
+            />
+     
+            <TextInput
+              value={landmark}
+              onChangeText={setLandmark}
+              placeholder="Enter Landmark"
+              placeholderTextColor="#999"
+              style={styles.input}
+            />
+          </View>
+        </View>
+        <View style={styles.inputBox}>
+  <Text style={styles.label}>Road Name</Text>
+
+  <View style={styles.inputWrapper}>
+    <Ionicons
+      name="navigate-outline"
+      size={20}
+      color="#777"
+    />
+
+    <TextInput
+      value={roadName}
+      onChangeText={setRoadName}
+      placeholder="Enter Road Name"
+      placeholderTextColor="#999"
+      style={styles.input}
+    />
+  </View>
+</View>
+          {/* ADDRESS */}
+        {/* <View style={styles.inputBox}>
+          <Text style={styles.label}>Address</Text>
+
+          <View style={[styles.inputWrapper, { height: 90 }]}>
+            <Ionicons
+              name="home-outline"
+              size={20}
+              color="#777"
+              style={{ alignSelf: 'flex-start', marginTop: 15 }}
+            />
+
+            <TextInput
+              value={address}
+              onChangeText={setAddress}
+              placeholder="Enter Full Address"
+              placeholderTextColor="#999"
+              style={[styles.input, { textAlignVertical: 'top', marginTop: 14 }]}
+              multiline
+            />
+          </View>
+        </View> */}
         {/* STATE */}
         <View style={styles.inputBox}>
           <Text style={styles.label}>State</Text>
@@ -110,7 +221,45 @@ const getCurrentLocation  = async () => {
             />
           </View>
         </View>
+<View style={styles.inputBox}>
+  <Text style={styles.label}>Address Type</Text>
 
+  <View style={{flexDirection: 'row', gap: 10}}>
+    <TouchableOpacity
+      onPress={() => setTypeType('Home')}
+      style={{
+        backgroundColor:
+          typeType === 'Home' ? '#FF4D6D' : '#E5E5E5',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 10,
+      }}>
+      <Text
+        style={{
+          color: typeType === 'Home' ? '#fff' : '#000',
+        }}>
+        Home
+      </Text>
+    </TouchableOpacity>
+
+    <TouchableOpacity
+      onPress={() => setTypeType('Office')}
+      style={{
+        backgroundColor:
+          typeType === 'Office' ? '#FF4D6D' : '#E5E5E5',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 10,
+      }}>
+      <Text
+        style={{
+          color: typeType === 'Office' ? '#fff' : '#000',
+        }}>
+        Office
+      </Text>
+    </TouchableOpacity>
+  </View>
+</View>
         {/* CITY */}
         <View style={styles.inputBox}>
           <Text style={styles.label}>City</Text>
@@ -132,9 +281,9 @@ const getCurrentLocation  = async () => {
           </View>
         </View>
 
-        {/* ZIP CODE */}
+        {/* Pin CODE */}
         <View style={styles.inputBox}>
-          <Text style={styles.label}>Zip Code</Text>
+          <Text style={styles.label}>pin Code</Text>
 
           <View style={styles.inputWrapper}>
             <Ionicons
@@ -145,8 +294,8 @@ const getCurrentLocation  = async () => {
 
             <TextInput
               value={zipCode}
-              onChangeText={setZipCode}
-              placeholder="Enter Zip Code"
+              onChangeText={setpinCode}
+              placeholder="Enter pin Code"
               placeholderTextColor="#999"
               style={styles.input}
               keyboardType="number-pad"
@@ -154,49 +303,10 @@ const getCurrentLocation  = async () => {
           </View>
         </View>
 
-        {/* ADDRESS */}
-        <View style={styles.inputBox}>
-          <Text style={styles.label}>Address</Text>
-
-          <View style={[styles.inputWrapper, { height: 90 }]}>
-            <Ionicons
-              name="home-outline"
-              size={20}
-              color="#777"
-              style={{ alignSelf: 'flex-start', marginTop: 15 }}
-            />
-
-            <TextInput
-              value={address}
-              onChangeText={setAddress}
-              placeholder="Enter Full Address"
-              placeholderTextColor="#999"
-              style={[styles.input, { textAlignVertical: 'top', marginTop: 14 }]}
-              multiline
-            />
-          </View>
-        </View>
+      
 
         {/* LANDMARK */}
-        <View style={styles.inputBox}>
-          <Text style={styles.label}>Landmark</Text>
-
-          <View style={styles.inputWrapper}>
-            <Ionicons
-              name="pin-outline"
-              size={20}
-              color="#777"
-            />
-
-            <TextInput
-              value={landmark}
-              onChangeText={setLandmark}
-              placeholder="Enter Landmark"
-              placeholderTextColor="#999"
-              style={styles.input}
-            />
-          </View>
-        </View>
+       
             {/*   curremtLocation */}
            <TouchableOpacity style={styles.locationBtn} onPress={getCurrentLocation}>
           <Ionicons name="location-outline" size={20} color="#fff" />
@@ -207,7 +317,7 @@ const getCurrentLocation  = async () => {
         <TouchableOpacity
           style={styles.saveBtn}
           activeOpacity={0.8}
-          onPress={handleSave}
+          onPress={saveAddress}
         >
           <Ionicons
             name="save-outline"
@@ -221,6 +331,12 @@ const getCurrentLocation  = async () => {
         </TouchableOpacity>
 
       </View>
+           <SuccessModal
+      visible={isSuccess}
+       title=" Save Address "
+       message="Your Address have been save successfully."
+       onClose={() =>
+       setIsSuccess(false)} />
     </ScrollView>
   );
 }
@@ -229,6 +345,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F7F8FA',
+    padding:10
   },
 
   formContainer: {
@@ -277,7 +394,7 @@ locationBtn: {
   flexDirection: 'row',
   alignItems: 'center',
   justifyContent: 'center',
-  backgroundColor: '#FF4D88',
+  backgroundColor:AllColors.primary,
   paddingVertical: 14,
   borderRadius: 12,
   marginTop: 15,

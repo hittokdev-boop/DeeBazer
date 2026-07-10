@@ -3,14 +3,16 @@
 import React, {useState} from 'react';
 
 import {
-  Modal,
   View,
   Text,
   TouchableOpacity,
   TextInput,
   StyleSheet,
-  Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -69,27 +71,23 @@ const handleLogin = async () => {
 
   }
 };
-  return (
-   
-
+ return (
+  <KeyboardAvoidingView
+    style={{ flex: 1 }}
+    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+  >
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.overlay}>
-
         <View style={styles.modalContainer}>
 
-          {/* Top Indicator */}
           <View style={styles.line} />
 
-
-          {/* Title */}
-          <Text style={styles.title}>
-            Login
-          </Text>
+          <Text style={styles.title}>Login</Text>
 
           <Text style={styles.subtitle}>
             Please login to continue.
           </Text>
 
-          {/* Mobile Input */}
           <TextInput
             placeholder="Enter Mobile Number"
             placeholderTextColor="#999"
@@ -97,39 +95,32 @@ const handleLogin = async () => {
             keyboardType="number-pad"
             maxLength={10}
             value={number}
-            onChangeText={text => setNumber(text)}
+            onChangeText={setNumber}
           />
 
-          {/* Login Button */}
           <TouchableOpacity
             style={styles.loginBtn}
             onPress={handleLogin}
-            disabled={loading}>
-
-            {
-              loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.loginText}>
-                  Get OTP
-                </Text>
-              )
-            }
-
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.loginText}>Get OTP</Text>
+            )}
           </TouchableOpacity>
 
         </View>
 
-        {/* Custom Alert */}
         <CustomAlert
           visible={showAlert}
           message="Please enter a valid 10-digit mobile number"
           onClose={() => setShowAlert(false)}
         />
-
       </View>
-
-  );
+    </TouchableWithoutFeedback>
+  </KeyboardAvoidingView>
+);
 };
 
 export default CommonLoginModal;
@@ -142,13 +133,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
 
-  modalContainer: {
-    height: '40%',
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    padding: 20,
-  },
+ modalContainer: {
+  backgroundColor: '#fff',
+  borderTopLeftRadius: 25,
+  borderTopRightRadius: 25,
+  padding: 20,
+  maxHeight: '70%',
+},
 
   line: {
     width: 60,

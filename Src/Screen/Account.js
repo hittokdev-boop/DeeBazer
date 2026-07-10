@@ -16,12 +16,12 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import AllColors from '../Constants/Color';
 import CustomLoader from '../Common/Loader';
-import { BASE_URL, getToken, removeToken } from '../Api/Api';
+import { BASE_URL, getToken, removemobile, removeToken, removeuserId } from '../Api/Api';
 import CustomAlert from '../Common/Alert';
 import SuccessScreen from './../Common/SuccessScreen'
 import SuccessModal from './../Common/SuccessScreen';
 export default function Account() {
-  
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState('');
   const [showAlert, setShowAlert] = useState(false);
@@ -39,6 +39,27 @@ export default function Account() {
     return () => clearTimeout(timer);
 
   }, []);
+useEffect(() => {
+  checkLogin();
+}, []);
+const goToWishList=()=>{
+  Navigation.navigate("Wishlist")
+}
+const checkLogin = async () => {
+  try {
+    const token = await getToken();
+
+    if (token) {
+      setIsLoggedIn(true);
+    } else {
+      setIsLoggedIn(false);
+    }
+  } catch (error) {
+    setIsLoggedIn(false);
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (loading) {
     return <CustomLoader visible={loading} />;
@@ -49,7 +70,7 @@ export default function Account() {
   };
 
   const gotoSaveAddress = () => {
-    Navigation.navigate('SaveAddress');
+    Navigation.navigate('AllAddress');
   };
  const requestForLogout = async () => {
   const token = await getToken();
@@ -71,13 +92,19 @@ export default function Account() {
     const data = await response.json();
 
     console.log('Logout Response:', data);
+if(response.ok){
+setIsSuccess(true);
 
    
-      await removeToken();
-      setIsSuccess(true)
-      Navigation.navigate('AppTab')
+  await removeToken();
+  await removemobile();
+  await removeuserId();
+
+  setIsLoggedIn(false);
+}
+
+      // Navigation.navigate('AppTab')
    
-    
   } catch (error) {
       setErrorText("Something went wrong. Please try again.")
       setShowAlert(true)
@@ -86,7 +113,184 @@ export default function Account() {
   //    setIsSuccess(false)
   // }
 };
+if (loading) {
+  return <CustomLoader visible={loading} />;
+}
+
+if (!isLoggedIn) {
   return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#F5F7FA' }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ padding: 16 }}>
+
+        {/* Login Card */}
+        <View
+          style={{
+            backgroundColor: AllColors.primary,
+            borderRadius: 24,
+            padding: 24,
+            marginBottom: 20,
+          }}>
+
+          <View
+            style={{
+              width: 70,
+              height: 70,
+              borderRadius: 35,
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}>
+            <AntDesign
+              name="user"
+              size={34}
+              color="#fff"
+            />
+          </View>
+
+          <Text
+            style={{
+              color: '#fff',
+              fontSize: 24,
+              fontWeight: '700',
+              marginTop: 15,
+            }}>
+            Welcome
+          </Text>
+
+          <Text
+            style={{
+              color: 'rgba(255,255,255,0.85)',
+              marginTop: 6,
+              fontSize: 15,
+            }}>
+            Login to manage orders, wishlist and account settings.
+          </Text>
+
+          <TouchableOpacity
+            onPress={() => Navigation.navigate('Login')}
+            style={{
+              backgroundColor: '#fff',
+              height: 50,
+              borderRadius: 14,
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginTop: 20,
+            }}>
+            <Text
+              style={{
+                color: AllColors.primary,
+                fontSize: 16,
+                fontWeight: '700',
+              }}>
+              Login / Sign Up
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Settings */}
+        <View
+          style={{
+            backgroundColor: '#fff',
+            borderRadius: 20,
+            overflow: 'hidden',
+          }}>
+
+          {[
+            {
+              icon: (
+                <Feather
+                  name="headphones"
+                  size={22}
+                  color={AllColors.primary}
+                />
+              ),
+              title: 'Help Center',
+            },
+            {
+              icon: (
+                <Ionicons
+                  name="language-outline"
+                  size={22}
+                  color={AllColors.primary}
+                />
+              ),
+              title: 'Change Language',
+            },
+            {
+              icon: (
+                <Ionicons
+                  name="notifications-outline"
+                  size={22}
+                  color={AllColors.primary}
+                />
+              ),
+              title: 'Notifications',
+            },
+            {
+              icon: (
+                <MaterialCommunityIcons
+                  name="file-document-outline"
+                  size={22}
+                  color={AllColors.primary}
+                />
+              ),
+              title: 'Terms & Policies',
+            },
+            {
+              icon: (
+                <AntDesign
+                  name="questioncircleo"
+                  size={22}
+                  color={AllColors.primary}
+                />
+              ),
+              title: 'FAQs',
+            },
+          ].map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: 18,
+                paddingVertical: 18,
+                borderBottomWidth: index === 4 ? 0 : 0.5,
+                borderBottomColor: '#E5E5E5',
+              }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                }}>
+                {item.icon}
+
+                <Text
+                  style={{
+                    marginLeft: 15,
+                    fontSize: 16,
+                    color: '#222',
+                    fontWeight: '500',
+                  }}>
+                  {item.title}
+                </Text>
+              </View>
+
+              <AntDesign
+                name="right"
+                size={16}
+                color="#999"
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+      </ScrollView>
+    </SafeAreaView>
+  );
+}return (
     <SafeAreaView style={styles.container}>
 
       {/* HEADER */}
@@ -98,13 +302,10 @@ export default function Account() {
       </View>
 
       <ScrollView
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
 
         {/* USER INFO */}
-          <TouchableOpacity style={{height:20,backgroundColor:"red"}}>
-            <Text>hello</Text>
-          </TouchableOpacity>
+         
         <View style={styles.content}>
 
           <Text style={styles.userName}>
@@ -127,7 +328,7 @@ export default function Account() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.box}>
+            <TouchableOpacity style={styles.box} onPress={goToWishList}>
               <AntDesign
                 name="hearto"
                 size={26}
@@ -284,17 +485,7 @@ export default function Account() {
 
         {/* INPUT */}
 
-        <View style={styles.inputContainer}>
-
-          <TextInput
-            value={data}
-            onChangeText={(value) => setData(value)}
-            placeholder="Type here..."
-            placeholderTextColor="#999"
-            style={styles.input}
-          />
-
-        </View>
+       
 
         {/* LOGOUT */}
 
@@ -327,7 +518,26 @@ export default function Account() {
 }
 
 const styles = StyleSheet.create({
+menuRow: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  paddingVertical: 18,
+  borderBottomWidth: 0.5,
+  borderBottomColor: '#EAEAEA',
+},
 
+leftRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+},
+
+menuText: {
+  marginLeft: 15,
+  fontSize: 16,
+  color: '#222',
+  fontWeight: '500',
+},
   container: {
     flex: 1,
     backgroundColor: '#f2f2f2',

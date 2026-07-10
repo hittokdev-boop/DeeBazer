@@ -12,6 +12,7 @@ const AllColors={
   lightPink:'#fcebf596',
   pink:"#fd039596",
   transparentBlack:'#000000b0',
-  drakGray:"#444"
+  drakGray:"#444",
+  yellow:"#FFF5E7"
 }
 export default AllColors;

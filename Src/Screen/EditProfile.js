@@ -1,6 +1,6 @@
 // screens/EditProfileScreen.js
 
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   View,
   Text,
@@ -10,43 +10,198 @@ import {
   Image,
   ScrollView,
   StatusBar,
-
+PermissionsAndroid,
+  Platform,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-
+ import {
+  launchCamera,
+  launchImageLibrary,
+} from 'react-native-image-picker';
+import { BASE_URL, getToken } from '../Api/Api';
 const EditProfileScreen = ({navigation}) => {
-  const [name, setName] = useState('John Doe');
-  const [email, setEmail] = useState('john@example.com');
-  const [mobile, setMobile] = useState('9876543210');
-  const [stateName, setStateName] = useState('Karnataka');
-  const [city, setCity] = useState('Bangalore');
-  const [zipCode, setZipCode] = useState('560001');
-  const [address, setAddress] = useState('123 Main Street');
-  const [landmark, setLandmark] = useState('Near Park');
-  const [alternativePhone, setAlternativePhone] =
-    useState('9876543211');
+  const [name, setName] = useState('');
+const [email, setEmail] = useState('');
+const [mobile, setMobile] = useState('');
+const [alternativePhone, setAlternativePhone] = useState('');
+const [image, setImage] = useState('');
 
-  const onSave = () => {
-    const body = {
-      name,
-      email,
-      mobile,
-      state: stateName,
-      city,
-      zipCode,
-      address,
-      landmark,
-      alternativePhone,
-    };
+const [loading, setLoading] = useState(false);
+ const onSave = async () => {
+  const token = await getToken();
 
-    console.log('PROFILE BODY => ', body);
-  };
+  try {
+    const response = await fetch(`${BASE_URL}user/profile`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        
+        email,
+        mobile,
+        name,
+        alternativePhone,
+      }),
+     
+    });
+console.log(email,mobile,name,alternativePhone,'jkj')
+    const data = await response.json();
+         console.log(data)
+    if (response.ok) {
+      Alert.alert('Success', data.message);
+      getProfileDetails();
+    } else {
+      Alert.alert('Error', data.message);
+    }
+  } catch (error) {
+    console.log(error);
+    Alert.alert('Error', 'Something went wrong');
+  }
+};
 
+const [profileImage, setProfileImage] = useState('');
+const requestCameraPermission = async () => {
+  if (Platform.OS !== 'android') {
+    return true;
+  }
+
+  const granted = await PermissionsAndroid.request(
+    PermissionsAndroid.PERMISSIONS.CAMERA,
+  );
+
+  return granted === PermissionsAndroid.RESULTS.GRANTED;
+};
+
+const openCamera = async () => {
+  const granted = await requestCameraPermission();
+
+  if (!granted) {
+    Alert.alert('Camera permission denied');
+    return;
+  }
+
+  launchCamera(
+    {
+      mediaType: 'photo',
+      quality: 0.8,
+      saveToPhotos: true,
+    },
+    response => {
+      if (response.didCancel) return;
+
+      if (response.errorCode) {
+        Alert.alert(response.errorMessage);
+        return;
+      }
+
+      if (response.assets && response.assets.length > 0) {
+        setProfileImage(response.assets[0].uri);
+      }
+    },
+  );
+};
+
+const openGallery = () => {
+  launchImageLibrary(
+    {
+      mediaType: 'photo',
+      quality: 0.8,
+    },
+    response => {
+      if (response.didCancel) return;
+
+      if (response.errorCode) {
+        Alert.alert(response.errorMessage);
+        return;
+      }
+
+      if (response.assets && response.assets.length > 0) {
+        setProfileImage(response.assets[0].uri);
+      }
+    },
+  );
+};
+
+const selectImage = () => {
+  Alert.alert(
+    'Select Profile Picture',
+    'Choose Image Source',
+    [
+      {
+        text: 'Camera',
+        onPress: openCamera,
+      },
+      {
+        text: 'Gallery',
+        onPress: openGallery,
+      },
+      {
+        text: 'Cancel',
+        style: 'cancel',
+      },
+    ],
+  );
+};
+const getProfileDetails = async () => {
+  const token = await getToken();
+
+  try {
+    setLoading(true);
+
+    const response = await fetch(`${BASE_URL}me`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+  
+    if (data.status === 200 && data.user) {
+      const user = data.user;
+ console.log(user.alternativePhone)
+      setName(user.name ?? '');
+      setEmail(user.email ?? '');
+      setMobile(user.mobile ?? '');
+       setAlternativePhone(user.alternativePhone ?? '');
+      setImage(user.avatar ?? '');
+    }
+
+    setLoading(false);
+  } catch (error) {
+    setLoading(false);
+    console.log(error);
+  }
+};
+useEffect(()=>{
+           getProfileDetails()
+},[])
+
+ 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar backgroundColor="#F7F8FA" barStyle="dark-content" />
-
+{loading && (
+  <View
+    style={{
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0,0,0,.15)',
+      zIndex: 100,
+    }}>
+    <ActivityIndicator size="large" color="#FF4D6D" />
+  </View>
+)}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{paddingBottom: 40}}>
@@ -66,14 +221,17 @@ const EditProfileScreen = ({navigation}) => {
 
         {/* PROFILE IMAGE */}
         <View style={styles.profileSection}>
-          <Image
-            source={{
-              uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
-            }}
-            style={styles.profileImage}
-          />
+        <Image
+  source={{
+    uri:
+      profileImage ||
+      image ||
+      'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+  }}
+  style={styles.profileImage}
+/>
 
-          <TouchableOpacity style={styles.cameraBtn}>
+          <TouchableOpacity style={styles.cameraBtn} onPress={selectImage}>
             <Ionicons name="camera" size={18} color="#fff" />
           </TouchableOpacity>
         </View>

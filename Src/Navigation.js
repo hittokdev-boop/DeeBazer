@@ -17,7 +17,10 @@ import SaveAddress from './Screen/SaveAddress'
 import ProductDetails from './Screen/ProductDetails'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import MapScreen from './Screen/MapScreen'
-
+import AllAddress from './Screen/AllAdress'
+import ViewAllProducts from  './Screen/ViewAllProducts'
+import Wishlist from './Screen/wishlist '
+import RazorpayScreen from './Screen/RazorpayScreen'
 // const Tab = createMaterialTopTabNavigator();
 const Tab=createBottomTabNavigator()
 export default function Navigation(){
@@ -43,57 +46,34 @@ const AppStack=()=>{
         <Stack.Screen name='SaveAddress' component={SaveAddress} />
         <Stack.Screen name='ProductDetails' component={ProductDetails} />
           <Stack.Screen name='MapScreen' component={MapScreen} />
+          <Stack.Screen name='AllAddress' component={AllAddress}/>
+          <Stack.Screen name="ViewAllProducts"  component={ViewAllProducts}/>
+             <Stack.Screen name="Wishlist"  component={Wishlist}/>
+              <Stack.Screen name="RazorpayScreen"  component={RazorpayScreen}/>
       </Stack.Navigator>
     )
 }
 const AppTab=()=>{
     return(
 <Tab.Navigator
-  tabBarPosition="bottom"
   screenOptions={{
-    swipeEnabled: true,
-    animationEnabled: true,
-    lazy: true,
-
+    headerShown: false,
     tabBarShowLabel: false,
-
-    tabBarActiveTintColor: AllColors.primary,
-    tabBarInactiveTintColor: AllColors.grey,
-    headerShown:false,
-    tabBarStyle: {
-      // position: 'absolute',
-      bottom: 20,
-      // left: 20,
-      // right: 20,
-     
-         marginLeft:20,
-      backgroundColor: '#fff',
-      
-      height: 50,
-      borderRadius: 40,
-
-      elevation: 10,
-      width:350,
-      shadowColor: '#000',
-      shadowOpacity: 0.1,
-      shadowRadius: 10,
-      shadowOffset: {
-        width: 0,
-        height: 5,
-      },
-
-      overflow: 'hidden',
-    },
-
-    tabBarIndicatorStyle: {
-      display: 'none',
-    },
-
-    tabBarItemStyle: {
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
+    tabBarActiveTintColor:AllColors.primary,
+    tabBarInactiveTintColor:AllColors.grey,
+    // tabBarStyle: {
+    //   position: 'absolute',
+    //   bottom: 15,
+    //   alignSelf: 'center',
+    //   width: '85%',
+    //   height: 65,
+    //   borderRadius: 20,
+    //   backgroundColor: '#fff',
+    //   elevation: 10,
+    // },
   }}>
+
+  
         <Tab.Screen
           name="Profile"
           component={DashBoard}
