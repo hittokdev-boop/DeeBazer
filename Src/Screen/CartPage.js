@@ -157,86 +157,6 @@ const decreaseQty = async (product) => {
 
   await updateCartQty(product, newQty);
 };
-
-// compute local extra data (subtotal, discount, total) from cart items
-const computeExtraDataFromCart = (items) => {
-  try {
-    const discountedSum = items.reduce(
-      (sum, it) => sum + Number(it.discount_total ?? it.discount_price ?? 0),
-      0
-    );
-
-    const actualSum = items.reduce(
-      (sum, it) => sum + Number(it.actual_total ?? (Number(it.actual_price || 0) * Number(it.qty || 1))),
-      0
-    );
-
-    const discount = actualSum - discountedSum;
-    const delivery_charge = Number(extraData?.delivery_charge) || 0;
-    const total_amount = discountedSum + delivery_charge;
-
-    return {
-      sub_total: Number(actualSum.toFixed(2)),
-      discount: Number(discount.toFixed(2)),
-      delivery_charge,
-      total_amount: Number(total_amount.toFixed(2)),
-    };
-  } catch (e) {
-    return extraData || {};
-  }
-};
-const requestForOder = async () => {
-  try {
-    if (!addressId) {
-      Alert.alert("Select Address", "Please select a delivery address.");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append("address_id", addressId);
-    formData.append("payment_method", "cashfree"); 
-
-    if (couponCode && couponCode.trim() !== "") {
-      formData.append("coupon_code", couponCode);
-    }
-
-    const response = await fetch(`${BASE_URL}/api/orders`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-      body: formData,
-    });
-
-    const result = await response.json();
-
-    console.log("Create Order Response:", result);
-
-    if (result.status === 200) {
-      Alert.alert("Success", result.message);
-
-      // Cashfree Payment
-      if (result.payment_url) {
-        navigation.navigate("PaymentWebView", {
-          paymentUrl: result.payment_url,
-          orderId: result.order_id,
-        });
-      } else {
-    
-        navigation.replace("OrderSuccess", {
-          orderId: result.order_id,
-        });
-      }
-    } else {
-      Alert.alert("Error", result.message || "Order creation failed");
-    }
-  } catch (error) {
-    console.log("Create Order Error:", error);
-    Alert.alert("Error", "Something went wrong.");
-  }
-};
-
 const removeItem = async (productId) => {
     const userid = await getuserId();
             const token = await getToken();
@@ -271,7 +191,137 @@ const removeItem = async (productId) => {
     Alert.alert("Error", "Something went wrong");
   }
 };
+// compute local extra data (subtotal, discount, total) from cart items
+const computeExtraDataFromCart = (items) => {
+  try {
+    const discountedSum = items.reduce(
+      (sum, it) => sum + Number(it.discount_total ?? it.discount_price ?? 0),
+      0
+    );
 
+    const actualSum = items.reduce(
+      (sum, it) => sum + Number(it.actual_total ?? (Number(it.actual_price || 0) * Number(it.qty || 1))),
+      0
+    );
+
+    const discount = actualSum - discountedSum;
+    const delivery_charge = Number(extraData?.delivery_charge) || 0;
+    const total_amount = discountedSum + delivery_charge;
+
+    return {
+      sub_total: Number(actualSum.toFixed(2)),
+      discount: Number(discount.toFixed(2)),
+      delivery_charge,
+      total_amount: Number(total_amount.toFixed(2)),
+    };
+  } catch (e) {
+    return extraData || {};
+  }
+};
+const requestForOder = async (paymentMethod = "cashfree") => {
+  console.log(addressId,'kolkata')
+  try {
+    if (!addressId) {
+      Alert.alert("Error", "Please select a delivery address.");
+      return;
+    }
+
+    const token = await getToken()
+console.log(addressData)
+  const body = {
+  address_id: addressId,
+  payment_method: String(paymentMethod),
+
+  items: cartItems.map(item => ({
+    product_id: item.product_id,
+    quantity: item.qty,
+    price: item.discount_price || item.price,
+  })),
+
+  shipping_address: {
+    full_name: addressData?.name,
+    address:
+      `${addressData?.house_no}, ${addressData?.road_name}`,
+    city: addressData?.city,
+    state: addressData?.state,
+    zip_code: addressData?.pin,
+    phone: addressData?.mobile,
+  },
+
+  total_amount: extraData?.total_amount,
+};
+
+    // console.log("Order Request:", body);
+
+    const response = await fetch(`${BASE_URL}orders`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      }
+    );
+
+    const result = await response.json();
+
+    console.log("Order Response:", result);
+
+    // if (result.status === 200) {
+    //   if (paymentMethod === "cashfree") {
+    //     if (result.payment_url) {
+    //       Linking.openURL(result.payment_url);
+    //     } else {
+    //       Alert.alert("Error", "Payment URL not found.");
+    //     }
+    //   } else {
+    //     Alert.alert("Success", result.message);
+    //     navigation.navigate("OrderSuccess");
+    //   }
+    // } else {
+    //   Alert.alert("Error", result.message || "Order creation failed.");
+    // }
+  } catch (error) {
+    console.log("Order Error:", error);
+    Alert.alert("Error", "Something went wrong.");
+  }
+};
+
+const openRazorpay = () => {
+  const options = {
+    description: 'Order Payment',
+    image: 'https://your-logo.com/logo.png',
+    currency: 'INR',
+    key: 'rzp_test_SSIXQ48CfHlnJs', 
+    amount: Math.round(Number(extraData?.total_amount) * 100), 
+    name: 'DeeBazer',
+    prefill: {
+      email: 'test@test.com',
+      contact: addressData?.mobile || '',
+      name: addressData?.name || '',
+    },
+    theme: {
+      color: '#291a5a',
+    },
+  };
+console.log("Total Amount:", extraData?.total_amount);
+console.log("Razorpay Amount:", Math.round(Number(extraData?.total_amount) * 100));
+  RazorpayCheckout.open(options)
+    .then(async (payment) => {
+      console.log('Payment Success', payment);
+
+      await requestForOder("cashfree");
+    })
+    .catch((error) => {
+      console.log('Payment Failed', error);
+
+      Alert.alert(
+        'Payment Failed',
+        error.description || 'Payment Cancelled'
+      );
+    });
+};
 const total = cartItems.reduce(
   (sum, item) =>
     sum + Number(item.actual_price) * Number(item.qty),
@@ -559,13 +609,13 @@ if (isuser && (!cartItems || cartItems.length === 0)) {
   renderItem={({ item }) => (
     <View style={styles.productCard}>
       <View style={styles.deliveryTop}>
-        <View style={styles.timeIcon}>
+        {/* <View style={styles.timeIcon}>
           <MaterialCommunityIcons
             name="clock-time-four-outline"
             size={22}
             color="#A26B00"
           />
-        </View>
+        </View> */}
 
          {/* <View>
        <Text style={styles.deliveryTime}>
@@ -647,9 +697,48 @@ if (isuser && (!cartItems || cartItems.length === 0)) {
        {/* <View style={{height:5,backgroundColor:all}}/> */}
     </View>
   )}
+   ListFooterComponent={
+    <><View style={styles.billCard}>
+      <Text style={styles.billTitle}>Bill Details</Text>
+
+      <View style={styles.billRow}>
+        <Text style={styles.billLabel}>Item Total</Text>
+        <Text style={styles.billValue}>₹{billSummary.sub_total}</Text>
+      </View>
+
+      <View style={styles.billRow}>
+        <Text style={styles.billLabel}>Discount</Text>
+        <Text style={styles.discountValue}>
+          - ₹{billSummary.discount}
+        </Text>
+      </View>
+
+      <View style={styles.billRow}>
+        <Text style={styles.billLabel}>Delivery Charge</Text>
+        <Text style={styles.billValue}>
+          {Number(billSummary.delivery_charge) === 0
+            ? "FREE"
+            : `₹${billSummary.delivery_charge}`}
+        </Text>
+      </View>
+
+      <View style={styles.billDivider} />
+
+      <View style={styles.billRow}>
+        <Text style={styles.totalLabel}>Total Amount</Text>
+        <Text style={styles.totalValue}>
+          ₹{billSummary.total_amount}
+        </Text>
+      </View>
+      
+    </View>
+    <View  style={{width: '100%', height: 50, backgroundColor: '#f0f0f0'}}/>
+    </>
+    
+  }
 />
 
-  <View style={styles.billCard}>
+  {/* <View style={styles.billCard}>
       <Text style={styles.billTitle}>Bill Details</Text>
 
       <View style={styles.billRow}>
@@ -690,7 +779,7 @@ if (isuser && (!cartItems || cartItems.length === 0)) {
           ₹{billSummary.total_amount}
         </Text>
       </View>
-    </View>
+    </View> */}
 {/* ======= Second Card ======= */}
 
 
@@ -733,7 +822,7 @@ if (isuser && (!cartItems || cartItems.length === 0)) {
   </TouchableOpacity>
 
   {/* Buy Now */}
-  <TouchableOpacity style={styles.buyBtn}   onPress={requestForOder}>
+  <TouchableOpacity style={styles.buyBtn}   onPress={openRazorpay}>
     <Text style={styles.buyText}>
       Buy Now
     </Text>

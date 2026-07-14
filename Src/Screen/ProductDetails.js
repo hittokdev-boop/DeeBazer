@@ -12,6 +12,7 @@ export default function ProductDetails({route}){
     const [productImage,setProductImage]=useState( null)
     const [isAddedToCart, setIsAddedToCart] = useState(false);
     const [isWishlisted, setIsWishlisted] = useState(false);
+    
      const { id } = route.params;
     
 const navigation=useNavigation()
@@ -47,16 +48,26 @@ ${product?.image?.[0]}`,
         });
     
         const data = await response.json();
-        console.log('data',data.data)
+        // console.log('data',data.data.isCartProduct)
        if(data.data){ 
           setProduct(data.data)
           setProductImage(data.data.image[0])
+            setIsAddedToCart(data.data.isCartProduct);
+  setIsWishlisted(data.data.isWishlistProduct);
       };
       } catch (error) {
         console.log('Error:', error);
       }   
     }
+const handleCart = async () => {
 
+  if (isAddedToCart) {
+    navigation.navigate("Cart");
+    return;
+  }
+
+  IsUser();
+};
 
 const getWishlistStatus = async () => {
   const token = await getToken();
@@ -131,7 +142,17 @@ const toggleWishlist = async () => {
     }
   }
 };
+const handleWishlist = async () => {
 
+  if (!await IsUser()) return;
+
+  // Wishlist API
+
+  if (success) {
+    setIsWishlisted(!isWishlisted);
+  }
+
+};
 const requestToCart = async () => {
   const userId = await getuserId();
 
@@ -151,6 +172,7 @@ const requestToCart = async () => {
 
     if (data.status == 200) {
       setIsAddedToCart(true);
+
 
       // Toast Message
       if (Platform.OS === 'android') {
@@ -203,15 +225,17 @@ const requestToCart = async () => {
   <View style={styles.rightButtons}>
 
     {/* Wishlist */}
-    <TouchableOpacity
-      style={styles.iconButton}
-      onPress={toggleWishlist}>
-      <AntDesign
-        name={isWishlisted ? 'heart' : 'hearto'}
-        size={20}
-        color={AllColors.primary}
-      />
-    </TouchableOpacity>
+<TouchableOpacity
+  style={styles.iconButton}
+  onPress={handleWishlist}>
+
+  <AntDesign
+    name={isWishlisted ? "heart" : "hearto"}
+    size={20}
+    color={AllColors.primary}
+  />
+
+</TouchableOpacity>
 
     {/* Share */}
     <TouchableOpacity
@@ -268,11 +292,15 @@ const requestToCart = async () => {
   </View>
 
   <View style={styles.bottomButtons}>
-    <TouchableOpacity style={styles.cartBtn} onPress={IsUser}>
-      <Text style={styles.cartText}>
-        {isAddedToCart ? <Text>goto cart</Text> :<Text>Add To Cart </Text> }
-      </Text>
-    </TouchableOpacity>
+   <TouchableOpacity
+  style={styles.cartBtn}
+  onPress={handleCart}>
+
+  <Text style={styles.cartText}>
+    {isAddedToCart ? "Go To Cart" : "Add To Cart"}
+  </Text>
+
+</TouchableOpacity>
 
     <TouchableOpacity style={styles.buyBtn}>
       <Text style={styles.buyText}>

@@ -46,9 +46,12 @@ export default function DashBoard() {
 const [searchProducts, setSearchProducts] = useState([]);
 const [loading, setLoading] = useState(false);
 const [wishlistIds, setWishlistIds] = useState([]);
+const [cartQty, setCartQty] = useState({});
 useFocusEffect(
   useCallback(() => {
     getWishlistIds();
+        getCartItems();   
+
   }, [])
 );
 const getSearchText = async (value) => {
@@ -85,9 +88,73 @@ const getSearchText = async (value) => {
     setLoading(false);
   }
 };
+const removeCart = async (id) => {
+  const userId = await getuserId();
 
+  const formData = new FormData();
+  formData.append("user_id", userId);
+  formData.append("product_id", id);
+
+  const response = await fetch(`${BASE_URL}cart-remove`, {
+    method: "POST",
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (data.status === 200) {
+    getCartItems();
+  }
+};
 const Navigation=useNavigation()
+const increaseQty = async (id) => {
+  const qty = (cartQty[id] || 0) + 1;
 
+  const userId = await getuserId();
+
+  const formData = new FormData();
+  formData.append("user_id", userId);
+  formData.append("product_id", id);
+  formData.append("qty", qty);
+
+  const response = await fetch(`${BASE_URL}cart-to-add`, {
+    method: "POST",
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (data.status === 200) {
+    getCartItems();
+  }
+};
+const decreaseQty = async (id) => {
+  const qty = cartQty[id];
+
+  if (qty <= 1) {
+    await removeCart(id);
+    getCartItems();
+    return;
+  }
+
+  const userId = await getuserId();
+
+  const formData = new FormData();
+  formData.append("user_id", userId);
+  formData.append("product_id", id);
+  formData.append("qty", qty - 1);
+
+  const response = await fetch(`${BASE_URL}cart-to-add`, {
+    method: "POST",
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (data.status === 200) {
+    getCartItems();
+  }
+};
 const isItemWishlisted = (item) => {
   return wishlistIds.includes(String(item.id));
 };
@@ -120,7 +187,19 @@ const getWishlistItems = async () => {
     console.log('Wishlist fetch error:', error);
   }
 };
+const updateCartQty = async (productId, qty) => {
+  const userId = await getuserId();
 
+  const formData = new FormData();
+  formData.append("user_id", userId);
+  formData.append("product_id", productId);
+  formData.append("qty", qty);
+
+  await fetch(`${BASE_URL}cart-to-add`, {
+    method: "POST",
+    body: formData,
+  });
+};
 const toggleWishlist = async (item) => {
   const token = await getToken();
   const userId = await getuserId();
@@ -219,7 +298,7 @@ useEffect(()=>{
   getWishlistItems()
 },[])
 const gotoProductDetails = (item) => {
-  
+  console.log(item)
   Navigation.navigate('ProductDetails', {
     id: item.id,
   });
@@ -393,7 +472,33 @@ const getbestsellingProducts=  async ()=>{
     console.log('Error1:', error);
   }
 }
+const getCartItems = async () => {
+  const userId = await getuserId();
+  if (!userId) return;
 
+  const formData = new FormData();
+  formData.append("user_id", userId);
+
+  try {
+    const response = await fetch(`${BASE_URL}cart-view`, {
+      method: "POST",
+      body: formData,
+    });
+
+    const result = await response.json();
+
+    let qtyObj = {};
+
+    (result.data || []).forEach(item => {
+      qtyObj[item.product_id] = Number(item.qty);
+    });
+
+    setCartQty(qtyObj);
+
+  } catch (e) {
+    console.log(e);
+  }
+};
  const requestToCart = async (id) => {
    const userId = await getuserId();
  
@@ -409,11 +514,16 @@ const getbestsellingProducts=  async ()=>{
      });
  
      const data = await response.json();
-    //  console.log('data', data);
+     console.log('data', data);
  
      if (data.status == 200) {
+       getCartItems();
       //  setIsAddedToCart(true);
- 
+   setCartQty(prev => ({
+    ...prev,
+    [id]: 1,
+  }));
+
        // Toast Message
        if (Platform.OS === 'android') {
          ToastAndroid.show(
@@ -583,72 +693,78 @@ const getbestsellingProducts=  async ()=>{
   keyExtractor={(item) => item.id}
   contentContainerStyle={{
     paddingHorizontal: 10,
-    // paddingBottom: 100,
+    paddingBottom: 20,
   }}
   columnWrapperStyle={{
   justifyContent: 'space-between',
 }}
-  renderItem={({ item }) => (
+   renderItem={({ item }) => (
+    <TouchableOpacity style={styles.dealCard}  onPress={() => gotoProductDetails(item)}>
+      <Image
+        source={{ uri: item.image }}
+        style={styles.dealImage}
+      />
+<TouchableOpacity
+      style={[
+        styles.wishlistButton,
+        isItemWishlisted(item) && styles.wishlistButtonActive,
+      ]}
+      onPress={() => toggleWishlist(item)}
+    >
+      <Ionicons
+        name={isItemWishlisted(item) ? "heart" : "heart-outline"}
+        size={18}
+        color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
+      />
+    </TouchableOpacity>
+      <Text numberOfLines={2} style={styles.productName}>
+        {item.name}
+      </Text>
+
+   
+      <View style={styles.priceRow}>
+          <Text style={styles.price}>₹{item.discount_price}</Text>
+
+        <Text style={styles.oldPrice}>₹{item.actual_price}</Text>
+       
+      </View>
+
+
+<View style={{flexDirection:'row',justifyContent:'space-between'}}>
+  <Text style={styles.offer}> 
+          16% OFF
+        </Text>
+      <View style={styles.actionContainer}>
+   {cartQty[item.id] ? (
+    <View style={styles.qtyContainer}>
+      <TouchableOpacity
+        style={styles.qtyBtn}
+        onPress={() => decreaseQty(item.id)}>
+        <Text style={styles.qtyText}>-</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.qtyCount}>{cartQty[item.id]}</Text>
+
+      <TouchableOpacity
+        style={styles.qtyBtn}
+        onPress={() => increaseQty(item.id)}>
+        <Text style={styles.qtyText}>+</Text>
+      </TouchableOpacity>
+    </View>
+  ) : (
     <TouchableOpacity
-  activeOpacity={0.9}
-  style={styles.card}
-  onPress={() => gotoProductDetails(item)}
->
-  {/* Wishlist */}
-  {/* <TouchableOpacity style={styles.wishlistBtn}>
-    <AntDesign
-      name="hearto"
-      size={18}
-      color={AllColors.primary}
-    />
-  </TouchableOpacity> */}
-
-  {/* Product Image */}
-  <View style={styles.imageBox}>
-    <Image
-      source={{uri: item.image}}
-      style={styles.productImage}
-    />
-
-    <View style={styles.discountBox}>
-      <Text style={styles.discountText}>
-        {item.discount}
-      </Text>
-    </View>
-  </View>
-
-  <View style={{marginTop: 10}}>
-    <Text numberOfLines={1} style={styles.productTitle}>
-      {item.name}
-    </Text>
-
-    <Text numberOfLines={2} style={styles.subTitle}>
-      {item.short_desc}
-    </Text>
-
-    <View style={styles.priceRow}>
-      <Text style={styles.price}>
-         ₹{item.discount_price} </Text>
-
-      <Text style={styles.oldPrice}>
-       ₹{item.actual_price}
-      </Text>
-    </View>
-
-    {/* Add To Cart */}
-    <TouchableOpacity style={styles.addCartBtn} onPress={()=>{IsUser(item)}}>
+      style={styles.iconButton}
+      onPress={() => IsUser(item)}>
       <Ionicons
         name="cart-outline"
         size={18}
         color="#fff"
       />
-      <Text style={styles.addCartText}>
-        Add To Cart
-      </Text>
     </TouchableOpacity>
-    <View style={{height:10}}/>
+  )}
   </View>
-</TouchableOpacity>
+</View>
+    </TouchableOpacity>
   )}
 />
 {/* DEAL OF THE DAY */}
@@ -709,13 +825,33 @@ dealOfTheDay
           {item.discount}% OFF
         </Text>
       <View style={styles.actionContainer}>
-    <TouchableOpacity style={styles.iconButton} onPress={()=>{IsUser(item)}}>
+   {cartQty[item.id] ? (
+    <View style={styles.qtyContainer}>
+      <TouchableOpacity
+        style={styles.qtyBtn}
+        onPress={() => decreaseQty(item.id)}>
+        <Text style={styles.qtyText}>-</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.qtyCount}>{cartQty[item.id]}</Text>
+
+      <TouchableOpacity
+        style={styles.qtyBtn}
+        onPress={() => increaseQty(item.id)}>
+        <Text style={styles.qtyText}>+</Text>
+      </TouchableOpacity>
+    </View>
+  ) : (
+    <TouchableOpacity
+      style={styles.iconButton}
+      onPress={() => IsUser(item)}>
       <Ionicons
         name="cart-outline"
         size={18}
         color="#fff"
       />
     </TouchableOpacity>
+  )}
   </View>
 </View>
     </TouchableOpacity>
@@ -767,9 +903,9 @@ popularProduct
 
 
       <View style={styles.priceRow}>
-          <Text style={styles.price}>₹{item.originalPrice}</Text>
+          <Text style={styles.price}>₹{item.price}</Text>
 
-        <Text style={styles.oldPrice}>₹{item.price}</Text>
+        <Text style={styles.oldPrice}>₹{item.originalPrice}</Text>
        
       </View>
 
@@ -778,14 +914,34 @@ popularProduct
   <Text style={styles.offer}> 
           {item.discount}% OFF
         </Text>
-      <View style={styles.actionContainer}>
-    <TouchableOpacity style={styles.iconButton} onPress={()=>{IsUser(item)}}>
+     <View style={styles.actionContainer}>
+   {cartQty[item.id] ? (
+    <View style={styles.qtyContainer}>
+      <TouchableOpacity
+        style={styles.qtyBtn}
+        onPress={() => decreaseQty(item.id)}>
+        <Text style={styles.qtyText}>-</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.qtyCount}>{cartQty[item.id]}</Text>
+
+      <TouchableOpacity
+        style={styles.qtyBtn}
+        onPress={() => increaseQty(item.id)}>
+        <Text style={styles.qtyText}>+</Text>
+      </TouchableOpacity>
+    </View>
+  ) : (
+    <TouchableOpacity
+      style={styles.iconButton}
+      onPress={() => IsUser(item)}>
       <Ionicons
         name="cart-outline"
         size={18}
         color="#fff"
       />
     </TouchableOpacity>
+  )}
   </View>
 </View>
     </TouchableOpacity>
@@ -848,14 +1004,34 @@ bestsellingProduct
   <Text style={styles.offer}> 
           {item.discount}% OFF
         </Text>
-      <View style={styles.actionContainer}>
-    <TouchableOpacity style={styles.iconButton} onPress={()=>{IsUser(item)}}>
+        <View style={styles.actionContainer}>
+   {cartQty[item.id] ? (
+    <View style={styles.qtyContainer}>
+      <TouchableOpacity
+        style={styles.qtyBtn}
+        onPress={() => decreaseQty(item.id)}>
+        <Text style={styles.qtyText}>-</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.qtyCount}>{cartQty[item.id]}</Text>
+
+      <TouchableOpacity
+        style={styles.qtyBtn}
+        onPress={() => increaseQty(item.id)}>
+        <Text style={styles.qtyText}>+</Text>
+      </TouchableOpacity>
+    </View>
+  ) : (
+    <TouchableOpacity
+      style={styles.iconButton}
+      onPress={() => IsUser(item)}>
       <Ionicons
         name="cart-outline"
         size={18}
         color="#fff"
       />
     </TouchableOpacity>
+  )}
   </View>
 </View>
 
@@ -926,14 +1102,34 @@ featuredproducts
   <Text style={styles.offer}> 
           {item.discount}% OFF
         </Text>
-      <View style={styles.actionContainer}>
-    <TouchableOpacity style={styles.iconButton} onPress={()=>{IsUser(item)}}>
+        <View style={styles.actionContainer}>
+   {cartQty[item.id] ? (
+    <View style={styles.qtyContainer}>
+      <TouchableOpacity
+        style={styles.qtyBtn}
+        onPress={() => decreaseQty(item.id)}>
+        <Text style={styles.qtyText}>-</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.qtyCount}>{cartQty[item.id]}</Text>
+
+      <TouchableOpacity
+        style={styles.qtyBtn}
+        onPress={() => increaseQty(item.id)}>
+        <Text style={styles.qtyText}>+</Text>
+      </TouchableOpacity>
+    </View>
+  ) : (
+    <TouchableOpacity
+      style={styles.iconButton}
+      onPress={() => IsUser(item)}>
       <Ionicons
         name="cart-outline"
         size={18}
         color="#fff"
       />
     </TouchableOpacity>
+  )}
   </View>
 </View>
 </TouchableOpacity>
@@ -999,7 +1195,37 @@ actionContainer: {
   alignSelf:"flex-end"
   // width:90, 
 },
+qtyContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  width: 82,        
+  height: 32,
+  backgroundColor: AllColors.primary,
+  borderWidth: 2,
+  borderColor: AllColors.primary,
+  borderRadius: 18,
+  paddingHorizontal: 4,
+},
 
+qtyBtn: {
+  width: 40,
+  height: 40,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+
+qtyText: {
+  color: '#fff',
+  fontSize: 22,
+  fontWeight: 'bold',
+},
+
+qtyValue: {
+  color: '#fff',
+  fontSize: 16,
+  fontWeight: '700',
+},
 iconButton: {
   width: 38,
   height: 38,
@@ -1118,7 +1344,46 @@ iconButton: {
     backgroundColor: '#fd83b050',
     borderColor: AllColors.primary,
   },
+// cart button
 
+
+
+qtyContainer: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+
+  width: 70,
+  height: 30,
+
+  borderWidth: 2,
+  borderColor: AllColors.primary,
+  borderRadius: 20,
+
+  paddingHorizontal: 4,
+},
+
+qtyBtn: {
+  width: 18,
+  height: 18,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+
+qtyText: {
+  fontSize: 20,
+  fontWeight: '700',
+  color: AllColors.black,
+  lineHeight: 18,
+},
+
+qtyCount: {
+  fontSize: 13,
+  fontWeight: '700',
+  color: AllColors.black,
+  textAlign: 'center',
+  minWidth: 16,
+},
   /* ========================= */
   /* CAROUSEL */
   /* ========================= */
@@ -1256,6 +1521,7 @@ dealCard: {
   padding: 10,
   marginRight: 12,
   elevation: 3,
+   marginBottom: 15,
 },
 
 dealImage: {

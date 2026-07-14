@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {Alert, Modal, PermissionsAndroid, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View} from 'react-native';
 import MapView, { Circle, Marker } from 'react-native-maps';
-// import Geolocation from 'react-native-geolocation-service';
 import Geolocation from '@react-native-community/geolocation';
 import AllColors from '../Constants/Color';
-import { add } from 'react-native/types_generated/Libraries/Animated/AnimatedExports';
 import Entypo from 'react-native-vector-icons/Entypo'
 import Geocoder from 'react-native-geocoding';
 import { BASE_URL, getToken, getuserId } from "../Api/Api";
@@ -14,7 +12,6 @@ import { useNavigation } from '@react-navigation/native';
 export default function MapScreen() {
   const [latitude,setLatitude]=useState(null)
   const [longitude,setLongitude]=useState(null)
-  // const [address, setAddress] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
 const [addressType, setAddressType] = useState('home');
   const [stateName, setStateName] = useState('');
@@ -116,7 +113,7 @@ const saveAddress = async () => {
     if (granted === PermissionsAndroid.RESULTS.GRANTED) {
       getCurrentLocation()
     } else {
-      console.log('Camera permission denied');
+      console.log('location permission denied');
     }
   } catch (err) {
     console.warn(err);
@@ -127,7 +124,7 @@ useEffect(()=>{
       requestmapPermission()
 },[])
  const getCurrentLocation = () => {
-     console.log('hkjh')
+    
   Geocoder.init('AIzaSyCJKwxaSS0glDtxXMX37uHX_KHUEleCMk0');
 
   Geolocation.getCurrentPosition(
@@ -138,13 +135,11 @@ useEffect(()=>{
 
      setLatitude(lat)
      setLongitude(lng)
-
       try {
         const res = await Geocoder.from(lat, lng);
-
+      
         const address =
           res.results[0]?.formatted_address || 'Address not found';
-
        setAddress(address)
       } catch (error) {
         console.log(error);
