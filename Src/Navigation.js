@@ -21,6 +21,9 @@ import AllAddress from './Screen/AllAdress'
 import ViewAllProducts from  './Screen/ViewAllProducts'
 import Wishlist from './Screen/wishlist '
 import RazorpayScreen from './Screen/RazorpayScreen'
+import Orders from './Screen/Orders';
+import Coupons from './Screen/Coupons';
+import HelpCenter from './Screen/HelpCenter';
 // const Tab = createMaterialTopTabNavigator();
 const Tab=createBottomTabNavigator()
 export default function Navigation(){
@@ -49,7 +52,11 @@ const AppStack=()=>{
           <Stack.Screen name='AllAddress' component={AllAddress}/>
           <Stack.Screen name="ViewAllProducts"  component={ViewAllProducts}/>
              <Stack.Screen name="Wishlist"  component={Wishlist}/>
-              <Stack.Screen name="RazorpayScreen"  component={RazorpayScreen}/>
+          <Stack.Screen name="RazorpayScreen"  component={RazorpayScreen}/>
+          <Stack.Screen name="CartPage"  component={CartPage}/>
+          <Stack.Screen name="Orders"  component={Orders}/>
+          <Stack.Screen name="Coupons"  component={Coupons}/>
+          <Stack.Screen name="HelpCenter"  component={HelpCenter}/>
       </Stack.Navigator>
     )
 }

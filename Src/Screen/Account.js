@@ -1,597 +1,361 @@
 import React, { useEffect, useState } from 'react';
 import {
-
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AllColors from '../Constants/Color';
 import CustomLoader from '../Common/Loader';
 import { BASE_URL, getToken, removemobile, removeToken, removeuserId } from '../Api/Api';
 import CustomAlert from '../Common/Alert';
-import SuccessScreen from './../Common/SuccessScreen'
 import SuccessModal from './../Common/SuccessScreen';
+
 export default function Account() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState('');
   const [showAlert, setShowAlert] = useState(false);
-  const [errorText,setErrorText]=useState('')
-  const [isSuccess,setIsSuccess]=useState(false)
-  // You have already logged out
+  const [errorText, setErrorText] = useState('');
+  const [isSuccess, setIsSuccess] = useState(false);
+
   const Navigation = useNavigation();
 
-  useEffect(() => {
 
+  useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(false);
-    }, 3000);
-
+    }, 1500);
     return () => clearTimeout(timer);
-
   }, []);
-useEffect(() => {
-  checkLogin();
-}, []);
-const goToWishList=()=>{
-  Navigation.navigate("Wishlist")
-}
-const checkLogin = async () => {
-  try {
-    const token = await getToken();
 
-    if (token) {
-      setIsLoggedIn(true);
-    } else {
-      setIsLoggedIn(false);
+  useFocusEffect(
+    React.useCallback(() => {
+      checkLogin();
+    }, [])
+  );
+
+  const handleNavigate = (screenName) => {
+    try {
+      const parent = Navigation.getParent ? Navigation.getParent() : null;
+      if (parent && parent.navigate) {
+        parent.navigate(screenName);
+      } else {
+        Navigation.navigate(screenName);
+      }
+    } catch (e) {
+      console.log('Nav error:', e);
+      try {
+        Navigation.navigate(screenName);
+      } catch (err) {
+        console.log('Direct nav error:', err);
+      }
     }
-  } catch (error) {
-    setIsLoggedIn(false);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
+  const goToWishList = () => handleNavigate('Wishlist');
+  const goToOrders = () => handleNavigate('Orders');
+  const goToCoupons = () => handleNavigate('Coupons');
+  const goToHelpCenter = () => handleNavigate('HelpCenter');
+  const gotoEditProfile = () => handleNavigate('editProfile');
+  const gotoSaveAddress = () => handleNavigate('AllAddress');
+
+  const checkLogin = async () => {
+    try {
+      const token = await getToken();
+      if (token) {
+        setIsLoggedIn(true);
+      } else {
+        setIsLoggedIn(false);
+      }
+    } catch (error) {
+      setIsLoggedIn(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestForLogout = async () => {
+    const token = await getToken();
+    if (!token || token === null) {
+      setErrorText('You are already logged out.');
+      setShowAlert(true);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BASE_URL}logout`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setIsSuccess(true);
+        await removeToken();
+        await removemobile();
+        await removeuserId();
+        setIsLoggedIn(false);
+      }
+    } catch (error) {
+      setErrorText('Something went wrong. Please try again.');
+      setShowAlert(true);
+    }
+  };
 
   if (loading) {
     return <CustomLoader visible={loading} />;
   }
 
-  const gotoEditProfile = () => {
-    Navigation.navigate("editProfile");
-  };
-
-  const gotoSaveAddress = () => {
-    Navigation.navigate('AllAddress');
-  };
- const requestForLogout = async () => {
-  const token = await getToken();
-   if (!token || token === null) {
-  setErrorText('You are already logged out.');
-  setShowAlert(true);
-  return;
- 
-}
-
-  try {
-    const response = await fetch(`${BASE_URL}logout`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = await response.json();
-
-    console.log('Logout Response:', data);
-if(response.ok){
-setIsSuccess(true);
-
-   
-  await removeToken();
-  await removemobile();
-  await removeuserId();
-
-  setIsLoggedIn(false);
-}
-
-      // Navigation.navigate('AppTab')
-   
-  } catch (error) {
-      setErrorText("Something went wrong. Please try again.")
-      setShowAlert(true)
-  }
-  // finally{
-  //    setIsSuccess(false)
-  // }
-};
-if (loading) {
-  return <CustomLoader visible={loading} />;
-}
-
-if (!isLoggedIn) {
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F5F7FA' }}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ padding: 16 }}>
-
-        {/* Login Card */}
-        <View
-          style={{
-            backgroundColor: AllColors.primary,
-            borderRadius: 24,
-            padding: 24,
-            marginBottom: 20,
-          }}>
-
-          <View
-            style={{
-              width: 70,
-              height: 70,
-              borderRadius: 35,
-              backgroundColor: 'rgba(255,255,255,0.2)',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}>
-            <AntDesign
-              name="user"
-              size={34}
-              color="#fff"
-            />
-          </View>
-
-          <Text
-            style={{
-              color: '#fff',
-              fontSize: 24,
-              fontWeight: '700',
-              marginTop: 15,
-            }}>
-            Welcome
-          </Text>
-
-          <Text
-            style={{
-              color: 'rgba(255,255,255,0.85)',
-              marginTop: 6,
-              fontSize: 15,
-            }}>
-            Login to manage orders, wishlist and account settings.
-          </Text>
-
-          <TouchableOpacity
-            onPress={() => Navigation.navigate('Login')}
-            style={{
-              backgroundColor: '#fff',
-              height: 50,
-              borderRadius: 14,
-              justifyContent: 'center',
-              alignItems: 'center',
-              marginTop: 20,
-            }}>
-            <Text
-              style={{
-                color: AllColors.primary,
-                fontSize: 16,
-                fontWeight: '700',
-              }}>
-              Login / Sign Up
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Settings */}
-        <View
-          style={{
-            backgroundColor: '#fff',
-            borderRadius: 20,
-            overflow: 'hidden',
-          }}>
-
-          {[
-            {
-              icon: (
-                <Feather
-                  name="headphones"
-                  size={22}
-                  color={AllColors.primary}
-                />
-              ),
-              title: 'Help Center',
-            },
-            {
-              icon: (
-                <Ionicons
-                  name="language-outline"
-                  size={22}
-                  color={AllColors.primary}
-                />
-              ),
-              title: 'Change Language',
-            },
-            {
-              icon: (
-                <Ionicons
-                  name="notifications-outline"
-                  size={22}
-                  color={AllColors.primary}
-                />
-              ),
-              title: 'Notifications',
-            },
-            {
-              icon: (
-                <MaterialCommunityIcons
-                  name="file-document-outline"
-                  size={22}
-                  color={AllColors.primary}
-                />
-              ),
-              title: 'Terms & Policies',
-            },
-            {
-              icon: (
-                <AntDesign
-                  name="questioncircleo"
-                  size={22}
-                  color={AllColors.primary}
-                />
-              ),
-              title: 'FAQs',
-            },
-          ].map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingHorizontal: 18,
-                paddingVertical: 18,
-                borderBottomWidth: index === 4 ? 0 : 0.5,
-                borderBottomColor: '#E5E5E5',
-              }}>
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                }}>
-                {item.icon}
-
-                <Text
-                  style={{
-                    marginLeft: 15,
-                    fontSize: 16,
-                    color: '#222',
-                    fontWeight: '500',
-                  }}>
-                  {item.title}
-                </Text>
-              </View>
-
-              <AntDesign
-                name="right"
-                size={16}
-                color="#999"
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-
-      </ScrollView>
-    </SafeAreaView>
-  );
-}return (
     <SafeAreaView style={styles.container}>
-
       {/* HEADER */}
-
       <View style={styles.header}>
-        <Text style={styles.headerText}>
-          My Account
-        </Text>
+        <Text style={styles.headerText}>My Account</Text>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {!isLoggedIn ? (
+          /* LOGGED OUT BANNER */
+          <View style={styles.loginBanner}>
+            <View style={styles.avatarCircle}>
+              <AntDesign name="user" size={34} color="#fff" />
+            </View>
+            <Text style={styles.loginTitle}>Welcome to DeeBazer</Text>
+            <Text style={styles.loginSubtitle}>
+              Login to manage orders, wishlist and account settings.
+            </Text>
+            <TouchableOpacity
+              style={styles.loginBtn}
+              activeOpacity={0.8}
+              onPress={() => Navigation.navigate('Login')}>
+              <Text style={styles.loginBtnText}>Login / Sign Up</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          /* LOGGED IN USER INFO HEADER */
+          <View style={styles.content}>
+            <Text style={styles.userName}>Hey! Hittok</Text>
+          </View>
+        )}
 
-        {/* USER INFO */}
-         
-        <View style={styles.content}>
-
-          <Text style={styles.userName}>
-            Hey! Hittok
-          </Text>
-
-          {/* TOP BUTTONS */}
-
+        {/* QUICK MENU GRID / BUTTONS */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Quick Access</Text>
           <View style={styles.gridContainer}>
-
-            <TouchableOpacity style={styles.box}>
+            <TouchableOpacity
+              style={styles.box}
+              activeOpacity={0.7}
+              onPress={goToOrders}>
               <MaterialCommunityIcons
                 name="clipboard-text-outline"
                 size={28}
                 color={AllColors.primary}
               />
-
-              <Text style={styles.boxText}>
-                Orders
-              </Text>
+              <Text style={styles.boxText}>Orders</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.box} onPress={goToWishList}>
+            <TouchableOpacity
+              style={styles.box}
+              activeOpacity={0.7}
+              onPress={goToWishList}>
               <AntDesign
                 name="hearto"
                 size={26}
                 color={AllColors.primary}
               />
-
-              <Text style={styles.boxText}>
-                Wishlist
-              </Text>
+              <Text style={styles.boxText}>Wishlist</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.box}>
+            <TouchableOpacity
+              style={styles.box}
+              activeOpacity={0.7}
+              onPress={goToCoupons}>
               <MaterialCommunityIcons
                 name="ticket-percent-outline"
                 size={28}
                 color={AllColors.primary}
               />
-
-              <Text style={styles.boxText}>
-                Coupons
-              </Text>
+              <Text style={styles.boxText}>Coupons</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.box}>
+            <TouchableOpacity
+              style={styles.box}
+              activeOpacity={0.7}
+              onPress={goToHelpCenter}>
               <Feather
                 name="headphones"
                 size={26}
                 color={AllColors.primary}
               />
-
-              <Text style={styles.boxText}>
-                Help Center
-              </Text>
+              <Text style={styles.boxText}>Help Center</Text>
             </TouchableOpacity>
-
           </View>
         </View>
 
-        {/* ACCOUNT SETTINGS */}
+        {/* ACCOUNT SETTINGS (Only if logged in) */}
+        {isLoggedIn && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account Settings</Text>
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={gotoEditProfile}>
+              <View style={styles.rowLeft}>
+                <AntDesign name="user" size={22} color={AllColors.primary} />
+                <Text style={styles.rowText}>Edit Profile</Text>
+              </View>
+              <AntDesign name="right" size={18} color="#777" />
+            </TouchableOpacity>
 
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={gotoSaveAddress}>
+              <View style={styles.rowLeft}>
+                <Ionicons name="location-outline" size={22} color={AllColors.primary} />
+                <Text style={styles.rowText}>Saved Address</Text>
+              </View>
+              <AntDesign name="right" size={18} color="#777" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* FEEDBACK & SUPPORT */}
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Feedback & Support</Text>
 
-          <Text style={styles.sectionTitle}>
-            Account Setting
-          </Text>
 
-          <TouchableOpacity style={styles.row} onPress={gotoEditProfile}>
 
+          <TouchableOpacity
+            style={styles.row}
+            activeOpacity={0.7}
+            onPress={goToCoupons}>
             <View style={styles.rowLeft}>
-
-              <AntDesign
-                name="user"
-                size={24}
-                color={AllColors.primary}
-              />
-
-              <Text style={styles.rowText}>
-                Edit Profile
-              </Text>
-
+              <MaterialCommunityIcons name="ticket-percent-outline" size={22} color={AllColors.primary} />
+              <Text style={styles.rowText}>Coupons & Offers</Text>
             </View>
-
-            <AntDesign
-              name="right"
-              size={20}
-              color="#777"
-            />
-
+            <AntDesign name="right" size={18} color="#777" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.row} onPress={gotoSaveAddress}>
-
+          <TouchableOpacity
+            style={styles.row}
+            activeOpacity={0.7}
+            onPress={goToHelpCenter}>
             <View style={styles.rowLeft}>
-
-              <Ionicons
-                name="location-outline"
-                size={24}
-                color={AllColors.primary}
-              />
-
-              <Text style={styles.rowText}>
-                Saved Address
-              </Text>
-
+              <AntDesign name="questioncircleo" size={22} color={AllColors.primary} />
+              <Text style={styles.rowText}>Browse FAQs</Text>
             </View>
-
-            <AntDesign
-              name="right"
-              size={20}
-              color="#777"
-            />
-
+            <AntDesign name="right" size={18} color="#777" />
           </TouchableOpacity>
-
         </View>
 
-        {/* FEEDBACK */}
+        {/* LOGOUT BUTTON (Only if logged in) */}
+        {isLoggedIn && (
+          <View style={styles.logoutContainer}>
+            <TouchableOpacity
+              style={styles.logoutBtn}
+              activeOpacity={0.7}
+              onPress={requestForLogout}>
+              <Text style={styles.logoutText}>Log Out</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-        <View style={styles.section}>
-
-          <Text style={styles.sectionTitle}>
-            Feedback and Information
-          </Text>
-
-          <TouchableOpacity style={styles.row}>
-
-            <View style={styles.rowLeft}>
-
-              <MaterialCommunityIcons
-                name="file-document-outline"
-                size={24}
-                color={AllColors.primary}
-              />
-
-              <Text style={styles.rowText}>
-                Terms, Policies and Licenses
-              </Text>
-
-            </View>
-
-            <AntDesign
-              name="right"
-              size={20}
-              color="#777"
-            />
-
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.row}>
-
-            <View style={styles.rowLeft}>
-
-              <AntDesign
-                name="questioncircleo"
-                size={24}
-                color={AllColors.primary}
-              />
-
-              <Text style={styles.rowText}>
-                Browse FAQs
-              </Text>
-
-            </View>
-
-            <AntDesign
-              name="right"
-              size={20}
-              color="#777"
-            />
-
-          </TouchableOpacity>
-
-        </View>
-
-        {/* INPUT */}
-
-       
-
-        {/* LOGOUT */}
-
-        <View style={styles.logoutContainer}>
-
-          <TouchableOpacity style={styles.logoutBtn} onPress={requestForLogout}>
-
-            <Text style={styles.logoutText}>
-              Log Out
-            </Text>
-
-          </TouchableOpacity>
-   <CustomAlert
-          visible={showAlert}
-          message={errorText}
-          onClose={() => setShowAlert(false)}
-        />
-    <SuccessModal 
-      visible={isSuccess}
-       title="Logout Successful"
-       message="You have been logged out successfully."
-       onClose={() =>
-       setIsSuccess(false)} />
-         </View>
-             <View style={{height:50,backgroundColor:AllColors.white}}/>
+        <View style={{ height: 40 }} />
       </ScrollView>
-         
+
+      <CustomAlert
+        visible={showAlert}
+        message={errorText}
+        onClose={() => setShowAlert(false)}
+      />
+      <SuccessModal
+        visible={isSuccess}
+        title="Logout Successful"
+        message="You have been logged out successfully."
+        onClose={() => setIsSuccess(false)}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-menuRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  paddingVertical: 18,
-  borderBottomWidth: 0.5,
-  borderBottomColor: '#EAEAEA',
-},
-
-leftRow: {
-  flexDirection: 'row',
-  alignItems: 'center',
-},
-
-menuText: {
-  marginLeft: 15,
-  fontSize: 16,
-  color: '#222',
-  fontWeight: '500',
-},
   container: {
     flex: 1,
-    backgroundColor: '#f2f2f2',
-
+    backgroundColor: '#F4F5F9',
   },
-
   header: {
     backgroundColor: AllColors.primary,
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 18,
   },
-
   headerText: {
     color: '#fff',
-    fontSize: 30,
-    fontWeight: '600',
+    fontSize: 26,
+    fontWeight: '700',
+  },
+
+  loginBanner: {
+    backgroundColor: AllColors.primary,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+    paddingTop: 10,
+    marginBottom: 10,
+  },
+  avatarCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loginTitle: {
+    color: '#fff',
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 12,
+  },
+  loginSubtitle: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 4,
+    fontSize: 14,
+  },
+  loginBtn: {
+    backgroundColor: '#fff',
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 18,
+  },
+  loginBtnText: {
+    color: AllColors.primary,
+    fontSize: 16,
+    fontWeight: '700',
   },
 
   content: {
     backgroundColor: '#fff',
     padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-
   userName: {
     fontSize: 20,
-    color: '#000',
-    marginBottom: 20,
-    fontWeight: '600',
-  },
-
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-
-  box: {
-    width: '47%',
-    height: 60,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 18,
-    marginBottom: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-  },
-
-  boxText: {
-    fontSize: 16,
-    marginLeft: 10,
-    color: '#555',
-    fontWeight: '500',
+    color: '#0F172A',
+    fontWeight: '700',
   },
 
   section: {
@@ -599,13 +363,41 @@ menuText: {
     marginTop: 10,
     paddingHorizontal: 16,
     paddingTop: 16,
-    paddingBottom: 6,
+    paddingBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    color: '#0F172A',
+    marginBottom: 14,
+    fontWeight: '700',
   },
 
-  sectionTitle: {
-    fontSize: 18,
-    color: '#000',
-    marginBottom: 14,
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  box: {
+    width: '48%',
+    height: 64,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    backgroundColor: '#FFFFFF',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+  },
+  boxText: {
+    fontSize: 15,
+    marginLeft: 10,
+    color: '#334155',
     fontWeight: '600',
   },
 
@@ -613,57 +405,37 @@ menuText: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 18,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-
   rowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-
   rowText: {
-    fontSize: 16,
-    color: '#555',
-    marginLeft: 14,
-  },
-
-  inputContainer: {
-    backgroundColor: '#fff',
-    marginTop: 10,
-    padding: 16,
-  },
-
-  input: {
-    height: 55,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    color: '#000',
+    fontSize: 15,
+    color: '#334155',
+    marginLeft: 12,
+    fontWeight: '500',
   },
 
   logoutContainer: {
-    backgroundColor: '#fff',
-    marginTop: 10,
-    padding: 18,
-    marginBottom: 40,
+    marginTop: 14,
+    paddingHorizontal: 16,
   },
-
   logoutBtn: {
-    height: 40,
-    borderWidth: 1,
+    height: 48,
+    borderWidth: 1.5,
     borderColor: AllColors.primary,
-    borderRadius: 16,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-   
+    backgroundColor: '#FFFFFF',
   },
-
   logoutText: {
-    fontSize: 20,
+    fontSize: 16,
     color: AllColors.primary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-
 });

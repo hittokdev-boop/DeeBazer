@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import {Alert, Modal, PermissionsAndroid, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View} from 'react-native';
+import {Alert, Modal, PermissionsAndroid, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View} from 'react-native';
 import MapView, { Circle, Marker } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
 import AllColors from '../Constants/Color';
@@ -105,99 +105,210 @@ const saveAddress = async () => {
   }
 };
   const requestmapPermission = async () => {
-  try {
-    const granted = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-  { title: 'Location Permission', message: 'App needs access to your location.', buttonPositive: 'OK', },
-    );
-    if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-      getCurrentLocation()
-    } else {
-      console.log('location permission denied');
-    }
-  } catch (err) {
-    console.warn(err);
-  }
-};
-
-useEffect(()=>{
-      requestmapPermission()
-},[])
- const getCurrentLocation = () => {
-    
-  Geocoder.init('AIzaSyCJKwxaSS0glDtxXMX37uHX_KHUEleCMk0');
-
-  Geolocation.getCurrentPosition(
-    
-    async position => {
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
-
-     setLatitude(lat)
-     setLongitude(lng)
-      try {
-        const res = await Geocoder.from(lat, lng);
-      
-        const address =
-          res.results[0]?.formatted_address || 'Address not found';
-       setAddress(address)
-      } catch (error) {
-        console.log(error);
+    try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+        ]);
+        if (
+          granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED ||
+          granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED
+        ) {
+          return getCurrentLocation();
+        } else {
+          console.log('Location permission denied');
+        }
+      } else {
+        return getCurrentLocation();
       }
-    },
-    error => {
-      console.log(error);
-    },
-    {
-      enableHighAccuracy: false,
-      timeout: 30000,
-      maximumAge: 10000,
-    },
-  );
-};
-if (latitude === null || longitude === null) {
-  return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}>
-      <Text>Loading Map...</Text>
-    </View>
-  );
-}
+    } catch (err) {
+      console.warn(err);
+    }
+  };
+
+  useEffect(() => {
+    let watchId;
+    requestmapPermission().then((id) => {
+      watchId = id;
+    });
+
+    return () => {
+      if (watchId !== undefined) {
+        Geolocation.clearWatch(watchId);
+      }
+    };
+  }, []);
+
+  const reverseGeocode = async (lat, lng) => {
+    // 1. Try Google Geocoder first
+    try {
+      Geocoder.init('AIzaSyCJKwxaSS0glDtxXMX37uHX_KHUEleCMk0');
+      const res = await Geocoder.from(lat, lng);
+      if (res.results && res.results.length > 0) {
+        const parts = res.results[0].formatted_address.split(',').map(s => s.trim());
+        const shortAddr = parts.slice(0, 3).join(', ');
+        setAddress(shortAddr || res.results[0].formatted_address);
+
+        const comps = res.results[0].address_components || [];
+        comps.forEach((c) => {
+          if (c.types.includes('postal_code')) setpinCode(c.long_name);
+          if (c.types.includes('locality')) setCity(c.long_name);
+          if (c.types.includes('administrative_area_level_1')) setStateName(c.long_name);
+          if (c.types.includes('route')) setRoadName(c.long_name);
+        });
+        return;
+      }
+    } catch (error) {
+      console.log('Google Geocoder failed, trying OpenStreetMap fallback:', error);
+    }
+
+    // 2. Fallback to OpenStreetMap Nominatim API (Free, concise address format)
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
+        {
+          headers: {
+            'User-Agent': 'DeeBazer-App',
+            'Accept-Language': 'en',
+          },
+        }
+      );
+      const data = await response.json();
+      if (data && data.address) {
+        const addr = data.address;
+        const area = addr.road || addr.suburb || addr.neighbourhood || addr.residential || '';
+        const cityName = addr.city || addr.town || addr.village || addr.suburb || addr.county || '';
+        const state = addr.state || '';
+        const pin = addr.postcode || '';
+
+        const cleanParts = [area, cityName, state, pin].filter(Boolean);
+        const cleanAddress = cleanParts.length > 0 ? cleanParts.join(', ') : (data.display_name || `Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+
+        setAddress(cleanAddress);
+        if (cityName) setCity(cityName);
+        if (state) setStateName(state);
+        if (pin) setpinCode(pin);
+        if (area) setRoadName(area);
+      } else {
+        setAddress(`Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+      }
+    } catch (osmErr) {
+      console.log('OpenStreetMap Reverse Geocode error:', osmErr);
+      setAddress(`Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+    }
+  };
+
+  const getCurrentLocation = () => {
+    Geolocation.getCurrentPosition(
+      async position => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        console.log('Initial GPS Location:', lat, lng, 'Accuracy:', position.coords.accuracy);
+
+        setLatitude(lat);
+        setLongitude(lng);
+        await reverseGeocode(lat, lng);
+      },
+      error => {
+        console.log('GPS High Accuracy initial failed:', error);
+        Geolocation.getCurrentPosition(
+          async position => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            setLatitude(lat);
+            setLongitude(lng);
+            await reverseGeocode(lat, lng);
+          },
+          err => console.log('Geolocation Network Fallback Error:', err),
+          {
+            enableHighAccuracy: false,
+            timeout: 20000,
+            maximumAge: 0,
+          }
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      },
+    );
+
+    // Live continuous watch for pinpoint accuracy
+    const watchId = Geolocation.watchPosition(
+      async position => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        console.log('Watched Live GPS Location:', lat, lng, 'Accuracy:', position.coords.accuracy);
+        setLatitude(lat);
+        setLongitude(lng);
+        await reverseGeocode(lat, lng);
+      },
+      err => console.log('Watch Position Error:', err),
+      {
+        enableHighAccuracy: true,
+        distanceFilter: 3, // Update if moved 3 meters
+        interval: 4000,
+        fastestInterval: 2000,
+      }
+    );
+
+    return watchId;
+  };
+
+  const handleSelectLocation = async (lat, lng) => {
+    setLatitude(lat);
+    setLongitude(lng);
+    await reverseGeocode(lat, lng);
+  };
+
+  if (latitude === null || longitude === null) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+        <Text>Loading Map...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.map}>
-   
-  <MapView
-  style={{height:'80%',width:"100%"}}
-  initialRegion={{
-    latitude: latitude,
-    longitude: longitude,
+      <MapView
+        style={{ height: '80%', width: "100%" }}
+        region={{
+          latitude: latitude,
+          longitude: longitude,
           latitudeDelta: 0.01,
-        longitudeDelta: 0.01,
-  }}>
-     <Circle
-    center={{
-      latitude:latitude,
-      longitude: longitude,
-    }}
-    radius={300} // meter
-    fillColor="rgba(126, 184, 247, 0.2)"
-    strokeColor="rgba(0,122,255,0.8)"
-    
-  />
-  <Marker
-    coordinate={{
-      latitude: latitude,
-      longitude:longitude,
-    }}
-    title="Kolkata"
-    // description="your current location"
-  />
-</MapView>
-  <Text style={styles.addressText}>{address}</Text>
+          longitudeDelta: 0.01,
+        }}
+        onPress={(e) => handleSelectLocation(e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude)}
+      >
+        <Circle
+          center={{
+            latitude: latitude,
+            longitude: longitude,
+          }}
+          radius={300}
+          fillColor="rgba(126, 184, 247, 0.2)"
+          strokeColor="rgba(0,122,255,0.8)"
+        />
+        <Marker
+          draggable
+          coordinate={{
+            latitude: latitude,
+            longitude: longitude,
+          }}
+          onDragEnd={(e) => handleSelectLocation(e.nativeEvent.coordinate.latitude, e.nativeEvent.coordinate.longitude)}
+          title="Current Location"
+          description={address}
+        />
+      </MapView>
+      <Text style={styles.addressText}>{address || 'Fetching live address...'}</Text>
 <TouchableOpacity style={styles.AddAddressButton}   onPress={() => setModalVisible(true)}>
   <Text style={styles.AddAdressText}>
     Add address Details

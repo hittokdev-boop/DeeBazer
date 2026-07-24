@@ -21,7 +21,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import AllColors from '../Constants/Color';
 import CustomAlert from './Alert';
 import { BASE_URL, setMobile, setuserId } from '../Api/Api';
-
+import LottieView from 'lottie-react-native';
 import { useNavigation } from "@react-navigation/native";
 const CommonLoginModal = () => {
 
@@ -45,6 +45,12 @@ const handleLogin = async () => {
     });
 
     const data = await response.json();
+    console.log("Send OTP Response Data:", data);
+    if (data.debug_otp) {
+      console.log("-------------------------------");
+      console.log("YOUR OTP IS:", data.debug_otp);
+      console.log("-------------------------------");
+    }
 
     if (response.ok) {
           console.log(number)
@@ -79,38 +85,63 @@ const handleLogin = async () => {
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.overlay}>
         <View style={styles.modalContainer}>
+  <View style={styles.line} />
 
-          <View style={styles.line} />
+  <LottieView
+    source={require("../Assets/Login.json")}
+    autoPlay
+    loop
+    style={styles.animation}
+  />
 
-          <Text style={styles.title}>Login</Text>
+  <Text style={styles.title}>Welcome Back!</Text>
 
-          <Text style={styles.subtitle}>
-            Please login to continue.
-          </Text>
+  <Text style={styles.subtitle}>
+    Login with your mobile number to continue your shopping experience.
+  </Text>
 
-          <TextInput
-            placeholder="Enter Mobile Number"
-            placeholderTextColor="#999"
-            style={styles.input}
-            keyboardType="number-pad"
-            maxLength={10}
-            value={number}
-            onChangeText={setNumber}
-          />
+  <View style={styles.inputContainer}>
+    <View style={styles.countryCode}>
+      <Text style={styles.countryText}>🇮🇳 +91</Text>
+    </View>
 
-          <TouchableOpacity
-            style={styles.loginBtn}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.loginText}>Get OTP</Text>
-            )}
-          </TouchableOpacity>
+    <TextInput
+      placeholder="Enter Mobile Number"
+      placeholderTextColor="#999"
+      keyboardType="number-pad"
+      maxLength={10}
+      value={number}
+      onChangeText={setNumber}
+      style={styles.input}
+    />
+  </View>
 
-        </View>
+  <TouchableOpacity
+    style={styles.loginBtn}
+    onPress={handleLogin}
+    disabled={loading}
+  >
+    {loading ? (
+      <ActivityIndicator color="#fff" />
+    ) : (
+      <>
+        <Ionicons
+          name="log-in-outline"
+          size={20}
+          color="#fff"
+        />
+        <Text style={styles.loginText}> Get OTP</Text>
+      </>
+    )}
+  </TouchableOpacity>
+
+  <Text style={styles.footerText}>
+    By continuing, you agree to our{" "}
+    <Text style={{ color: AllColors.primary, fontWeight: "600" }}>
+      Terms & Conditions
+    </Text>
+  </Text>
+</View>
 
         <CustomAlert
           visible={showAlert}
@@ -133,72 +164,101 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
 
- modalContainer: {
-  backgroundColor: '#fff',
-  borderTopLeftRadius: 25,
-  borderTopRightRadius: 25,
-  padding: 20,
-  maxHeight: '70%',
+modalContainer: {
+  backgroundColor: "#fff",
+  borderTopLeftRadius: 30,
+  borderTopRightRadius: 30,
+  paddingHorizontal: 22,
+  paddingTop: 20,
+  paddingBottom: 30,
 },
 
-  line: {
-    width: 60,
-    height: 5,
-    backgroundColor: '#ccc',
-    alignSelf: 'center',
-    borderRadius: 10,
-    marginBottom: 20,
-  },
+line: {
+  width: 65,
+  height: 5,
+  backgroundColor: "#D8D8D8",
+  borderRadius: 20,
+  alignSelf: "center",
+  marginBottom: 10,
+},
 
-  closeBtn: {
-    position: 'absolute',
-    top: 15,
-    right: 15,
-    width: 35,
-    height: 35,
-    borderRadius: 50,
-    backgroundColor: '#f3f3f3',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
+animation: {
+  width: 180,
+  height: 180,
+  alignSelf: "center",
+  marginBottom: 10,
+},
 
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: AllColors.primary,
-    marginTop: 15,
-  },
+title: {
+  fontSize: 26,
+  fontWeight: "700",
+  color: AllColors.primary,
+  textAlign: "center",
+},
 
-  subtitle: {
-    fontSize: 16,
-    color: '#555',
-    marginBottom: 20,
-    marginTop: 5,
-  },
+subtitle: {
+  fontSize: 15,
+  color: "#666",
+  textAlign: "center",
+  marginTop: 8,
+  marginBottom: 25,
+  lineHeight: 22,
+},
 
-  input: {
-    height: 52,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    marginBottom: 15,
-    color: '#000',
-  },
+inputContainer: {
+  flexDirection: "row",
+  alignItems: "center",
+  borderWidth: 1,
+  borderColor: "#E5E5E5",
+  borderRadius: 14,
+  overflow: "hidden",
+  backgroundColor: "#FAFAFA",
+},
 
-  loginBtn: {
-    height: 52,
-    backgroundColor: AllColors.primary,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 10,
-  },
+countryCode: {
+  backgroundColor: "#F2F2F2",
+  paddingHorizontal: 15,
+  height: 55,
+  justifyContent: "center",
+  borderRightWidth: 1,
+  borderRightColor: "#E5E5E5",
+},
 
-  loginText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+countryText: {
+  fontSize: 15,
+  fontWeight: "600",
+  color: "#333",
+},
+
+input: {
+  flex: 1,
+  height: 55,
+  paddingHorizontal: 15,
+  fontSize: 16,
+  color: "#000",
+},
+
+loginBtn: {
+  height: 55,
+  borderRadius: 14,
+  backgroundColor: AllColors.primary,
+  justifyContent: "center",
+  alignItems: "center",
+  flexDirection: "row",
+  marginTop: 25,
+},
+
+loginText: {
+  color: "#fff",
+  fontSize: 17,
+  fontWeight: "700",
+},
+
+footerText: {
+  marginTop: 20,
+  textAlign: "center",
+  color: "#777",
+  fontSize: 13,
+  lineHeight: 20,
+},
 });

@@ -9,6 +9,7 @@ import {
   Modal,
   TextInput,
   Alert,
+   ToastAndroid 
 } from 'react-native';
 import { Rating } from '@kolking/react-native-rating';
 import AllColors from '../Constants/Color';
@@ -20,6 +21,8 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons'
  import RazorpayCheckout from "react-native-razorpay";
+ import LottieView from 'lottie-react-native';
+ 
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 const CartPage = () => {
   const [cartItems,setCartItems]=useState([])
@@ -188,6 +191,40 @@ const removeItem = async (productId) => {
     }
   } catch (error) {
     console.log("Remove Cart Error:", error);
+    Alert.alert("Error", "Something went wrong");
+  }
+};
+const moveToWishlist = async (item) => {
+  try {
+    const token = await getToken();
+    const userId = await getuserId();
+
+    // Add to Wishlist
+    const formData = new FormData();
+    formData.append("user_id", userId);
+    formData.append("product_id", item.product_id);
+
+    const response = await fetch(`${BASE_URL}wishlist-add`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const result = await response.json();
+    if (result.status === 200) {
+      await removeItem(item.product_id);
+
+      // ToastAndroid.show(
+      //   "Product moved to Wishlist",
+      //   ToastAndroid.SHORT
+      // );
+    } else {
+      Alert.alert("Error", result.message);
+    }
+  } catch (error) {
+    console.log(error);
     Alert.alert("Error", "Something went wrong");
   }
 };
@@ -517,6 +554,7 @@ if (!isuser) {
   </TouchableOpacity>
 
   <TouchableOpacity
+  style={{marginHorizontal:10}}
     onPress={() => navigation.navigate('Profile')}>
     <Text style={loginStyles.skipText}>
       Continue Shopping
@@ -529,36 +567,31 @@ if (!isuser) {
 if (isuser && (!cartItems || cartItems.length === 0)) {
   return (
     <SafeAreaView style={styles.container}>
-      <View style={loginStyles.container}>
-        <View style={loginStyles.iconBox}>
-          <AntDesign
-            name="shoppingcart"
-            size={80}
-            color={AllColors.primary}
-          />
-          {/* <Image
-            source={require('../Assets/Images/empty_cart.png')}
-            style={{ width: 80, height: 80, marginTop: 10 }}
-          /> */}
-        </View>
+  <View style={loginStyles.container}>
+    <LottieView
+      source={require("../Assets/empty.json")}
+      autoPlay
+      loop
+      style={loginStyles.animation}
+    />
 
-        <Text style={loginStyles.title}>Your Cart is Empty</Text>
+    <Text style={loginStyles.title}>Your Cart is Empty</Text>
 
-        <Text style={loginStyles.subtitle}>
-          Looks like you haven't added any products yet.
-          Start shopping to fill your cart.
-        </Text>
+    <Text style={loginStyles.subtitle}>
+      Looks like you haven't added any products yet.
+      {"\n"}
+      Start shopping to fill your cart.
+    </Text>
 
-        <TouchableOpacity
-          style={loginStyles.loginBtn}
-          onPress={() => navigation.navigate("Home")} // বা Product Screen
-        >
-          <Text style={loginStyles.loginText}>
-            Add Products
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+    <TouchableOpacity
+      style={loginStyles.loginBtn}
+      onPress={() => navigation.navigate("Home")}
+      activeOpacity={0.8}
+    >
+      <Text style={loginStyles.loginText}>Add Products</Text>
+    </TouchableOpacity>
+  </View>
+</SafeAreaView>
   );
 }
 
@@ -656,11 +689,11 @@ if (isuser && (!cartItems || cartItems.length === 0)) {
             {item.short_desc02}
           </Text>
 
-          <TouchableOpacity>
-            <Text style={styles.wishlist}>
-              Move to wishlist
-            </Text>
-          </TouchableOpacity>
+          <TouchableOpacity onPress={() => moveToWishlist(item)}>
+  <Text style={styles.wishlist}>
+    Move to wishlist
+  </Text>
+</TouchableOpacity>
         </View>
 
         <View>
@@ -1379,59 +1412,66 @@ addressText: {
   lineHeight: 22,
 },
 });
-const loginStyles=StyleSheet.create({
+const loginStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 25,
+    backgroundColor: "#F8F9FC",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
   },
 
-  iconBox: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: '#F5F5F5',
-    justifyContent: 'center',
-    alignItems: 'center',
+  animation: {
+    width: 280,
+    height: 280,
+    marginBottom: 15,
   },
 
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111',
-    marginTop: 25,
+    fontSize: 26,
+    fontWeight: "700",
+    color: "#291A5A",
+    marginBottom: 10,
+    textAlign: "center",
   },
 
   subtitle: {
-    marginTop: 12,
-    textAlign: 'center',
-    color: '#666',
     fontSize: 15,
-    lineHeight: 24,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 35,
+    paddingHorizontal: 15,
   },
 
   loginBtn: {
-    marginTop: 30,
-    width: '100%',
-    height: 55,
-    backgroundColor: AllColors.primary,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: "100%",
+    height: 52,
+    backgroundColor:AllColors.primary,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+
+    shadowColor: "#291A5A",
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 8,
   },
 
   loginText: {
-    color: '#fff',
+    color: "#FFFFFF",
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: "700",
   },
+});
 
-  skipText: {
-    marginTop: 20,
-    color: AllColors.primary,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-})
+// const styles = StyleSheet.create({
+//   container: {
+//     flex: 1,
+//     backgroundColor: "#F8F9FC",
+//   },
+// });

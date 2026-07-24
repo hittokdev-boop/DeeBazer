@@ -6,20 +6,36 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-    ToastAndroid,
+  ToastAndroid,
   View,
   Alert,
+  Share,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { BASE_URL, getToken, getuserId } from '../Api/Api';
 import AllColors from '../Constants/Color';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import LottieView from "lottie-react-native";
+
 // import Icon from 'react-native-vector-icons/Icon';
 export default function Wishlist() {
   const navigation = useNavigation();
   const [wishlistItems, setWishlistItems] = useState([]);
   const [loading, setLoading] = useState(false);
+const onShare = async (item) => {
+  try {
+    await Share.share({
+      title: item.name,
+      message: `${item.name}
+      
+Price: ₹${item.discount_price}
 
+https://deebazar.com/product/${item.id}`,
+    });
+  } catch (error) {
+    console.log(error);
+  }
+};
   const getWishlistItems = async () => {
     const token = await getToken();
     const userId = await getuserId();
@@ -71,24 +87,24 @@ export default function Wishlist() {
       //  setIsAddedToCart(true);
  
        // Toast Message
-       if (Platform.OS === 'android') {
-         ToastAndroid.show(
-           '✅ Product added to cart successfully',
-           ToastAndroid.SHORT
-         );
-       } else {
+        if (Platform.OS === 'android') {
+          // ToastAndroid.show(
+          //   '✅ Product added to cart successfully',
+          //   ToastAndroid.SHORT
+          // );
+        } else {
          Alert.alert('Success', 'Product added to cart successfully');
        }
      }
    } catch (error) {
      console.log('Error:', error);
  
-     if (Platform.OS === 'android') {
-       ToastAndroid.show(
-         'Something went wrong',
-         ToastAndroid.SHORT
-       );
-     } else {
+      if (Platform.OS === 'android') {
+        // ToastAndroid.show(
+        //   'Something went wrong',
+        //   ToastAndroid.SHORT
+        // );
+      } else {
        Alert.alert('Error', 'Something went wrong');
      }
    }
@@ -110,15 +126,15 @@ export default function Wishlist() {
     console.log("Remove Response:", data);
 
     if (response.ok && (data.status === 200 || data.success)) {
-      // সঙ্গে সঙ্গে UI থেকে remove
+       
       setWishlistItems((prev) =>
         prev.filter((item) => item.id !== product_id)
       );
 
-      ToastAndroid.show(
-        "Product removed from wishlist",
-        ToastAndroid.SHORT
-      );
+      // ToastAndroid.show(
+      //   "Product removed from wishlist",
+      //   ToastAndroid.SHORT
+      // );
     } else {
       Alert.alert("Error", data.message || "Failed to remove product");
     }
@@ -156,9 +172,33 @@ export default function Wishlist() {
       {loading ? (
         <ActivityIndicator size="large" color={AllColors.primary} style={{ marginTop: 24 }} />
       ) : wishlistItems.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>Your wishlist is empty.</Text>
-        </View>
+       <View style={styles.emptyContainer}>
+    <LottieView
+      source={require("../Assets/Wishlist.json")}
+      autoPlay
+      loop
+      style={styles.emptyAnimation}
+    />
+
+    <Text style={styles.emptyTitle}>
+      Your Wishlist is Empty
+    </Text>
+
+    <Text style={styles.emptySubtitle}>
+      Save your favourite products here.
+      {"\n"}
+      Start exploring and add products to your wishlist.
+    </Text>
+
+    <TouchableOpacity
+      style={styles.shopBtn}
+      onPress={() => navigation.goBack()}
+    >
+      <Text style={styles.shopBtnText}>
+        Continue Shopping
+      </Text>
+    </TouchableOpacity>
+  </View>
       ) : (
       <FlatList
   data={wishlistItems}
@@ -212,21 +252,21 @@ export default function Wishlist() {
 
       <View style={styles.bottomRow}>
         <View style={styles.leftActions}>
-          <TouchableOpacity>
+          {/* <TouchableOpacity>
             <Ionicons
               name="heart"
               size={22}
               color={AllColors.primary}
-            />
-          </TouchableOpacity>
+            /> */}
+          {/* </TouchableOpacity> */}
 
-          <TouchableOpacity>
-            <Ionicons
-              name="share-social-outline"
-              size={22}
-              color={AllColors.black}
-            />
-          </TouchableOpacity>
+      <TouchableOpacity onPress={() => onShare(item)}>
+  <Ionicons
+    name="share-social-outline"
+    size={22}
+    color={AllColors.black}
+  />
+</TouchableOpacity>
         </View>
 
         <View style={styles.rightActions}>
@@ -241,7 +281,7 @@ export default function Wishlist() {
             style={styles.cartBtn}
             onPress={() => requestToCart(item.id)}
           >
-            <Text style={{ color: AllColors.primary }}>
+            <Text style={{ color: AllColors.white, fontWeight: "600" }}>
               Add to cart
             </Text>
           </TouchableOpacity>
@@ -270,11 +310,41 @@ export default function Wishlist() {
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#F6F7FB",
+  },
+
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: "#fff",
+    elevation: 3,
+  },
+
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#222",
+    marginLeft: 15,
+  },
+
   card: {
     backgroundColor: "#fff",
+    marginHorizontal: 12,
+    marginTop: 12,
+    borderRadius: 16,
     padding: 12,
-    marginBottom: 10,
-    margin:10
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: {
+      width: 0,
+      height: 3,
+    },
   },
 
   productRow: {
@@ -282,91 +352,155 @@ const styles = StyleSheet.create({
   },
 
   image: {
-    width: 90,
-    height: 110,
-    resizeMode: "contain",
+    width: 100,
+    height: 120,
+    borderRadius: 10,
+    backgroundColor: "#F5F5F5",
   },
 
   details: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 14,
+    justifyContent: "space-between",
   },
 
   title: {
     fontSize: 16,
-    fontWeight: "500",
+    fontWeight: "700",
+    color: "#222",
+    lineHeight: 22,
   },
 
   priceRow: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 8,
+    flexWrap: "wrap",
   },
 
   price: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 22,
+    fontWeight: "bold",
+    color: AllColors.primary,
   },
 
   oldPrice: {
-    marginLeft: 8,
+    marginLeft: 10,
+    color: "#999",
     textDecorationLine: "line-through",
-    color: "#888",
+    fontSize: 14,
   },
 
   discount: {
-    marginLeft: 8,
-    color: "green",
-    fontWeight: "600",
+    marginLeft: 10,
+    color: "#2E7D32",
+    fontWeight: "700",
+    fontSize: 13,
   },
 
   ratingRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 8,
+    marginTop: 10,
   },
 
   rating: {
-    backgroundColor: "green",
+    backgroundColor: "#0BA360",
     color: "#fff",
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
+    paddingVertical: 3,
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: "600",
     marginRight: 8,
   },
 
   bottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 16,
-    paddingTop: 12,
+    alignItems: "center",
     borderTopWidth: 1,
-    borderColor: "#eee",
+    borderColor: "#F0F0F0",
+    marginTop: 15,
+    paddingTop: 15,
   },
 
   leftActions: {
     flexDirection: "row",
-    gap: 20,
+    alignItems: "center",
   },
 
   rightActions: {
     flexDirection: "row",
-    gap: 10,
+    alignItems: "center",
   },
 
   removeBtn: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    paddingHorizontal: 20,
+    backgroundColor: "#FDECEC",
+    borderRadius: 10,
+    paddingHorizontal: 18,
     paddingVertical: 10,
-    borderRadius: 8,
+    marginRight: 10,
   },
 
   cartBtn: {
-    borderWidth: 1,
-    borderColor: AllColors.primary,
-    paddingHorizontal: 20,
+    backgroundColor: AllColors.primary,
+    borderRadius: 10,
+    paddingHorizontal: 18,
     paddingVertical: 10,
-    borderRadius: 8,
+  },
+
+  cartBtnText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+
+  removeText: {
+    color: "#E53935",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 25,
+  },
+
+  emptyAnimation: {
+    width: 250,
+    height: 250,
+  },
+
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: AllColors.primary,
+    marginTop: 15,
+  },
+
+  emptySubtitle: {
+    fontSize: 15,
+    color: "#777",
+    textAlign: "center",
+    lineHeight: 22,
+    marginTop: 8,
+    marginBottom: 28,
+  },
+
+  shopBtn: {
+    backgroundColor: AllColors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 35,
+    paddingVertical: 14,
+    elevation: 3,
+  },
+
+  shopBtnText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });
