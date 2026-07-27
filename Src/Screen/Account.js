@@ -24,6 +24,7 @@ export default function Account() {
   const [showAlert, setShowAlert] = useState(false);
   const [errorText, setErrorText] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
+  const [userName, setUserName] = useState('User');
 
   const Navigation = useNavigation();
 
@@ -71,6 +72,14 @@ export default function Account() {
       const token = await getToken();
       if (token) {
         setIsLoggedIn(true);
+        const response = await fetch(`${BASE_URL}me`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json();
+        if (data.status === 200 && data.user) {
+          setUserName(data.user.name || 'User');
+        }
       } else {
         setIsLoggedIn(false);
       }
@@ -143,7 +152,7 @@ export default function Account() {
         ) : (
           /* LOGGED IN USER INFO HEADER */
           <View style={styles.content}>
-            <Text style={styles.userName}>Hey! Hittok</Text>
+            <Text style={styles.userName}>Hey! {userName}</Text>
           </View>
         )}
 

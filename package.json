@@ -13,6 +13,7 @@
     "@kolking/react-native-rating": "^1.4.1",
     "@pushpendersingh/react-native-otp-verify": "^1.2.0",
     "@react-native-async-storage/async-storage": "^3.1.0",
+    "@react-native-clipboard/clipboard": "^1.16.3",
     "@react-native-community/geolocation": "^3.4.0",
     "@react-native/new-app-screen": "0.85.3",
     "@react-navigation/bottom-tabs": "^7.17.0",

@@ -20,7 +20,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 
 import AllColors from '../Constants/Color';
 import CustomAlert from './Alert';
-import { BASE_URL, setMobile, setuserId } from '../Api/Api';
+import { BASE_URL, setMobile, setuserId, getDeviceId } from '../Api/Api';
 import LottieView from 'lottie-react-native';
 import { useNavigation } from "@react-navigation/native";
 const CommonLoginModal = () => {
@@ -31,13 +31,16 @@ const CommonLoginModal = () => {
 
   const Navigation=useNavigation()
 const handleLogin = async () => {
-
   setLoading(true);
-   
+
   try {
+    // Get unique device ID — binds OTP to this device
+    const deviceId = await getDeviceId();
+    console.log('📱 Device ID:', deviceId);
 
     const formData = new FormData();
     formData.append('mobile', number);
+    formData.append('device_id', deviceId);
 
     const response = await fetch(`${BASE_URL}send-otp`, {
       method: 'POST',
@@ -45,36 +48,28 @@ const handleLogin = async () => {
     });
 
     const data = await response.json();
-    console.log("Send OTP Response Data:", data);
+    console.log('Send OTP Response Data:', data);
     if (data.debug_otp) {
-      console.log("-------------------------------");
-      console.log("YOUR OTP IS:", data.debug_otp);
-      console.log("-------------------------------");
+      console.log('-------------------------------');
+      console.log('YOUR OTP IS:', data.debug_otp);
+      console.log('-------------------------------');
     }
 
     if (response.ok) {
-          console.log(number)
       await setuserId(data.user_id);
       await setMobile(number);
-      setLoading(false)
-     Navigation.navigate('VerifyOTP')
-      
+      setLoading(false);
+      Navigation.navigate('VerifyOTP', {
+        mobile: number,
+        device_id: deviceId,
+      });
     } else {
-
-     console.log("sh")
-
+      console.log('Send OTP failed:', data);
     }
-
   } catch (error) {
-
-    console.log(error,'jjj');
-
-   
-
+    console.log(error, 'Login error');
   } finally {
-
     setLoading(false);
-
   }
 };
  return (

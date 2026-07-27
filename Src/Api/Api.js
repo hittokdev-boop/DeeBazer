@@ -6,6 +6,35 @@ export const BASE_URL = "https://deebazar.com/admin/api/";
 const USER_ID_KEY = "USER_ID";
 const MOBILE_KEY = "MOBILE";
 const TOKEN_KEY = "TOKEN";
+const DEVICE_ID_KEY = "DEVICE_ID";
+
+// ================= DEVICE ID =================
+
+// Simple UUID v4 generator (no external dependency needed)
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
+// Get or create a permanent device ID (created once, stored forever)
+export const getDeviceId = async () => {
+  try {
+    let deviceId = await AsyncStorage.getItem(DEVICE_ID_KEY);
+    if (!deviceId) {
+      deviceId = generateUUID();
+      await AsyncStorage.setItem(DEVICE_ID_KEY, deviceId);
+      console.log('🆔 New Device ID created:', deviceId);
+    }
+    return deviceId;
+  } catch (e) {
+    console.log('Device ID error:', e);
+    return 'unknown-device';
+  }
+};
+
 
 
 // ================= USER ID =================

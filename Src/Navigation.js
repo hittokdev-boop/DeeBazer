@@ -24,6 +24,8 @@ import RazorpayScreen from './Screen/RazorpayScreen'
 import Orders from './Screen/Orders';
 import Coupons from './Screen/Coupons';
 import HelpCenter from './Screen/HelpCenter';
+import SplashScreen from './Screen/SplashScreen';
+import OrderDetails from './Screen/OrderDetails';
 // const Tab = createMaterialTopTabNavigator();
 const Tab=createBottomTabNavigator()
 export default function Navigation(){
@@ -38,9 +40,10 @@ const Stack=createStackNavigator()
 
 const AppStack=()=>{
     return(
-      <Stack.Navigator  screenOptions={{
+      <Stack.Navigator  initialRouteName='Splash' screenOptions={{
         headerShown:false
       }}>
+        <Stack.Screen name='Splash' component={SplashScreen}/>
         <Stack.Screen name='AppTab' component={AppTab}/>
         <Stack.Screen name='VerifyOTP' component={VerifyOTP} />
         <Stack.Screen name='Login' component={CommonLoginModal}/>
@@ -57,6 +60,7 @@ const AppStack=()=>{
           <Stack.Screen name="Orders"  component={Orders}/>
           <Stack.Screen name="Coupons"  component={Coupons}/>
           <Stack.Screen name="HelpCenter"  component={HelpCenter}/>
+          <Stack.Screen name="OrderDetails" component={OrderDetails} />
       </Stack.Navigator>
     )
 }

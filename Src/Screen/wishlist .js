@@ -22,20 +22,20 @@ export default function Wishlist() {
   const navigation = useNavigation();
   const [wishlistItems, setWishlistItems] = useState([]);
   const [loading, setLoading] = useState(false);
-const onShare = async (item) => {
-  try {
-    await Share.share({
-      title: item.name,
-      message: `${item.name}
+  const onShare = async (item) => {
+    try {
+      await Share.share({
+        title: item.name,
+        message: `${item.name}
       
 Price: ₹${item.discount_price}
 
 https://deebazar.com/product/${item.id}`,
-    });
-  } catch (error) {
-    console.log(error);
-  }
-};
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  };
   const getWishlistItems = async () => {
     const token = await getToken();
     const userId = await getuserId();
@@ -66,82 +66,82 @@ https://deebazar.com/product/${item.id}`,
       setLoading(false);
     }
   };
- const requestToCart = async (id) => {
-   const userId = await getuserId();
- 
-   const formData = new FormData();
-   formData.append('user_id', userId);
-   formData.append('product_id', id);
-   formData.append('qty', 1);
- 
-   try {
-     const response = await fetch(`${BASE_URL}cart-to-add`, {
-       method: 'POST',
-       body: formData,
-     });
- 
-     const data = await response.json();
-    //  console.log('data', data);
- 
-     if (data.status == 200) {
-      //  setIsAddedToCart(true);
- 
-       // Toast Message
+  const requestToCart = async (id) => {
+    const userId = await getuserId();
+
+    const formData = new FormData();
+    formData.append('user_id', userId);
+    formData.append('product_id', id);
+    formData.append('qty', 1);
+
+    try {
+      const response = await fetch(`${BASE_URL}cart-to-add`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+      //  console.log('data', data);
+
+      if (data.status == 200) {
+        //  setIsAddedToCart(true);
+
+        // Toast Message
         if (Platform.OS === 'android') {
           // ToastAndroid.show(
           //   '✅ Product added to cart successfully',
           //   ToastAndroid.SHORT
           // );
         } else {
-         Alert.alert('Success', 'Product added to cart successfully');
-       }
-     }
-   } catch (error) {
-     console.log('Error:', error);
- 
+          Alert.alert('Success', 'Product added to cart successfully');
+        }
+      }
+    } catch (error) {
+      console.log('Error:', error);
+
       if (Platform.OS === 'android') {
         // ToastAndroid.show(
         //   'Something went wrong',
         //   ToastAndroid.SHORT
         // );
       } else {
-       Alert.alert('Error', 'Something went wrong');
-     }
-   }
- }
- const removeWishlistItem = async (product_id) => {
-  const userId = await getuserId();
-
-  try {
-    const formData = new FormData();
-    formData.append("user_id", userId);
-    formData.append("product_id", product_id);
-
-    const response = await fetch(`${BASE_URL}wishlist-remove`, {
-      method: "POST",
-      body: formData,
-    });
-
-    const data = await response.json();
-    console.log("Remove Response:", data);
-
-    if (response.ok && (data.status === 200 || data.success)) {
-       
-      setWishlistItems((prev) =>
-        prev.filter((item) => item.id !== product_id)
-      );
-
-      // ToastAndroid.show(
-      //   "Product removed from wishlist",
-      //   ToastAndroid.SHORT
-      // );
-    } else {
-      Alert.alert("Error", data.message || "Failed to remove product");
+        Alert.alert('Error', 'Something went wrong');
+      }
     }
-  } catch (error) {
-    console.log("Wishlist Remove Error:", error);
   }
-};
+  const removeWishlistItem = async (product_id) => {
+    const userId = await getuserId();
+
+    try {
+      const formData = new FormData();
+      formData.append("user_id", userId);
+      formData.append("product_id", product_id);
+
+      const response = await fetch(`${BASE_URL}wishlist-remove`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      console.log("Remove Response:", data);
+
+      if (response.ok && (data.status === 200 || data.success)) {
+
+        setWishlistItems((prev) =>
+          prev.filter((item) => item.id !== product_id)
+        );
+
+        // ToastAndroid.show(
+        //   "Product removed from wishlist",
+        //   ToastAndroid.SHORT
+        // );
+      } else {
+        Alert.alert("Error", data.message || "Failed to remove product");
+      }
+    } catch (error) {
+      console.log("Wishlist Remove Error:", error);
+    }
+  };
   useEffect(() => {
     getWishlistItems();
   }, []);
@@ -172,138 +172,138 @@ https://deebazar.com/product/${item.id}`,
       {loading ? (
         <ActivityIndicator size="large" color={AllColors.primary} style={{ marginTop: 24 }} />
       ) : wishlistItems.length === 0 ? (
-       <View style={styles.emptyContainer}>
-    <LottieView
-      source={require("../Assets/Wishlist.json")}
-      autoPlay
-      loop
-      style={styles.emptyAnimation}
-    />
+        <View style={styles.emptyContainer}>
+          <LottieView
+            source={require("../Assets/Wishlist.json")}
+            autoPlay
+            loop
+            style={styles.emptyAnimation}
+          />
 
-    <Text style={styles.emptyTitle}>
-      Your Wishlist is Empty
-    </Text>
-
-    <Text style={styles.emptySubtitle}>
-      Save your favourite products here.
-      {"\n"}
-      Start exploring and add products to your wishlist.
-    </Text>
-
-    <TouchableOpacity
-      style={styles.shopBtn}
-      onPress={() => navigation.goBack()}
-    >
-      <Text style={styles.shopBtnText}>
-        Continue Shopping
-      </Text>
-    </TouchableOpacity>
-  </View>
-      ) : (
-      <FlatList
-  data={wishlistItems}
-  keyExtractor={(item) => item.id.toString()}
-  showsVerticalScrollIndicator={false}
-  contentContainerStyle={{ paddingBottom: 100 }}
-  renderItem={({ item }) => (
-    <View style={styles.card}>
-      <View style={styles.productRow}>
-        <Image
-          source={{ uri: item.image }}
-          style={styles.image}
-          resizeMode="contain"
-        />
-
-        <View style={styles.details}>
-          <Text numberOfLines={2} style={styles.title}>
-            {item.name}
+          <Text style={styles.emptyTitle}>
+            Your Wishlist is Empty
           </Text>
 
-          <View style={styles.priceRow}>
-            <Text style={styles.price}>
-              ₹{item.discount_price}
-            </Text>
+          <Text style={styles.emptySubtitle}>
+            Save your favourite products here.
+            {"\n"}
+            Start exploring and add products to your wishlist.
+          </Text>
 
-            <Text style={styles.oldPrice}>
-              ₹{item.actual_price}
+          <TouchableOpacity
+            style={styles.shopBtn}
+            onPress={() => navigation.navigate('AppTab')}
+          >
+            <Text style={styles.shopBtnText}>
+              Continue Shopping
             </Text>
-
-            <Text style={styles.discount}>
-              {Math.round(
-                ((item.actual_price - item.discount_price) /
-                  item.actual_price) *
-                  100
-              )}
-              % Off
-            </Text>
-          </View>
-
-          <View style={styles.ratingRow}>
-            <Text style={styles.rating}>
-              ⭐ {item.rating || 0}
-            </Text>
-
-            <Text>
-              {item.reviews || 0} Ratings
-            </Text>
-          </View>
+          </TouchableOpacity>
         </View>
-      </View>
+      ) : (
+        <FlatList
+          data={wishlistItems}
+          keyExtractor={(item) => item.id.toString()}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          renderItem={({ item }) => (
+            <View style={styles.card}>
+              <View style={styles.productRow}>
+                <Image
+                  source={{ uri: item.image }}
+                  style={styles.image}
+                  resizeMode="contain"
+                />
 
-      <View style={styles.bottomRow}>
-        <View style={styles.leftActions}>
-          {/* <TouchableOpacity>
+                <View style={styles.details}>
+                  <Text numberOfLines={2} style={styles.title}>
+                    {item.name}
+                  </Text>
+
+                  <View style={styles.priceRow}>
+                    <Text style={styles.price}>
+                      ₹{item.discount_price}
+                    </Text>
+
+                    <Text style={styles.oldPrice}>
+                      ₹{item.actual_price}
+                    </Text>
+
+                    <Text style={styles.discount}>
+                      {Math.round(
+                        ((item.actual_price - item.discount_price) /
+                          item.actual_price) *
+                        100
+                      )}
+                      % Off
+                    </Text>
+                  </View>
+
+                  <View style={styles.ratingRow}>
+                    <Text style={styles.rating}>
+                      ⭐ {item.rating || 0}
+                    </Text>
+
+                    <Text>
+                      {item.reviews || 0} Ratings
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.bottomRow}>
+                <View style={styles.leftActions}>
+                  {/* <TouchableOpacity>
             <Ionicons
               name="heart"
               size={22}
               color={AllColors.primary}
             /> */}
-          {/* </TouchableOpacity> */}
+                  {/* </TouchableOpacity> */}
 
-      <TouchableOpacity onPress={() => onShare(item)}>
-  <Ionicons
-    name="share-social-outline"
-    size={22}
-    color={AllColors.black}
-  />
-</TouchableOpacity>
-        </View>
+                  <TouchableOpacity onPress={() => onShare(item)}>
+                    <Ionicons
+                      name="share-social-outline"
+                      size={22}
+                      color={AllColors.black}
+                    />
+                  </TouchableOpacity>
+                </View>
 
-        <View style={styles.rightActions}>
-        <TouchableOpacity
-  style={styles.removeBtn}
-  onPress={() => removeWishlistItem(item.id)}
->
-  <Text>Remove</Text>
-</TouchableOpacity>
+                <View style={styles.rightActions}>
+                  <TouchableOpacity
+                    style={styles.removeBtn}
+                    onPress={() => removeWishlistItem(item.id)}
+                  >
+                    <Text>Remove</Text>
+                  </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.cartBtn}
-            onPress={() => requestToCart(item.id)}
-          >
-            <Text style={{ color: AllColors.white, fontWeight: "600" }}>
-              Add to cart
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </View>
-  )}
-  ListEmptyComponent={
-    <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        marginTop: 80,
-      }}
-    >
-      <Text style={{ fontSize: 16, color: "#777" }}>
-        No wishlist items found
-      </Text>
-    </View>
-  }
-/>
+                  <TouchableOpacity
+                    style={styles.cartBtn}
+                    onPress={() => requestToCart(item.id)}
+                  >
+                    <Text style={{ color: AllColors.white, fontWeight: "600" }}>
+                      Add to cart
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+          ListEmptyComponent={
+            <View
+              style={{
+                flex: 1,
+                justifyContent: "center",
+                alignItems: "center",
+                marginTop: 80,
+              }}
+            >
+              <Text style={{ fontSize: 16, color: "#777" }}>
+                No wishlist items found
+              </Text>
+            </View>
+          }
+        />
       )}
     </View>
   );

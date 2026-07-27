@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import {
   TouchableWithoutFeedback,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import OtpVerify from '@pushpendersingh/react-native-otp-verify';
 
 import AllColors from '../Constants/Color';
 import CustomAlert from './Alert';
@@ -20,50 +21,114 @@ import {
   BASE_URL,
   getMobile,
   setToken,
+  getDeviceId,
 } from '../Api/Api';
 
 export default function VerifyOTP() {
   const navigation = useNavigation();
+  const route = useRoute();
 
   const [otp, setOtp] = useState('');
-  const [mobile, setMobile] = useState('');
+  const [mobile, setMobile] = useState(route.params?.mobile || '');
   const [loading, setLoading] = useState(false);
-
   const [seconds, setSeconds] = useState(30);
-
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
+
+  // Refs to avoid stale closures
+  const autoSubmittedRef = useRef(false);
+  const otpRef = useRef('');
+  const mobileRef = useRef(route.params?.mobile || '');
+  const loadingRef = useRef(false);
+  const deviceIdRef = useRef(route.params?.device_id || '');
+
+  // Keep refs in sync
+  useEffect(() => {
+    mobileRef.current = mobile;
+  }, [mobile]);
+
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
 
   useEffect(() => {
     const loadMobile = async () => {
       const number = await getMobile();
       if (number) {
         setMobile(number);
+        mobileRef.current = number;
       }
     };
+    if (!route.params?.mobile) {
+      loadMobile();
+    }
+  }, [route.params?.mobile]);
 
-    loadMobile();
+
+  // Listen for incoming SMS OTP on Android
+  useEffect(() => {
+    if (Platform.OS === 'android' && OtpVerify?.getOtp) {
+      OtpVerify.getHash().then(hash => {
+        console.log('📱 APP SIGNATURE HASH (Add this to backend SMS template):', hash);
+      });
+      OtpVerify.getOtp()
+        .then(() => OtpVerify.addListener(otpHandler))
+        .catch((err) => console.log('OtpVerify error:', err));
+
+      return () => {
+        try { OtpVerify.removeListener(); } catch (e) {}
+      };
+    }
   }, []);
 
+  const otpHandler = (message) => {
+    try {
+      if (message) {
+        const match = /(\d{4,6})/.exec(message);
+        if (match && match[1]) {
+          console.log('✅ Auto-read OTP from SMS:', match[1]);
+          autoSubmittedRef.current = false;
+          otpRef.current = match[1];
+          setOtp(match[1]);
+        }
+      }
+    } catch (e) {
+      console.log('OTP Parse Error:', e);
+    }
+  };
+
+  // Countdown timer
   useEffect(() => {
     if (seconds > 0) {
-      const timer = setTimeout(() => {
-        setSeconds(prev => prev - 1);
-      }, 1000);
-
+      const timer = setTimeout(() => setSeconds(prev => prev - 1), 1000);
       return () => clearTimeout(timer);
     }
   }, [seconds]);
 
-  const handleVerify = async () => {
-   
+  // ✅ Core verify — reads from refs, no stale closure
+  const handleVerifyWithOtp = async (otpToVerify) => {
+    const code = String(otpToVerify ?? '').trim();
+    if (!code || code.length < 4) {
+      setAlertMessage('Please enter valid OTP');
+      setShowAlert(true);
+      return;
+    }
 
     try {
       setLoading(true);
+      loadingRef.current = true;
+
+      // Load device_id — from route params or AsyncStorage fallback
+      if (!deviceIdRef.current) {
+        deviceIdRef.current = await getDeviceId();
+      }
 
       const formData = new FormData();
-      formData.append('mobile', mobile);
-      formData.append('otp', otp);
+      formData.append('mobile', mobileRef.current);
+      formData.append('otp', code);
+      formData.append('device_id', deviceIdRef.current);
+
+      console.log('🔐 Verifying OTP:', code, '| Mobile:', mobileRef.current, '| Device:', deviceIdRef.current);
 
       const response = await fetch(`${BASE_URL}verify-otp`, {
         method: 'POST',
@@ -71,12 +136,14 @@ export default function VerifyOTP() {
       });
 
       const data = await response.json();
-
-      console.log(data);
+      console.log('Verify OTP Response:', data);
 
       if (response.ok && data.token) {
         await setToken(data.token);
-        navigation.replace('AppTab');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'AppTab' }],
+        });
       } else {
         setAlertMessage(data.message || 'Invalid OTP');
         setShowAlert(true);
@@ -87,8 +154,36 @@ export default function VerifyOTP() {
       setShowAlert(true);
     } finally {
       setLoading(false);
+      loadingRef.current = false;
     }
   };
+
+  const handleVerify = () => {
+    handleVerifyWithOtp(otpRef.current || otp);
+  };
+
+  // ✅ Auto-submit when OTP hits 4 or 6 digits — no circular dependency
+  useEffect(() => {
+    const trimmed = otp.trim();
+    otpRef.current = trimmed;
+
+    if (
+      trimmed &&
+      (trimmed.length === 4 || trimmed.length === 6) &&
+      !loadingRef.current &&
+      !autoSubmittedRef.current
+    ) {
+      autoSubmittedRef.current = true;
+      const timer = setTimeout(() => {
+        handleVerifyWithOtp(trimmed);
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+
+    if (!trimmed || (trimmed.length !== 4 && trimmed.length !== 6)) {
+      autoSubmittedRef.current = false;
+    }
+  }, [otp]);
 
   const handleResendOTP = async () => {
     try {
@@ -126,7 +221,7 @@ export default function VerifyOTP() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS == 'ios' ? 'padding' : 'height'}>
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
 
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.container}>
@@ -165,11 +260,16 @@ export default function VerifyOTP() {
 
           <TextInput
             value={otp}
-            onChangeText={setOtp}
+            onChangeText={(text) => {
+              autoSubmittedRef.current = false;
+              setOtp(text);
+            }}
             keyboardType="number-pad"
             maxLength={6}
             placeholder="------"
             placeholderTextColor="#bbb"
+            textContentType="oneTimeCode"
+            autoComplete="sms-otp"
             style={styles.input}
           />
 

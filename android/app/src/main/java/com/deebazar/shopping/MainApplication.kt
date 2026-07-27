@@ -1,4 +1,4 @@
-package com.deebazer
+package com.deebazar.shopping
 
 import android.app.Application
 import com.facebook.react.PackageList

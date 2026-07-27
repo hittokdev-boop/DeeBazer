@@ -60,6 +60,7 @@ export default function DashBoard() {
   const [cartItems, setCartItems] = useState([]);
   const [banners, setBanners] = useState([]);
   const [bannersLoading, setBannersLoading] = useState(false);
+  const [userName, setUserName] = useState('User');
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const skeletonOpacity = React.useRef(new Animated.Value(0.3)).current;
 
@@ -602,6 +603,30 @@ export default function DashBoard() {
     }
   };
 
+  const getUserProfile = async () => {
+    const token = await getToken();
+    if (token) {
+      try {
+        const response = await fetch(`${BASE_URL}me`, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await response.json();
+        if (data.status === 200 && data.user) {
+          setUserName(data.user.name || 'User');
+        }
+      } catch (error) {
+        console.log('Profile fetch error:', error);
+      }
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      getUserProfile();
+    }, [])
+  );
+
   const getBanners = async () => {
     setBannersLoading(true);
     try {
@@ -1137,7 +1162,7 @@ export default function DashBoard() {
                 style={styles.logo}
               />
               <View>
-                <Text style={styles.logoText}>Hello, Hittok 👋</Text>
+                <Text style={styles.logoText}>Hello, {userName} 👋</Text>
                 <Text style={styles.logoSubtext}>Find your favorite products at the best prices.</Text>
               </View>
             </View>

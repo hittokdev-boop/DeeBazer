@@ -27,6 +27,9 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 const CartPage = () => {
   const [cartItems,setCartItems]=useState([])
   const [extraData,setExtraData]=useState({})
+  const [couponCode, setCouponCode] = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState(null)
+  const [couponDiscount, setCouponDiscount] = useState(0)
 
   const billSummary = useMemo(() => {
     try {
@@ -42,23 +45,25 @@ const CartPage = () => {
 
       const discount = actualSum - discountedSum;
       const delivery_charge = Number(extraData?.delivery_charge ?? 0);
-      const total_amount = discountedSum + delivery_charge;
+      const total_amount = discountedSum + delivery_charge - couponDiscount;
 
       return {
         sub_total: Number(actualSum.toFixed(2)),
         discount: Number(discount.toFixed(2)),
+        coupon_discount: Number(couponDiscount.toFixed(2)),
         delivery_charge,
-        total_amount: Number(total_amount.toFixed(2)),
+        total_amount: Number(Math.max(0, total_amount).toFixed(2)),
       };
     } catch (e) {
       return {
         sub_total: 0,
         discount: 0,
+        coupon_discount: 0,
         delivery_charge: 0,
         total_amount: 0,
       };
     }
-  }, [cartItems, extraData]);
+  }, [cartItems, extraData, couponDiscount]);
   const [addressList,setAddressList]=useState([])
   const [isModal,setIsModal]=useState(false)
   const [addressModal, setAddressModal] = useState(false);
@@ -229,6 +234,48 @@ const moveToWishlist = async (item) => {
   }
 };
 // compute local extra data (subtotal, discount, total) from cart items
+// ===== COUPON LOGIC =====
+const COUPONS_DATA = [
+  { id: '1', code: 'DEEBAZER50', discount: '50% OFF', title: 'Flat 50% Off', minSpend: 499, type: 'percent', value: 50 },
+  { id: '2', code: 'FESTIVE200', discount: '₹200 OFF', title: 'Festival Discount', minSpend: 999, type: 'flat', value: 200 },
+  { id: '3', code: 'MEGA100', discount: '₹100 OFF', title: 'Super Saver', minSpend: 799, type: 'flat', value: 100 },
+];
+
+const applyCoupon = () => {
+  const code = couponCode.trim().toUpperCase();
+  if (!code) {
+    Alert.alert('Error', 'Please enter a coupon code');
+    return;
+  }
+  const matched = COUPONS_DATA.find(c => c.code === code);
+  if (!matched) {
+    Alert.alert('Invalid Coupon', 'This coupon code is invalid or expired.');
+    return;
+  }
+  const cartTotal = cartItems.reduce(
+    (sum, it) => sum + Number(it.discount_total ?? it.discount_price ?? 0), 0
+  );
+  if (cartTotal < matched.minSpend) {
+    Alert.alert('Not Eligible', `Minimum cart value of ₹${matched.minSpend} required for this coupon.`);
+    return;
+  }
+  let discAmt = 0;
+  if (matched.type === 'flat') {
+    discAmt = matched.value;
+  } else if (matched.type === 'percent') {
+    discAmt = (cartTotal * matched.value) / 100;
+  }
+  setAppliedCoupon(matched);
+  setCouponDiscount(Number(discAmt.toFixed(2)));
+  setCouponCode('');
+};
+
+const removeCoupon = () => {
+  setAppliedCoupon(null);
+  setCouponDiscount(0);
+  setCouponCode('');
+};
+
 const computeExtraDataFromCart = (items) => {
   try {
     const discountedSum = items.reduce(
@@ -717,11 +764,11 @@ if (isuser && (!cartItems || cartItems.length === 0)) {
 
           <View style={{ marginTop: 10 }}>
             <Text style={styles.oldPrice}>
-              ₹{item.actual_price}
+              ₹{Number(item.actual_total ?? (Number(item.actual_price || 0) * Number(item.qty || 1))).toFixed(2)}
             </Text>
 
             <Text style={styles.newPrice}>
-              ₹{item.discount_price}
+              ₹{Number(item.discount_total ?? item.discount_price ?? 0).toFixed(2)}
             </Text>
            
           </View>
@@ -731,7 +778,44 @@ if (isuser && (!cartItems || cartItems.length === 0)) {
     </View>
   )}
    ListFooterComponent={
-    <><View style={styles.billCard}>
+    <>
+    {/* ===== COUPON SECTION ===== */}
+    <View style={styles.couponCard}>
+      <View style={styles.couponHeader}>
+        <MaterialCommunityIcons name="ticket-percent-outline" size={20} color={AllColors.primary} />
+        <Text style={styles.couponHeaderText}>Apply Coupon</Text>
+      </View>
+
+      {appliedCoupon ? (
+        <View style={styles.appliedCouponRow}>
+          <View style={styles.appliedBadge}>
+            <MaterialCommunityIcons name="check-circle" size={16} color="#059669" />
+            <Text style={styles.appliedCode}>{appliedCoupon.code}</Text>
+            <Text style={styles.appliedSaving}>- ₹{couponDiscount} saved</Text>
+          </View>
+          <TouchableOpacity onPress={removeCoupon} style={styles.removeBtn}>
+            <Text style={styles.removeBtnText}>Remove</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={styles.couponInputRow}>
+          <TextInput
+            placeholder="Enter coupon code"
+            placeholderTextColor="#94A3B8"
+            style={styles.couponInput}
+            value={couponCode}
+            onChangeText={setCouponCode}
+            autoCapitalize="characters"
+          />
+          <TouchableOpacity style={styles.applyBtn} onPress={applyCoupon} activeOpacity={0.85}>
+            <Text style={styles.applyBtnText}>APPLY</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+
+    {/* ===== BILL DETAILS ===== */}
+    <View style={styles.billCard}>
       <Text style={styles.billTitle}>Bill Details</Text>
 
       <View style={styles.billRow}>
@@ -740,11 +824,20 @@ if (isuser && (!cartItems || cartItems.length === 0)) {
       </View>
 
       <View style={styles.billRow}>
-        <Text style={styles.billLabel}>Discount</Text>
+        <Text style={styles.billLabel}>Product Discount</Text>
         <Text style={styles.discountValue}>
           - ₹{billSummary.discount}
         </Text>
       </View>
+
+      {billSummary.coupon_discount > 0 && (
+        <View style={styles.billRow}>
+          <Text style={styles.billLabel}>Coupon Discount</Text>
+          <Text style={styles.discountValue}>
+            - ₹{billSummary.coupon_discount}
+          </Text>
+        </View>
+      )}
 
       <View style={styles.billRow}>
         <Text style={styles.billLabel}>Delivery Charge</Text>
@@ -765,7 +858,7 @@ if (isuser && (!cartItems || cartItems.length === 0)) {
       </View>
       
     </View>
-    <View  style={{width: '100%', height: 50, backgroundColor: '#f0f0f0'}}/>
+    <View style={{width: '100%', height: 50, backgroundColor: '#f0f0f0'}}/>
     </>
     
   }
@@ -882,9 +975,14 @@ if (isuser && (!cartItems || cartItems.length === 0)) {
       <Text style={styles.modalTitle}>
         Select Delivery Address
       </Text>
-     <TouchableOpacity style={{margin:10}} >
+     <TouchableOpacity 
+       style={{margin:10}}
+       onPress={() => {
+         setIsModal(false);
+         navigation.navigate('SaveAddress');
+       }}
+     >
       <Text style={{color:AllColors.primary,textAlign:'right',fontSize:18}}>+Add New Address</Text>
-
      </TouchableOpacity>
           
       <FlatList
@@ -998,6 +1096,97 @@ discountValue: {
   fontSize: 14,
   fontWeight: "600",
   color: "#1E9E45",
+},
+
+
+couponCard: {
+  backgroundColor: '#fff',
+  marginHorizontal: 10,
+  marginVertical: 6,
+  paddingVertical: 14,
+  paddingHorizontal: 14,
+  borderRadius: 12,
+  elevation: 2,
+},
+couponHeader: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+  marginBottom: 12,
+},
+couponHeaderText: {
+  fontSize: 15,
+  fontWeight: '700',
+  color: '#1E293B',
+},
+couponInputRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 10,
+},
+couponInput: {
+  flex: 1,
+  height: 46,
+  backgroundColor: '#F8FAFC',
+  borderRadius: 10,
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  paddingHorizontal: 14,
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#0F172A',
+  letterSpacing: 0.5,
+},
+applyBtn: {
+  height: 46,
+  paddingHorizontal: 18,
+  backgroundColor: AllColors.primary,
+  borderRadius: 10,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+applyBtnText: {
+  fontSize: 13,
+  fontWeight: '800',
+  color: '#fff',
+  letterSpacing: 0.5,
+},
+appliedCouponRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  backgroundColor: '#F0FDF4',
+  borderRadius: 10,
+  paddingHorizontal: 12,
+  paddingVertical: 10,
+  borderWidth: 1,
+  borderColor: '#86EFAC',
+},
+appliedBadge: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+  flex: 1,
+},
+appliedCode: {
+  fontSize: 13,
+  fontWeight: '800',
+  color: '#059669',
+  letterSpacing: 0.5,
+},
+appliedSaving: {
+  fontSize: 12,
+  color: '#059669',
+  fontWeight: '600',
+},
+removeBtn: {
+  paddingHorizontal: 10,
+  paddingVertical: 4,
+},
+removeBtnText: {
+  fontSize: 13,
+  fontWeight: '700',
+  color: '#EF4444',
 },
 
 billDivider: {
@@ -1410,6 +1599,97 @@ addressText: {
   fontSize: 14,
   color: "#666",
   lineHeight: 22,
+},
+
+// ===== COUPON STYLES =====
+couponCard: {
+  backgroundColor: '#fff',
+  marginHorizontal: 10,
+  marginVertical: 6,
+  paddingVertical: 14,
+  paddingHorizontal: 14,
+  borderRadius: 12,
+  elevation: 2,
+},
+couponHeader: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+  marginBottom: 12,
+},
+couponHeaderText: {
+  fontSize: 15,
+  fontWeight: '700',
+  color: '#1E293B',
+},
+couponInputRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 10,
+},
+couponInput: {
+  flex: 1,
+  height: 46,
+  backgroundColor: '#F8FAFC',
+  borderRadius: 10,
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  paddingHorizontal: 14,
+  fontSize: 14,
+  fontWeight: '600',
+  color: '#0F172A',
+  letterSpacing: 0.5,
+},
+applyBtn: {
+  height: 46,
+  paddingHorizontal: 18,
+  backgroundColor: AllColors.primary,
+  borderRadius: 10,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+applyBtnText: {
+  fontSize: 13,
+  fontWeight: '800',
+  color: '#fff',
+  letterSpacing: 0.5,
+},
+appliedCouponRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  backgroundColor: '#F0FDF4',
+  borderRadius: 10,
+  paddingHorizontal: 12,
+  paddingVertical: 10,
+  borderWidth: 1,
+  borderColor: '#86EFAC',
+},
+appliedBadge: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 8,
+  flex: 1,
+},
+appliedCode: {
+  fontSize: 13,
+  fontWeight: '800',
+  color: '#059669',
+  letterSpacing: 0.5,
+},
+appliedSaving: {
+  fontSize: 12,
+  color: '#059669',
+  fontWeight: '600',
+},
+removeBtn: {
+  paddingHorizontal: 10,
+  paddingVertical: 4,
+},
+removeBtnText: {
+  fontSize: 13,
+  fontWeight: '700',
+  color: '#EF4444',
 },
 });
 const loginStyles = StyleSheet.create({

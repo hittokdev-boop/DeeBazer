@@ -86,7 +86,7 @@ const SAMPLE_CUSTOMER_ORDERS = [
 export default function Orders() {
   const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState('All');
-  const [orders, setOrders] = useState(SAMPLE_CUSTOMER_ORDERS);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(true);
@@ -97,8 +97,8 @@ export default function Orders() {
       const userId = await getuserId();
 
       if (!token || !userId) {
-        setIsLoggedIn(true); // Allow viewing dummy data even if logged out for preview
-        setOrders(SAMPLE_CUSTOMER_ORDERS);
+        setIsLoggedIn(false);
+        setOrders([]);
         setLoading(false);
         return;
       }
@@ -121,13 +121,13 @@ export default function Orders() {
 
       if (result?.status === 200 || result?.success) {
         const orderData = result?.data || result?.orders || [];
-        setOrders(Array.isArray(orderData) && orderData.length > 0 ? orderData : SAMPLE_CUSTOMER_ORDERS);
+        setOrders(Array.isArray(orderData) ? orderData : []);
       } else {
-        setOrders(SAMPLE_CUSTOMER_ORDERS);
+        setOrders([]);
       }
     } catch (error) {
       console.log('Fetch Orders Error:', error);
-      setOrders(SAMPLE_CUSTOMER_ORDERS);
+      setOrders([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -279,11 +279,7 @@ export default function Orders() {
 
             <TouchableOpacity
               style={styles.reorderBtn}
-              onPress={() => {
-                if (Platform.OS === 'android') {
-                  Alert.alert('Order Details', `Order ID: #${orderId}\nTotal Amount: ₹${amount}\nStatus: ${badge.label}`);
-                }
-              }}
+              onPress={() => navigation.navigate('OrderDetails', { order: item })}
               activeOpacity={0.8}>
               <Text style={styles.reorderBtnText}>View Details</Text>
               <Ionicons name="chevron-forward" size={14} color="#FFFFFF" style={{ marginLeft: 2 }} />
