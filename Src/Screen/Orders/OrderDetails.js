@@ -13,7 +13,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import AllColors from '../Constants/Color';
+import AllColors from '../../Constants/Color';
 
 export default function OrderDetails() {
   const navigation = useNavigation();

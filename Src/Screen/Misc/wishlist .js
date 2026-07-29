@@ -12,8 +12,8 @@ import {
   Share,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { BASE_URL, getToken, getuserId } from '../Api/Api';
-import AllColors from '../Constants/Color';
+import { BASE_URL, getToken, getuserId } from '../../Api/Api';
+import AllColors from '../../Constants/Color';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LottieView from "lottie-react-native";
 
@@ -56,7 +56,7 @@ https://deebazar.com/product/${item.id}`,
       });
 
       const data = await response.json();
-      console.log('Wishlist screen fetch data:', data);
+      // console.log('Wishlist screen fetch data:', data);
       const items = data?.data || data?.products || data?.wishlist || [];
       const normalizedItems = items.map((entry) => entry?.product || entry);
       setWishlistItems(normalizedItems);
@@ -123,7 +123,7 @@ https://deebazar.com/product/${item.id}`,
       });
 
       const data = await response.json();
-      console.log("Remove Response:", data);
+      // console.log("Remove Response:", data);
 
       if (response.ok && (data.status === 200 || data.success)) {
 
@@ -174,7 +174,7 @@ https://deebazar.com/product/${item.id}`,
       ) : wishlistItems.length === 0 ? (
         <View style={styles.emptyContainer}>
           <LottieView
-            source={require("../Assets/Wishlist.json")}
+            source={require("../../Assets/Wishlist.json")}
             autoPlay
             loop
             style={styles.emptyAnimation}

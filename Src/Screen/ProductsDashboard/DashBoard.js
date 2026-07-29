@@ -24,16 +24,18 @@ import LinearGradient from 'react-native-linear-gradient';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import Feather from 'react-native-vector-icons/Feather';
 import AntDesign from 'react-native-vector-icons/AntDesign';
-import AllColors from '../Constants/Color';
+import AllColors from '../../Constants/Color';
 
-import CommonLoginModal from './../Common/Login';
+import CommonLoginModal from '../../Common/Login';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { BASE_URL, getToken, getuserId, } from '../Api/Api';
+import { BASE_URL, getToken, getuserId, } from '../../Api/Api';
 import Swiper from 'react-native-swiper';
 
 // import Feather from 'react-native-vector-icons/Feather'
 const { width } = Dimensions.get('window');
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { launchCamera } from 'react-native-image-picker';
+
 export default function DashBoard() {
   const Navigation = useNavigation();
 
@@ -45,6 +47,32 @@ export default function DashBoard() {
   const [product, setProduct] = useState([])
   const [subCategories, setSubCategories] = useState([])
   const [selectedSubCategoryId, setSelectedSubCategoryId] = useState(null)
+
+  const handleVoiceSearch = () => {
+    Alert.alert("Voice Search", "Voice search feature coming soon!");
+    // Requires a native module like @react-native-voice/voice for actual implementation
+  };
+
+  const handleCameraSearch = () => {
+    launchCamera(
+      {
+        mediaType: 'photo',
+        quality: 0.8,
+      },
+      (response) => {
+        if (response.didCancel) {
+          console.log('User cancelled image picker');
+        } else if (response.errorCode) {
+          Alert.alert('Error', response.errorMessage);
+        } else if (response.assets && response.assets.length > 0) {
+          const imageUri = response.assets[0].uri;
+          // Handle the image for visual search here
+          Alert.alert("Image Search", "Image captured! Visual search API integration coming soon.");
+        }
+      }
+    );
+  };
+
   const [subCategoriesLoading, setSubCategoriesLoading] = useState(false)
   const [dealOfTheDay, setDealOfTheDay] = useState([])
   const [latestproducts, setLatestproducts] = useState([])
@@ -470,6 +498,11 @@ export default function DashBoard() {
     if (item.stock_quantity !== undefined && item.stock_quantity !== null && Number(item.stock_quantity) <= 0) return true;
     return false;
   };
+  const getQtyForItem = (item) => {
+    if (!item) return 0;
+    const id = item?.id ?? item?.product_id;
+    return cartQty[id] || cartQty[String(id)] || cartQty[Number(id)] || 0;
+  };
   const getWishlistItems = async () => {
     const token = await getToken();
     const userId = await getuserId();
@@ -719,6 +752,24 @@ export default function DashBoard() {
     });
   };
 
+  const gotoEditProfile = async () => {
+    const token = await getToken();
+    if (token) {
+      try {
+        const parent = Navigation.getParent ? Navigation.getParent() : null;
+        if (parent && parent.navigate) {
+          parent.navigate('editProfile');
+        } else {
+          Navigation.navigate('editProfile');
+        }
+      } catch (e) {
+        Navigation.navigate('editProfile');
+      }
+    } else {
+      Navigation.navigate('Login');
+    }
+  };
+
   const getSubCategories = async (catId) => {
     if (!catId || catId === 'all') {
       setSubCategories([]);
@@ -862,7 +913,7 @@ export default function DashBoard() {
 
       setWishlistIds(ids);
     } catch (e) {
-      console.log(e);
+      // console.log(e);
     }
   };
   const getDealOfTheDay = async () => {
@@ -937,7 +988,7 @@ export default function DashBoard() {
       });
 
       const result = await response.json();
-      console.log('Cart Items:', result);
+      // console.log('Cart Items:', result);
       const itemsList = result.data || [];
       setCartItems(itemsList);
 
@@ -949,7 +1000,7 @@ export default function DashBoard() {
       setCartQty(qtyObj);
 
     } catch (e) {
-      console.log(e);
+      // console.log(e);
     }
   };
   const requestToCart = async (item) => {
@@ -990,7 +1041,7 @@ export default function DashBoard() {
       });
 
       const data = await response.json();
-      console.log('data', data);
+      // console.log('data', data);
 
       if (data.status != 200) {
         // Revert optimistic updates
@@ -1060,7 +1111,7 @@ export default function DashBoard() {
               style={styles.slide}
               onPress={() => {
                 if (item.link) {
-                  console.log('Banner pressed link:', item.link);
+                  // console.log('Banner pressed link:', item.link);
                 }
               }}
             >
@@ -1154,7 +1205,11 @@ export default function DashBoard() {
         {/* HEADER */}
         <View style={styles.topHeader}>
           <View style={styles.headerRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={gotoEditProfile}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
+            >
               <Image
                 source={{
                   uri: 'https://www.vhv.rs/dpng/d/409-4090121_transparent-background-user-icon-hd-png-download.png',
@@ -1165,7 +1220,7 @@ export default function DashBoard() {
                 <Text style={styles.logoText}>Hello, {userName} 👋</Text>
                 <Text style={styles.logoSubtext}>Find your favorite products at the best prices.</Text>
               </View>
-            </View>
+            </TouchableOpacity>
 
             <TouchableOpacity style={styles.bellBtn}>
               <FontAwesome
@@ -1187,10 +1242,23 @@ export default function DashBoard() {
               <TextInput
                 placeholder="Search your need"
                 placeholderTextColor="#94A3B8"
-                style={styles.input}
+                style={[styles.input, { flex: 1 }]}
                 value={searchText}
                 onChangeText={(value) => { getSearchText(value) }}
               />
+              <TouchableOpacity
+                style={styles.searchIconButton}
+                onPress={handleVoiceSearch}
+              >
+                <Ionicons name="mic" color={AllColors.primary} size={20} />
+              </TouchableOpacity>
+              <View style={styles.verticalDivider} />
+              <TouchableOpacity
+                style={styles.searchIconButton}
+                onPress={handleCameraSearch}
+              >
+                <Ionicons name="camera" color={AllColors.primary} size={20} />
+              </TouchableOpacity>
             </View>
             <TouchableOpacity
               style={styles.filterBtn}
@@ -1406,19 +1474,19 @@ export default function DashBoard() {
               <View style={styles.outOfStockBadge}>
                 <Text style={styles.outOfStockText}>Out of Stock</Text>
               </View>
-            ) : cartQty[item.id] ? (
+            ) : getQtyForItem(item) > 0 ? (
               <View style={styles.qtyContainer}>
                 <TouchableOpacity
                   style={styles.qtyBtn}
-                  onPress={() => decreaseQty(item.id)}>
+                  onPress={() => decreaseQty(item.id ?? item.product_id)}>
                   <Text style={styles.qtyText}>-</Text>
                 </TouchableOpacity>
 
-                <Text style={styles.qtyCount}>{cartQty[item.id]}</Text>
+                <Text style={styles.qtyCount}>{getQtyForItem(item)}</Text>
 
                 <TouchableOpacity
                   style={styles.qtyBtn}
-                  onPress={() => increaseQty(item.id)}>
+                  onPress={() => increaseQty(item.id ?? item.product_id)}>
                   <Text style={styles.qtyPlusText}>+</Text>
                 </TouchableOpacity>
               </View>
@@ -1427,9 +1495,9 @@ export default function DashBoard() {
                 style={styles.iconButton}
                 onPress={() => IsUser(item)}>
                 <Ionicons
-                  name="cart-outline"
-                  size={18}
-                  color="#fff"
+                  name="cart"
+                  size={22}
+                  color={AllColors.primary}
                 />
               </TouchableOpacity>
             )}
@@ -1591,19 +1659,19 @@ export default function DashBoard() {
                         <View style={styles.outOfStockBadge}>
                           <Text style={styles.outOfStockText}>Out of Stock</Text>
                         </View>
-                      ) : cartQty[item.id] ? (
+                      ) : getQtyForItem(item) > 0 ? (
                         <View style={styles.qtyContainer}>
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => decreaseQty(item.id)}>
+                            onPress={() => decreaseQty(item.id ?? item.product_id)}>
                             <Text style={styles.qtyText}>-</Text>
                           </TouchableOpacity>
 
-                          <Text style={styles.qtyCount}>{cartQty[item.id]}</Text>
+                          <Text style={styles.qtyCount}>{getQtyForItem(item)}</Text>
 
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => increaseQty(item.id)}>
+                            onPress={() => increaseQty(item.id ?? item.product_id)}>
                             <Text style={styles.qtyPlusText}>+</Text>
                           </TouchableOpacity>
                         </View>
@@ -1612,9 +1680,9 @@ export default function DashBoard() {
                           style={styles.iconButton}
                           onPress={() => IsUser(item)}>
                           <Ionicons
-                            name="cart-outline"
-                            size={16}
-                            color="#fff"
+                            name="cart"
+                            size={20}
+                            color={AllColors.primary}
                           />
                         </TouchableOpacity>
                       )}
@@ -1682,19 +1750,19 @@ export default function DashBoard() {
                         <View style={styles.outOfStockBadge}>
                           <Text style={styles.outOfStockText}>Out of Stock</Text>
                         </View>
-                      ) : cartQty[item.id] ? (
+                      ) : getQtyForItem(item) > 0 ? (
                         <View style={styles.qtyContainer}>
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => decreaseQty(item.id)}>
+                            onPress={() => decreaseQty(item.id ?? item.product_id)}>
                             <Text style={styles.qtyText}>-</Text>
                           </TouchableOpacity>
 
-                          <Text style={styles.qtyCount}>{cartQty[item.id]}</Text>
+                          <Text style={styles.qtyCount}>{getQtyForItem(item)}</Text>
 
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => increaseQty(item.id)}>
+                            onPress={() => increaseQty(item.id ?? item.product_id)}>
                             <Text style={styles.qtyPlusText}>+</Text>
                           </TouchableOpacity>
                         </View>
@@ -1703,9 +1771,9 @@ export default function DashBoard() {
                           style={styles.iconButton}
                           onPress={() => IsUser(item)}>
                           <Ionicons
-                            name="cart-outline"
-                            size={16}
-                            color="#fff"
+                            name="cart"
+                            size={20}
+                            color={AllColors.primary}
                           />
                         </TouchableOpacity>
                       )}
@@ -1773,19 +1841,19 @@ export default function DashBoard() {
                         <View style={styles.outOfStockBadge}>
                           <Text style={styles.outOfStockText}>Out of Stock</Text>
                         </View>
-                      ) : cartQty[item.id] ? (
+                      ) : getQtyForItem(item) > 0 ? (
                         <View style={styles.qtyContainer}>
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => decreaseQty(item.id)}>
+                            onPress={() => decreaseQty(item.id ?? item.product_id)}>
                             <Text style={styles.qtyText}>-</Text>
                           </TouchableOpacity>
 
-                          <Text style={styles.qtyCount}>{cartQty[item.id]}</Text>
+                          <Text style={styles.qtyCount}>{getQtyForItem(item)}</Text>
 
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => increaseQty(item.id)}>
+                            onPress={() => increaseQty(item.id ?? item.product_id)}>
                             <Text style={styles.qtyPlusText}>+</Text>
                           </TouchableOpacity>
                         </View>
@@ -1794,9 +1862,9 @@ export default function DashBoard() {
                           style={styles.iconButton}
                           onPress={() => IsUser(item)}>
                           <Ionicons
-                            name="cart-outline"
-                            size={16}
-                            color="#fff"
+                            name="cart"
+                            size={20}
+                            color={AllColors.primary}
                           />
                         </TouchableOpacity>
                       )}
@@ -2051,7 +2119,7 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 18,
     paddingHorizontal: 16,
   },
   searchBox: {
@@ -2241,10 +2309,12 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   iconButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: AllColors.primary,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF1F7',
+    borderWidth: 1,
+    borderColor: AllColors.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -2252,12 +2322,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    width: 76,
-    height: 32,
+    width: 82,
+    height: 36,
     borderWidth: 1.5,
     borderColor: AllColors.primary,
-    borderRadius: 16,
-    paddingHorizontal: 3,
+    borderRadius: 18,
+    paddingHorizontal: 4,
   },
   qtyBtn: {
     width: 22,
@@ -2620,6 +2690,22 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#E2E8F0',
   },
+  iconButton: {
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  verticalDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 4,
+  },
+  input: {
+    flex: 1,
+    height: 40,
+    paddingHorizontal: 10,
+  },
   skeletonSearchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2704,5 +2790,27 @@ const styles = StyleSheet.create({
     height: 28,
     borderRadius: 14,
     backgroundColor: '#E2E8F0',
+  },
+  searchIconButton: {
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerCartBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: AllColors.primary,
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  headerCartBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
   },
 });

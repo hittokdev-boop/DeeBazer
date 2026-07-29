@@ -2,30 +2,32 @@ import react from 'react'
 import Entypo from 'react-native-vector-icons/Entypo';
 import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
-import DashBoard from './Screen/DashBoard';
-import Home from './Screen/Home';
-import Account from './Screen/Account';
-import CartPage from './Screen/CartPage';
+import DashBoard from './Screen/ProductsDashboard/DashBoard';
+import Home from './Screen/ProductsDashboard/Home';
+import Account from './Screen/AuthProfile/Account';
+import CartPage from './Screen/CartCheckout/CartPage';
 import AllColors from './Constants/Color';
 import VerifyOTP from './Common/VerifyOTP'
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import CommonLoginModal from './Common/Login';
-import TextView from './Screen/Text';
-import EditProfileScreen from './Screen/EditProfile'
-import SaveAddress from './Screen/SaveAddress'
-import ProductDetails from './Screen/ProductDetails'
+import TextView from './Screen/Misc/Text';
+import EditProfileScreen from './Screen/AuthProfile/EditProfile'
+import SaveAddress from './Screen/Address/SaveAddress'
+import ProductDetails from './Screen/ProductsDashboard/ProductDetails'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import MapScreen from './Screen/MapScreen'
-import AllAddress from './Screen/AllAdress'
-import ViewAllProducts from  './Screen/ViewAllProducts'
-import Wishlist from './Screen/wishlist '
-import RazorpayScreen from './Screen/RazorpayScreen'
-import Orders from './Screen/Orders';
-import Coupons from './Screen/Coupons';
-import HelpCenter from './Screen/HelpCenter';
-import SplashScreen from './Screen/SplashScreen';
-import OrderDetails from './Screen/OrderDetails';
+import MapScreen from './Screen/Address/MapScreen'
+import AllAddress from './Screen/Address/AllAdress'
+import ViewAllProducts from  './Screen/ProductsDashboard/ViewAllProducts'
+import Wishlist from './Screen/Misc/wishlist '
+import RazorpayScreen from './Screen/CartCheckout/RazorpayScreen'
+import Orders from './Screen/Orders/Orders';
+import Coupons from './Screen/CartCheckout/Coupons';
+import HelpCenter from './Screen/Misc/HelpCenter';
+import SplashScreen from './Screen/Misc/SplashScreen';
+import OrderDetails from './Screen/Orders/OrderDetails';
+import Register from './Common/Register';
+import TermsCondition from './Screen/Misc/TermsCondition';
 // const Tab = createMaterialTopTabNavigator();
 const Tab=createBottomTabNavigator()
 export default function Navigation(){
@@ -47,6 +49,8 @@ const AppStack=()=>{
         <Stack.Screen name='AppTab' component={AppTab}/>
         <Stack.Screen name='VerifyOTP' component={VerifyOTP} />
         <Stack.Screen name='Login' component={CommonLoginModal}/>
+        <Stack.Screen name='Register' component={Register}/>
+        <Stack.Screen name='TermsCondition' component={TermsCondition}/>
         <Stack.Screen name='TextView' component={TextView}/>
         <Stack.Screen name='editProfile' component={EditProfileScreen}/>
         <Stack.Screen name='SaveAddress' component={SaveAddress} />

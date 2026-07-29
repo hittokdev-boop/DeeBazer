@@ -20,7 +20,7 @@ const navigation=useNavigation();
 const {title,products}=route.params;
  
 const gotoDetails=(item)=>{
-    console.log(item,'hjhkjjhkhjhg')
+    // console.log(item,'hjhkjjhkhjhg')
 navigation.navigate("ProductDetails",{
 id:item.id
 })

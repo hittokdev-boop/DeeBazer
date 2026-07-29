@@ -139,7 +139,7 @@ const SplashScreen = ({ navigation }) => {
         ]}>
         <View style={styles.logoCircle}>
           <Image
-            source={require('../Assets/icon.png')}
+            source={require('../../Assets/icon.png')}
             style={styles.logo}
             resizeMode="contain"
           />
@@ -154,7 +154,7 @@ const SplashScreen = ({ navigation }) => {
           alignItems: 'center',
           marginTop: 28,
         }}>
-        <Animated.Text style={styles.appName}>DeeBazer</Animated.Text>
+        <Animated.Text style={styles.appName}>DeeBazar</Animated.Text>
         <Animated.Text style={styles.tagline}>
           Shop Smart. Live Better.
         </Animated.Text>

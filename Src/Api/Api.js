@@ -7,6 +7,7 @@ const USER_ID_KEY = "USER_ID";
 const MOBILE_KEY = "MOBILE";
 const TOKEN_KEY = "TOKEN";
 const DEVICE_ID_KEY = "DEVICE_ID";
+const PASSWORD_KEY = "PASSWORD";
 
 // ================= DEVICE ID =================
 
@@ -26,7 +27,7 @@ export const getDeviceId = async () => {
     if (!deviceId) {
       deviceId = generateUUID();
       await AsyncStorage.setItem(DEVICE_ID_KEY, deviceId);
-      console.log('🆔 New Device ID created:', deviceId);
+      // console.log('🆔 New Device ID created:', deviceId);
     }
     return deviceId;
   } catch (e) {
@@ -126,5 +127,35 @@ export const removeToken = async () => {
     await AsyncStorage.removeItem(TOKEN_KEY);
   } catch (e) {
     console.log("token remove error", e);
+  }
+};
+
+// ================= PASSWORD =================
+
+// Save password
+export const setPassword = async (password) => {
+  try {
+    await AsyncStorage.setItem(PASSWORD_KEY, password);
+  } catch (e) {
+    console.log("password save error", e);
+  }
+};
+
+// Get password
+export const getPassword = async () => {
+  try {
+    return await AsyncStorage.getItem(PASSWORD_KEY);
+  } catch (e) {
+    console.log("password get error", e);
+    return null;
+  }
+};
+
+// Remove password
+export const removePassword = async () => {
+  try {
+    await AsyncStorage.removeItem(PASSWORD_KEY);
+  } catch (e) {
+    console.log("password remove error", e);
   }
 };

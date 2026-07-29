@@ -69,7 +69,7 @@ export default function VerifyOTP() {
   useEffect(() => {
     if (Platform.OS === 'android' && OtpVerify?.getOtp) {
       OtpVerify.getHash().then(hash => {
-        console.log('📱 APP SIGNATURE HASH (Add this to backend SMS template):', hash);
+        // console.log('📱 APP SIGNATURE HASH (Add this to backend SMS template):', hash);
       });
       OtpVerify.getOtp()
         .then(() => OtpVerify.addListener(otpHandler))
@@ -86,7 +86,7 @@ export default function VerifyOTP() {
       if (message) {
         const match = /(\d{4,6})/.exec(message);
         if (match && match[1]) {
-          console.log('✅ Auto-read OTP from SMS:', match[1]);
+          // console.log('✅ Auto-read OTP from SMS:', match[1]);
           autoSubmittedRef.current = false;
           otpRef.current = match[1];
           setOtp(match[1]);
@@ -128,7 +128,7 @@ export default function VerifyOTP() {
       formData.append('otp', code);
       formData.append('device_id', deviceIdRef.current);
 
-      console.log('🔐 Verifying OTP:', code, '| Mobile:', mobileRef.current, '| Device:', deviceIdRef.current);
+      // console.log('🔐 Verifying OTP:', code, '| Mobile:', mobileRef.current, '| Device:', deviceIdRef.current);
 
       const response = await fetch(`${BASE_URL}verify-otp`, {
         method: 'POST',
@@ -136,7 +136,7 @@ export default function VerifyOTP() {
       });
 
       const data = await response.json();
-      console.log('Verify OTP Response:', data);
+      // console.log('Verify OTP Response:', data);
 
       if (response.ok && data.token) {
         await setToken(data.token);
@@ -149,7 +149,7 @@ export default function VerifyOTP() {
         setShowAlert(true);
       }
     } catch (e) {
-      console.log(e);
+      // console.log(e);
       setAlertMessage('Something went wrong');
       setShowAlert(true);
     } finally {
@@ -199,7 +199,7 @@ export default function VerifyOTP() {
 
       const data = await response.json();
 
-      console.log(data);
+      // console.log(data);
 
       if (response.ok) {
         setAlertMessage('OTP Sent Successfully');
@@ -210,7 +210,7 @@ export default function VerifyOTP() {
         setShowAlert(true);
       }
     } catch (e) {
-      console.log(e);
+      // console.log(e);
       setAlertMessage('Network Error');
       setShowAlert(true);
     } finally {

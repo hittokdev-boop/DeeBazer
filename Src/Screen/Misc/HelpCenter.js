@@ -18,7 +18,7 @@ import Feather from 'react-native-vector-icons/Feather';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
-import AllColors from '../Constants/Color';
+import AllColors from '../../Constants/Color';
 
 const FAQS = [
   {

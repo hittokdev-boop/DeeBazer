@@ -7,7 +7,7 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native';
-import { BASE_URL, getToken, getuserId } from '../Api/Api';
+import { BASE_URL, getToken, getuserId } from '../../Api/Api';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -37,7 +37,7 @@ const confirmUpdate = (addressId) => {
  
 };
 const handleUpdatte =()=>{
-  console.log('no ')
+  // console.log('no ')
 }
 const confirmDelete = (addressId) => {
   Alert.alert(
@@ -120,12 +120,12 @@ const openAddAddress =()=>{
 
       const data = await response.json();
 
-      console.log(data);
+      // console.log(data);
 
       if (response.ok) {
         setAddressList(data.data || []);
       } else {
-        console.log(data.message);
+        // console.log(data.message);
       }
     } catch (error) {
       console.log(error);

@@ -17,71 +17,10 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { BASE_URL, getToken, getuserId } from '../Api/Api';
-import AllColors from '../Constants/Color';
+import { BASE_URL, getToken, getuserId } from '../../Api/Api';
+import AllColors from '../../Constants/Color';
 
 const TABS = ['All', 'Processing', 'Delivered', 'Cancelled'];
-
-const SAMPLE_CUSTOMER_ORDERS = [
-  {
-    id: 1,
-    order_id_generate: 'DB-984321',
-    created_at: '2026-07-22T14:30:00Z',
-    order_status: 'Delivered',
-    amount: 1450,
-    net_amount: 1450,
-    items: [
-      {
-        id: 101,
-        name: 'Cotton Floral Printed Kurti & Pant Set',
-        image: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=400&auto=format&fit=crop&q=60',
-        selling_price: 950,
-        qty: 1,
-      },
-      {
-        id: 102,
-        name: 'Traditional Designer Silk Dupatta',
-        image: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=400&auto=format&fit=crop&q=60',
-        selling_price: 500,
-        qty: 1,
-      },
-    ],
-  },
-  {
-    id: 2,
-    order_id_generate: 'DB-871239',
-    created_at: '2026-07-24T09:15:00Z',
-    order_status: 'Processing',
-    amount: 2199,
-    net_amount: 2199,
-    items: [
-      {
-        id: 103,
-        name: 'Premium Wireless Bluetooth Headphones',
-        image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&auto=format&fit=crop&q=60',
-        selling_price: 2199,
-        qty: 1,
-      },
-    ],
-  },
-  {
-    id: 3,
-    order_id_generate: 'DB-765412',
-    created_at: '2026-07-18T18:45:00Z',
-    order_status: 'Cancelled',
-    amount: 899,
-    net_amount: 899,
-    items: [
-      {
-        id: 104,
-        name: 'Casual Slim Fit Denim Shirt',
-        image: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400&auto=format&fit=crop&q=60',
-        selling_price: 899,
-        qty: 1,
-      },
-    ],
-  },
-];
 
 export default function Orders() {
   const navigation = useNavigation();
@@ -117,7 +56,6 @@ export default function Orders() {
       });
 
       const result = await response.json();
-      console.log('Order List Response:', result);
 
       if (result?.status === 200 || result?.success) {
         const orderData = result?.data || result?.orders || [];

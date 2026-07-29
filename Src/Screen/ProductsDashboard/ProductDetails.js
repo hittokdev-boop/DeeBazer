@@ -19,8 +19,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import Feather from 'react-native-vector-icons/Feather';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import AllColors from '../Constants/Color';
-import { BASE_URL, getToken, getuserId } from '../Api/Api';
+import AllColors from '../../Constants/Color';
+import { BASE_URL, getToken, getuserId } from '../../Api/Api';
 
 const { width } = Dimensions.get('window');
 const slideWidth = width - 32;

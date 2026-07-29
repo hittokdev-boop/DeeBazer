@@ -5,6 +5,8 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Alert as RNAlert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AntDesign from 'react-native-vector-icons/AntDesign';
@@ -12,11 +14,11 @@ import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import AllColors from '../Constants/Color';
-import CustomLoader from '../Common/Loader';
-import { BASE_URL, getToken, removemobile, removeToken, removeuserId } from '../Api/Api';
-import CustomAlert from '../Common/Alert';
-import SuccessModal from './../Common/SuccessScreen';
+import AllColors from '../../Constants/Color';
+import CustomLoader from '../../Common/Loader';
+import { BASE_URL, getToken, removemobile, removeToken, removeuserId, getPassword, removePassword } from '../../Api/Api';
+import CustomAlert from '../../Common/Alert';
+import SuccessModal from '../../Common/SuccessScreen';
 
 export default function Account() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -25,6 +27,17 @@ export default function Account() {
   const [errorText, setErrorText] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [userName, setUserName] = useState('User');
+  const [userEmail, setUserEmail] = useState('');
+  const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+  const [selectedReason, setSelectedReason] = useState(null);
+
+  const deleteReasons = [
+    "I don't use this app anymore",
+    "I have another account",
+    "Privacy concerns",
+    "Meri Marzi",
+    "Other"
+  ];
 
   const Navigation = useNavigation();
 
@@ -66,10 +79,11 @@ export default function Account() {
   const goToHelpCenter = () => handleNavigate('HelpCenter');
   const gotoEditProfile = () => handleNavigate('editProfile');
   const gotoSaveAddress = () => handleNavigate('AllAddress');
-
+  // 7631192321
   const checkLogin = async () => {
     try {
       const token = await getToken();
+      // console.log(token)
       if (token) {
         setIsLoggedIn(true);
         const response = await fetch(`${BASE_URL}me`, {
@@ -79,6 +93,7 @@ export default function Account() {
         const data = await response.json();
         if (data.status === 200 && data.user) {
           setUserName(data.user.name || 'User');
+          setUserEmail(data.user.email || '');
         }
       } else {
         setIsLoggedIn(false);
@@ -112,12 +127,80 @@ export default function Account() {
         await removeToken();
         await removemobile();
         await removeuserId();
+        await removePassword();
         setIsLoggedIn(false);
       }
     } catch (error) {
       setErrorText('Something went wrong. Please try again.');
       setShowAlert(true);
     }
+  };
+
+  const requestForDeleteAccount = async () => {
+    const token = await getToken();
+    if (!token || token === null) {
+      setErrorText('You are not logged in.');
+      setShowAlert(true);
+      return;
+    }
+
+    const savedPassword = await getPassword();
+
+    try {
+      const formData = new FormData();
+      formData.append('email', userEmail);
+      formData.append('password', savedPassword || '');
+
+      const response = await fetch(`${BASE_URL}destroy-account`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json'
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+      // console.log("Delete Account API response:", data)
+
+      if (response.ok) {
+        await removeToken();
+        await removemobile();
+        await removeuserId();
+        await removePassword();
+        setIsLoggedIn(false);
+
+        setErrorText('Account deleted successfully. You have been signed out.');
+        setShowAlert(true);
+
+        setTimeout(() => {
+          setShowAlert(false);
+          Navigation.reset({
+            index: 0,
+            routes: [{ name: 'AppTab' }],
+          });
+        }, 1500);
+
+      } else {
+        let errorMsg = data.message || 'Failed to delete account.';
+        if (data.errors) {
+          const firstErrorKey = Object.keys(data.errors)[0];
+          if (firstErrorKey) {
+            errorMsg = data.errors[firstErrorKey][0] || errorMsg;
+          }
+        }
+        setErrorText(errorMsg);
+        setShowAlert(true);
+      }
+    } catch (error) {
+      setErrorText('Something went wrong. Please try again.');
+      setShowAlert(true);
+    }
+  };
+
+  const confirmDeleteAccount = () => {
+    setSelectedReason(null);
+    setIsDeleteModalVisible(true);
   };
 
   if (loading) {
@@ -235,6 +318,17 @@ export default function Account() {
               </View>
               <AntDesign name="right" size={18} color="#777" />
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.row}
+              activeOpacity={0.7}
+              onPress={confirmDeleteAccount}>
+              <View style={styles.rowLeft}>
+                <AntDesign name="delete" size={22} color={AllColors.primary} />
+                <Text style={styles.rowText}>Delete Account</Text>
+              </View>
+              <AntDesign name="right" size={18} color="#777" />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -293,6 +387,51 @@ export default function Account() {
         message="You have been logged out successfully."
         onClose={() => setIsSuccess(false)}
       />
+
+      <Modal
+        visible={isDeleteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsDeleteModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Delete Account</Text>
+            <Text style={styles.modalSub}>Please select a reason for deleting your account:</Text>
+            {deleteReasons.map((reason, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.radioRow}
+                onPress={() => setSelectedReason(reason)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.radioCircle}>
+                  {selectedReason === reason && <View style={styles.radioInner} />}
+                </View>
+                <Text style={styles.radioText}>{reason}</Text>
+              </TouchableOpacity>
+            ))}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setIsDeleteModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalDeleteBtn, !selectedReason && { opacity: 0.5 }]}
+                disabled={!selectedReason}
+                onPress={() => {
+                  setIsDeleteModalVisible(false);
+                  requestForDeleteAccount();
+                }}
+              >
+                <Text style={styles.modalDeleteText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -446,5 +585,85 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: AllColors.primary,
     fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    width: '85%',
+    borderRadius: 16,
+    padding: 20,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 8,
+  },
+  modalSub: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 20,
+  },
+  radioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  radioCircle: {
+    height: 22,
+    width: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: AllColors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  radioInner: {
+    height: 12,
+    width: 12,
+    borderRadius: 6,
+    backgroundColor: AllColors.primary,
+  },
+  radioText: {
+    fontSize: 15,
+    color: '#334155',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 10,
+  },
+  modalCancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    marginRight: 10,
+  },
+  modalCancelText: {
+    color: '#64748B',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  modalDeleteBtn: {
+    backgroundColor: '#EF4444',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    justifyContent: 'center',
+  },
+  modalDeleteText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

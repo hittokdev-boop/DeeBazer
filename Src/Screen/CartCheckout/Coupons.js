@@ -16,7 +16,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
-import AllColors from '../Constants/Color';
+import Clipboard from '@react-native-clipboard/clipboard';
+import AllColors from '../../Constants/Color';
 
 const COUPONS_DATA = [
   {
@@ -64,11 +65,19 @@ const COUPONS_DATA = [
 export default function Coupons() {
   const navigation = useNavigation();
   const [promoCode, setPromoCode] = useState('');
+  const [copiedCode, setCopiedCode] = useState(null);
 
   const copyCode = (code) => {
+    Clipboard.setString(code);
+    setCopiedCode(code);
+    
+    setTimeout(() => {
+      setCopiedCode(null);
+    }, 2000);
+
     const msg = `Copied coupon code: ${code}`;
     if (Platform.OS === 'android') {
-      // ToastAndroid.show(msg, ToastAndroid.SHORT);
+      ToastAndroid.show(msg, ToastAndroid.SHORT);
     } else {
       Alert.alert('Copied!', msg);
     }
@@ -77,7 +86,7 @@ export default function Coupons() {
   const handleApplyPromo = () => {
     if (!promoCode.trim()) {
       if (Platform.OS === 'android') {
-        // ToastAndroid.show('Please enter a valid coupon code', ToastAndroid.SHORT);
+        ToastAndroid.show('Please enter a valid coupon code', ToastAndroid.SHORT);
       } else {
         Alert.alert('Invalid Code', 'Please enter a valid coupon code');
       }
@@ -90,13 +99,13 @@ export default function Coupons() {
 
     if (matched) {
       if (Platform.OS === 'android') {
-        // ToastAndroid.show(`🎉 Coupon ${matched.code} Applied Successfully!`, ToastAndroid.SHORT);
+        ToastAndroid.show(`🎉 Coupon ${matched.code} Applied Successfully!`, ToastAndroid.SHORT);
       } else {
         Alert.alert('Success', `Coupon ${matched.code} Applied Successfully!`);
       }
     } else {
       if (Platform.OS === 'android') {
-        // ToastAndroid.show('❌ Invalid or expired coupon code', ToastAndroid.SHORT);
+        ToastAndroid.show('❌ Invalid or expired coupon code', ToastAndroid.SHORT);
       } else {
         Alert.alert('Error', 'Invalid or expired coupon code');
       }
@@ -145,37 +154,47 @@ export default function Coupons() {
             </View>
           </View>
         }
-        renderItem={({ item }) => (
-          <View style={styles.couponCard}>
-            {/* Left Tag */}
-            <View style={styles.leftTag}>
-              <MaterialCommunityIcons name="ticket-percent-outline" size={26} color="#FFFFFF" />
-              <Text style={styles.discountText}>{item.discount}</Text>
-            </View>
-
-            {/* Right Details */}
-            <View style={styles.rightContent}>
-              <Text style={styles.couponTitle}>{item.title}</Text>
-              <Text style={styles.couponDesc}>{item.description}</Text>
-
-              <View style={styles.codeRow}>
-                <View style={styles.codeBox}>
-                  <Text style={styles.codeText}>{item.code}</Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.copyBtn}
-                  onPress={() => copyCode(item.code)}
-                  activeOpacity={0.8}>
-                  <Feather name="copy" size={14} color={AllColors.primary} style={{ marginRight: 4 }} />
-                  <Text style={styles.copyBtnText}>COPY</Text>
-                </TouchableOpacity>
+        renderItem={({ item }) => {
+          const isCopied = copiedCode === item.code;
+          return (
+            <View style={styles.couponCard}>
+              {/* Left Tag */}
+              <View style={styles.leftTag}>
+                <MaterialCommunityIcons name="ticket-percent-outline" size={26} color="#FFFFFF" />
+                <Text style={styles.discountText}>{item.discount}</Text>
               </View>
 
-              <Text style={styles.expiryText}>Valid till {item.validTill}</Text>
+              {/* Right Details */}
+              <View style={styles.rightContent}>
+                <Text style={styles.couponTitle}>{item.title}</Text>
+                <Text style={styles.couponDesc}>{item.description}</Text>
+
+                <View style={styles.codeRow}>
+                  <View style={styles.codeBox}>
+                    <Text style={styles.codeText}>{item.code}</Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.copyBtn}
+                    onPress={() => copyCode(item.code)}
+                    activeOpacity={0.8}>
+                    <Feather 
+                      name={isCopied ? "check" : "copy"} 
+                      size={14} 
+                      color={isCopied ? "#10B981" : AllColors.primary} 
+                      style={{ marginRight: 4 }} 
+                    />
+                    <Text style={[styles.copyBtnText, isCopied && { color: "#10B981" }]}>
+                      {isCopied ? "COPIED" : "COPY"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.expiryText}>Valid till {item.validTill}</Text>
+              </View>
             </View>
-          </View>
-        )}
+          );
+        }}
       />
     </SafeAreaView>
   );
