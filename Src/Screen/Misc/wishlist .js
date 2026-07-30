@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -10,8 +10,11 @@ import {
   View,
   Alert,
   Share,
+  RefreshControl,
+  ScrollView,
+  Platform,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { BASE_URL, getToken, getuserId } from '../../Api/Api';
 import AllColors from '../../Constants/Color';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -21,7 +24,47 @@ import LottieView from "lottie-react-native";
 export default function Wishlist() {
   const navigation = useNavigation();
   const [wishlistItems, setWishlistItems] = useState([]);
+
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const getWishlistItems = async () => {
+    const token = await getToken();
+    const userId = await getuserId();
+
+    if (!token || !userId) {
+      setWishlistItems([]);
+      setRefreshing(false);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('user_id', userId);
+
+      const response = await fetch(`${BASE_URL}wishlist-view`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+      const items = data?.data || data?.products || data?.wishlist || [];
+      const normalizedItems = items.map((entry) => entry?.product || entry);
+      setWishlistItems(normalizedItems);
+    } catch (error) {
+      console.log('Wishlist screen fetch error:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    getWishlistItems();
+  };
+
   const onShare = async (item) => {
     try {
       await Share.share({
@@ -34,36 +77,6 @@ https://deebazar.com/product/${item.id}`,
       });
     } catch (error) {
       console.log(error);
-    }
-  };
-  const getWishlistItems = async () => {
-    const token = await getToken();
-    const userId = await getuserId();
-
-    if (!token || !userId) {
-      setWishlistItems([]);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const formData = new FormData();
-      formData.append('user_id', userId);
-
-      const response = await fetch(`${BASE_URL}wishlist-view`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
-      // console.log('Wishlist screen fetch data:', data);
-      const items = data?.data || data?.products || data?.wishlist || [];
-      const normalizedItems = items.map((entry) => entry?.product || entry);
-      setWishlistItems(normalizedItems);
-    } catch (error) {
-      console.log('Wishlist screen fetch error:', error);
-    } finally {
-      setLoading(false);
     }
   };
   const requestToCart = async (id) => {
@@ -142,9 +155,11 @@ https://deebazar.com/product/${item.id}`,
       console.log("Wishlist Remove Error:", error);
     }
   };
-  useEffect(() => {
-    getWishlistItems();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      getWishlistItems();
+    }, [])
+  );
 
   const renderItem = ({ item }) => (
     <View style={styles.card}>
@@ -169,42 +184,62 @@ https://deebazar.com/product/${item.id}`,
         <Text style={styles.headerTitle}>My Wishlist</Text>
       </View>
 
-      {loading ? (
+      {loading && !refreshing ? (
         <ActivityIndicator size="large" color={AllColors.primary} style={{ marginTop: 24 }} />
       ) : wishlistItems.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <LottieView
-            source={require("../../Assets/Wishlist.json")}
-            autoPlay
-            loop
-            style={styles.emptyAnimation}
-          />
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[AllColors.primary]}
+              tintColor={AllColors.primary}
+            />
+          }
+        >
+          <View style={styles.emptyContainer}>
+            <LottieView
+              source={require("../../Assets/Wishlist.json")}
+              autoPlay
+              loop
+              style={styles.emptyAnimation}
+            />
 
-          <Text style={styles.emptyTitle}>
-            Your Wishlist is Empty
-          </Text>
-
-          <Text style={styles.emptySubtitle}>
-            Save your favourite products here.
-            {"\n"}
-            Start exploring and add products to your wishlist.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.shopBtn}
-            onPress={() => navigation.navigate('AppTab')}
-          >
-            <Text style={styles.shopBtnText}>
-              Continue Shopping
+            <Text style={styles.emptyTitle}>
+              Your Wishlist is Empty
             </Text>
-          </TouchableOpacity>
-        </View>
+
+            <Text style={styles.emptySubtitle}>
+              Save your favourite products here.
+              {"\n"}
+              Start exploring and add products to your wishlist.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.shopBtn}
+              onPress={() => navigation.navigate('AppTab')}
+            >
+              <Text style={styles.shopBtnText}>
+                Continue Shopping
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       ) : (
         <FlatList
           data={wishlistItems}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item, index) => (item?.id ? item.id.toString() : index.toString())}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 100 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[AllColors.primary]}
+              tintColor={AllColors.primary}
+            />
+          }
           renderItem={({ item }) => (
             <View style={styles.card}>
               <View style={styles.productRow}>

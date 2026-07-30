@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Linking,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { Rating } from '@kolking/react-native-rating';
 import AllColors from '../../Constants/Color';
@@ -78,6 +79,7 @@ const CartPage = () => {
   const [isPaymentModalVisible, setIsPaymentModalVisible] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cod');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const updateCartQty = async (product, qty) => {
     const ID = await getuserId();
     try {
@@ -496,6 +498,10 @@ const CartPage = () => {
   );
   const CartView = async () => {
     const userid = await getuserId();
+    if (!userid) {
+      setRefreshing(false);
+      return;
+    }
 
     const formData = new FormData();
     formData.append('user_id', userid);
@@ -506,16 +512,24 @@ const CartPage = () => {
         body: formData,
       });
 
-
       const data = await response.json();
-      setAddresId(data.address_data.id)
+      if (data?.address_data?.id) {
+        setAddresId(data.address_data.id);
+      }
 
       setAddressData(data.address_data || {});
       setCartItems(data.data || []);
       setExtraData(data.extra_data || {});
     } catch (error) {
       console.log('Error:', error);
+    } finally {
+      setRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    CartView();
   };
 
 
@@ -683,30 +697,42 @@ const CartPage = () => {
   if (isuser && (!cartItems || cartItems.length === 0)) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={loginStyles.container}>
-          <LottieView
-            source={require("../../Assets/empty.json")}
-            autoPlay
-            loop
-            style={loginStyles.animation}
-          />
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[AllColors.primary]}
+              tintColor={AllColors.primary}
+            />
+          }
+        >
+          <View style={loginStyles.container}>
+            <LottieView
+              source={require("../../Assets/empty.json")}
+              autoPlay
+              loop
+              style={loginStyles.animation}
+            />
 
-          <Text style={loginStyles.title}>Your Cart is Empty</Text>
+            <Text style={loginStyles.title}>Your Cart is Empty</Text>
 
-          <Text style={loginStyles.subtitle}>
-            Looks like you haven't added any products yet.
-            {"\n"}
-            Start shopping to fill your cart.
-          </Text>
+            <Text style={loginStyles.subtitle}>
+              Looks like you haven't added any products yet.
+              {"\n"}
+              Start shopping to fill your cart.
+            </Text>
 
-          <TouchableOpacity
-            style={loginStyles.loginBtn}
-            onPress={() => navigation.navigate("Profile")}
-            activeOpacity={0.8}
-          >
-            <Text style={loginStyles.loginText}>Add Products</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={loginStyles.loginBtn}
+              onPress={() => navigation.navigate("Profile")}
+              activeOpacity={0.8}
+            >
+              <Text style={loginStyles.loginText}>Add Products</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -729,9 +755,9 @@ const CartPage = () => {
 
         <View style={{ flexDirection: 'row' }}>
 
-          <TouchableOpacity style={styles.iconBtn}>
+          {/* <TouchableOpacity style={styles.iconBtn}>
             <Feather name="search" size={22} color={AllColors.primary} />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
 
           {/* <TouchableOpacity style={styles.iconBtn}>
             <Feather name="share" size={22}/>
@@ -760,6 +786,14 @@ const CartPage = () => {
           windowSize={5}
           removeClippedSubviews={true}
           updateCellsBatchingPeriod={50}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[AllColors.primary]}
+              tintColor={AllColors.primary}
+            />
+          }
           renderItem={({ item }) => (
             <View style={styles.productCard}>
               <View style={styles.deliveryTop}>

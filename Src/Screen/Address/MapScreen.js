@@ -16,16 +16,19 @@ import MapView, { Circle, Marker } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
 import AllColors from '../../Constants/Color';
 import Entypo from 'react-native-vector-icons/Entypo';
-import Geocoder from 'react-native-geocoding';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { BASE_URL, getToken, getuserId } from "../../Api/Api";
 import SuccessModal from "../../Common/SuccessScreen";
 import { useNavigation } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function MapScreen() {
   const navigation = useNavigation();
 
-  const [latitude, setLatitude] = useState(null);
-  const [longitude, setLongitude] = useState(null);
+  // Default initial coordinates so map opens INSTANTLY without blocking spinner
+  const [latitude, setLatitude] = useState(22.5726);
+  const [longitude, setLongitude] = useState(88.3639);
+  const [locationLoading, setLocationLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [stateName, setStateName] = useState('');
   const [city, setCity] = useState('');
@@ -116,51 +119,46 @@ export default function MapScreen() {
           granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED ||
           granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED
         ) {
-          return getCurrentLocation();
+          getCurrentLocation();
+        } else {
+          // If permission is denied, fallback reverse geocode initial coords
+          reverseGeocode(22.5726, 88.3639);
         }
       } else {
-        return getCurrentLocation();
+        getCurrentLocation();
       }
     } catch (err) {
       console.warn(err);
+      reverseGeocode(22.5726, 88.3639);
     }
   };
 
   useEffect(() => {
-    let watchId;
-    requestmapPermission().then((id) => {
-      watchId = id;
-    });
-
-    return () => {
-      if (watchId !== undefined) {
-        Geolocation.clearWatch(watchId);
-      }
-    };
+    requestmapPermission();
   }, []);
 
-  const reverseGeocode = async (lat, lng) => {
-    try {
-      Geocoder.init('AIzaSyCJKwxaSS0glDtxXMX37uHX_KHUEleCMk0');
-      const res = await Geocoder.from(lat, lng);
-      if (res.results && res.results.length > 0) {
-        const parts = res.results[0].formatted_address.split(',').map(s => s.trim());
-        const shortAddr = parts.slice(0, 3).join(', ');
-        setAddress(shortAddr || res.results[0].formatted_address);
+  const extractPincode = (data) => {
+    if (!data) return '';
+    const addr = data.address || {};
 
-        const comps = res.results[0].address_components || [];
-        comps.forEach((c) => {
-          if (c.types.includes('postal_code')) setpinCode(c.long_name);
-          if (c.types.includes('locality')) setCity(c.long_name);
-          if (c.types.includes('administrative_area_level_1')) setStateName(c.long_name);
-          if (c.types.includes('route')) setRoadName(c.long_name);
-        });
-        return;
-      }
-    } catch (error) {
-      console.log('Google Geocoder failed, trying OpenStreetMap fallback:', error);
+    // 1. Try addr.postcode
+    if (addr.postcode) {
+      const cleaned = String(addr.postcode).replace(/\D/g, '');
+      if (cleaned.length === 6) return cleaned;
+      if (cleaned.length > 6) return cleaned.slice(0, 6);
     }
 
+    // 2. Search for 6-digit PIN code pattern in display_name or JSON
+    const searchString = data.display_name || JSON.stringify(data);
+    const match = searchString.match(/\b[1-9][0-9]{5}\b/);
+    if (match && match[0]) {
+      return match[0];
+    }
+
+    return '';
+  };
+
+  const reverseGeocode = async (lat, lng) => {
     try {
       const response = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
@@ -177,7 +175,31 @@ export default function MapScreen() {
         const area = addr.road || addr.suburb || addr.neighbourhood || addr.residential || '';
         const cityName = addr.city || addr.town || addr.village || addr.suburb || addr.county || '';
         const state = addr.state || '';
-        const pin = addr.postcode || '';
+        let pin = extractPincode(data);
+
+        // Fallback to BigDataCloud API if pincode is still missing
+        if (!pin) {
+          try {
+            const bdcRes = await fetch(
+              `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`
+            );
+            const bdcData = await bdcRes.json();
+            if (bdcData) {
+              if (bdcData.postcode) {
+                const cleaned = String(bdcData.postcode).replace(/\D/g, '');
+                if (cleaned.length === 6) pin = cleaned;
+                else if (cleaned.length > 6) pin = cleaned.slice(0, 6);
+              }
+              if (!pin && bdcData.localityInfo) {
+                const searchStr = JSON.stringify(bdcData.localityInfo);
+                const bdcMatch = searchStr.match(/\b[1-9][0-9]{5}\b/);
+                if (bdcMatch && bdcMatch[0]) pin = bdcMatch[0];
+              }
+            }
+          } catch (bdcErr) {
+            console.log('BigDataCloud fallback error:', bdcErr);
+          }
+        }
 
         const cleanParts = [area, cityName, state, pin].filter(Boolean);
         const cleanAddress = cleanParts.length > 0 ? cleanParts.join(', ') : (data.display_name || `Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
@@ -197,57 +219,47 @@ export default function MapScreen() {
   };
 
   const getCurrentLocation = () => {
+    setLocationLoading(true);
+
+    // Fast position retrieval (uses cached/cell tower location first)
     Geolocation.getCurrentPosition(
       async position => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
         setLatitude(lat);
         setLongitude(lng);
+        setLocationLoading(false);
         await reverseGeocode(lat, lng);
       },
       error => {
-        console.log('GPS High Accuracy initial failed:', error);
+        console.log('Fast geolocation failed, trying standard fallback:', error);
         Geolocation.getCurrentPosition(
           async position => {
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
             setLatitude(lat);
             setLongitude(lng);
+            setLocationLoading(false);
             await reverseGeocode(lat, lng);
           },
-          err => console.log('Geolocation Network Fallback Error:', err),
+          err => {
+            console.log('Geolocation Network Fallback Error:', err);
+            setLocationLoading(false);
+            reverseGeocode(latitude, longitude);
+          },
           {
             enableHighAccuracy: false,
-            timeout: 20000,
-            maximumAge: 0,
+            timeout: 7000,
+            maximumAge: 10000,
           }
         );
       },
       {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
+        enableHighAccuracy: false,
+        timeout: 4000,
+        maximumAge: 60000,
       },
     );
-
-    const watchId = Geolocation.watchPosition(
-      async position => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        setLatitude(lat);
-        setLongitude(lng);
-        await reverseGeocode(lat, lng);
-      },
-      err => console.log('Watch Position Error:', err),
-      {
-        enableHighAccuracy: true,
-        distanceFilter: 3,
-        interval: 4000,
-        fastestInterval: 2000,
-      }
-    );
-
-    return watchId;
   };
 
   const handleSelectLocation = async (lat, lng) => {
@@ -256,17 +268,27 @@ export default function MapScreen() {
     await reverseGeocode(lat, lng);
   };
 
-  if (latitude === null || longitude === null) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={AllColors.primary} />
-        <Text style={styles.loadingText}>Fetching live location...</Text>
-      </View>
-    );
-  }
-
   return (
-    <View style={styles.mapContainer}>
+    <SafeAreaView style={styles.mapContainer}>
+      {/* Header Bar */}
+      <View style={styles.topHeader}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+          <Ionicons name="arrow-back" size={24} color="#0F172A" />
+        </TouchableOpacity>
+        <Text style={styles.topHeaderTitle}>Select Location</Text>
+        <TouchableOpacity style={styles.refreshLocBtn} onPress={getCurrentLocation} activeOpacity={0.8}>
+          <Ionicons name="locate" size={22} color={AllColors.primary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Floating Status Chip when fetching location */}
+      {locationLoading && (
+        <View style={styles.locatingChip}>
+          <ActivityIndicator size="small" color={AllColors.primary} />
+          <Text style={styles.locatingText}>Locating your position...</Text>
+        </View>
+      )}
+
       <MapView
         style={styles.map}
         region={{
@@ -314,7 +336,7 @@ export default function MapScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            {/* Header */}
+            {/* Modal Header */}
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalTitle}>Save Address</Text>
@@ -470,25 +492,62 @@ export default function MapScreen() {
           navigation.goBack();
         }}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 14,
-    color: '#64748B',
-  },
   mapContainer: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    zIndex: 10,
+  },
+  backBtn: {
+    padding: 6,
+  },
+  topHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  refreshLocBtn: {
+    padding: 6,
+  },
+  locatingChip: {
+    position: 'absolute',
+    top: 65,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    zIndex: 20,
+  },
+  locatingText: {
+    marginLeft: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
   },
   map: {
     flex: 1,

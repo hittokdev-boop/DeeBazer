@@ -36,6 +36,91 @@ const { width } = Dimensions.get('window');
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchCamera } from 'react-native-image-picker';
 
+const DEFAULT_DUMMY_SUB_CATEGORIES = [
+  { id: 'sub_d1', name: 'Smartphones', image: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=300&auto=format&fit=crop&q=80' },
+  { id: 'sub_d2', name: 'Men Fashion', image: 'https://images.unsplash.com/photo-1490578474895-699cd4e2cf59?w=300&auto=format&fit=crop&q=80' },
+  { id: 'sub_d3', name: 'Women Fashion', image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=300&auto=format&fit=crop&q=80' },
+  { id: 'sub_d4', name: 'Fresh Fruits', image: 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=300&auto=format&fit=crop&q=80' },
+  { id: 'sub_d5', name: 'Footwear', image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&auto=format&fit=crop&q=80' },
+  { id: 'sub_d6', name: 'Beauty Care', image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80' },
+  { id: 'sub_d7', name: 'Home Essentials', image: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=300&auto=format&fit=crop&q=80' },
+  { id: 'sub_d8', name: 'Gadgets', image: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=300&auto=format&fit=crop&q=80' },
+  { id: 'sub_d9', name: 'Watches', image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=300&auto=format&fit=crop&q=80' },
+  { id: 'sub_d10', name: 'Fitness', image: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=300&auto=format&fit=crop&q=80' },
+];
+const DEFAULT_SUB_CAT_IMAGE = 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300';
+
+const formatSubCategoryImageUri = (item) => {
+  if (!item) return DEFAULT_SUB_CAT_IMAGE;
+  let raw =
+    item?.image ||
+    item?.sub_category_image ||
+    item?.subcategory_image ||
+    item?.sub_cat_image ||
+    item?.icon ||
+    item?.cat_image ||
+    item?.category_image ||
+    item?.img ||
+    item?.photo ||
+    item?.thumbnail;
+
+  if (!raw || typeof raw !== 'string') return DEFAULT_SUB_CAT_IMAGE;
+  raw = raw.trim();
+  if (!raw) return DEFAULT_SUB_CAT_IMAGE;
+
+  if (raw.startsWith('http://deebazar.com')) {
+    raw = raw.replace('http://deebazar.com', 'https://deebazar.com');
+  }
+
+  if (raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw;
+  }
+
+  const cleanPath = raw.startsWith('/') ? raw.slice(1) : raw;
+  return `https://deebazar.com/admin/${cleanPath}`;
+};
+
+const SubCategoryCardItem = ({ item, isSelected, onPress }) => {
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [item]);
+
+  const rawUri = formatSubCategoryImageUri(item);
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.85}
+      style={styles.subCategoryItemContainer}
+    >
+      <View
+        style={[
+          styles.subCategoryWrapper,
+          isSelected && styles.activeSubCategoryWrapper,
+        ]}
+      >
+        <View style={styles.subCategoryCard}>
+          <Ionicons
+            name="cube-outline"
+            size={28}
+            color={isSelected ? AllColors.primary : '#64748B'}
+          />
+          {rawUri && !imgError && (
+            <Image
+              source={{ uri: rawUri }}
+              style={styles.subCategoryImage}
+              resizeMode="cover"
+              onError={() => setImgError(true)}
+            />
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
 export default function DashBoard() {
   const Navigation = useNavigation();
 
@@ -45,7 +130,7 @@ export default function DashBoard() {
   const [slug, setSlug] = useState('')
   const [catagoriesId, setCategoriesId] = useState('all')
   const [product, setProduct] = useState([])
-  const [subCategories, setSubCategories] = useState([])
+  const [subCategories, setSubCategories] = useState(DEFAULT_DUMMY_SUB_CATEGORIES)
   const [selectedSubCategoryId, setSelectedSubCategoryId] = useState(null)
 
   const handleVoiceSearch = () => {
@@ -647,10 +732,15 @@ export default function DashBoard() {
         const data = await response.json();
         if (data.status === 200 && data.user) {
           setUserName(data.user.name || 'User');
+        } else {
+          setUserName('Guest');
         }
       } catch (error) {
         console.log('Profile fetch error:', error);
+        setUserName('Guest');
       }
+    } else {
+      setUserName('Guest');
     }
   };
 
@@ -735,6 +825,7 @@ export default function DashBoard() {
           getbestsellingProducts(),
           getWishlistItems(),
           getBanners(),
+          getSubCategories('all'),
         ]);
       } catch (error) {
         console.error('Error loading dashboard data:', error);
@@ -772,7 +863,7 @@ export default function DashBoard() {
 
   const getSubCategories = async (catId) => {
     if (!catId || catId === 'all') {
-      setSubCategories([]);
+      setSubCategories(DEFAULT_DUMMY_SUB_CATEGORIES);
       setSelectedSubCategoryId(null);
       return;
     }
@@ -787,14 +878,17 @@ export default function DashBoard() {
       });
 
       const data = await response.json();
-      if (data?.status === 200 && data?.data) {
-        setSubCategories(data.data);
+      const list = data?.data || data?.subcategories || data?.sub_categories || (Array.isArray(data) ? data : null);
+      if ((data?.status == 200 || data?.status === 'success') && list && list.length > 0) {
+        setSubCategories(list);
+      } else if (list && list.length > 0) {
+        setSubCategories(list);
       } else {
-        setSubCategories([]);
+        setSubCategories(DEFAULT_DUMMY_SUB_CATEGORIES);
       }
     } catch (error) {
       console.error('Error fetching subcategories:', error);
-      setSubCategories([]);
+      setSubCategories(DEFAULT_DUMMY_SUB_CATEGORIES);
     } finally {
       setSubCategoriesLoading(false);
     }
@@ -803,10 +897,41 @@ export default function DashBoard() {
   const handleSubCategoryClick = (subCatId) => {
     if (selectedSubCategoryId === subCatId) {
       setSelectedSubCategoryId(null);
+      setIsFilterActive(false);
+      setFilteredProducts([]);
       getAllPrduct(catagoriesId, null);
     } else {
       setSelectedSubCategoryId(subCatId);
-      getAllPrduct(catagoriesId, subCatId);
+      if (String(subCatId).startsWith('sub_d')) {
+        const subItem = subCategories.find((s) => String(s.id) === String(subCatId));
+        if (subItem) {
+          const subName = subItem.name.toLowerCase();
+          const allPool = [
+            ...(product || []),
+            ...(dealOfTheDay || []),
+            ...(latestproducts || []),
+            ...(featuredproducts || []),
+            ...(bestsellingProduct || []),
+            ...(popularProduct || []),
+          ];
+          const matches = allPool.filter(
+            (p, index, self) =>
+              (p.name?.toLowerCase().includes(subName) ||
+                p.short_desc02?.toLowerCase().includes(subName) ||
+                p.category_name?.toLowerCase().includes(subName)) &&
+              index === self.findIndex((t) => String(t.id) === String(p.id))
+          );
+          if (matches.length > 0) {
+            setFilteredProducts(matches);
+            setIsFilterActive(true);
+          } else {
+            setIsFilterActive(false);
+            getAllPrduct(catagoriesId, null);
+          }
+        }
+      } else {
+        getAllPrduct(catagoriesId, subCatId);
+      }
     }
   };
 
@@ -1284,6 +1409,7 @@ export default function DashBoard() {
           horizontal
           showsHorizontalScrollIndicator={false}
           keyExtractor={(item) => item.id.toString()}
+          extraData={catagoriesId}
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingVertical: 12,
@@ -1293,13 +1419,14 @@ export default function DashBoard() {
           bounces={false}
           scrollEventThrottle={16}
           renderItem={({ item }) => {
+            const isSelected = String(catagoriesId) === String(item.id);
             const imgSrc = item?.image || item?.icon || item?.cat_image || item?.category_image;
             return (
               <TouchableOpacity
                 onPress={() => getcategoriesProduct(item)}
                 style={[
                   styles.categoryBtn,
-                  catagoriesId === item.id && styles.activeCategory,
+                  isSelected && styles.activeCategory,
                 ]}
               >
                 {imgSrc ? (
@@ -1316,15 +1443,15 @@ export default function DashBoard() {
                   <Ionicons
                     name={item.id === 'all' ? 'grid-outline' : 'pricetag-outline'}
                     size={16}
-                    color={catagoriesId === item.id ? AllColors.primary : '#64748B'}
+                    color={isSelected ? AllColors.primary : '#64748B'}
                     style={{ marginRight: 6 }}
                   />
                 )}
 
                 <Text
                   style={{
-                    color: catagoriesId === item.id ? AllColors.primary : '#334155',
-                    fontWeight: '600',
+                    color: isSelected ? AllColors.primary : '#334155',
+                    fontWeight: isSelected ? '700' : '600',
                     fontSize: 13,
                   }}
                 >
@@ -1347,51 +1474,22 @@ export default function DashBoard() {
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 keyExtractor={(item) => item.id.toString()}
+                extraData={selectedSubCategoryId}
                 contentContainerStyle={{
                   paddingHorizontal: 16,
-                  paddingVertical: 8,
+                  paddingTop: 10,
+                  paddingBottom: 14,
                 }}
                 nestedScrollEnabled={true}
                 directionalLockEnabled={true}
                 bounces={false}
-                renderItem={({ item }) => {
-                  const isSelected = selectedSubCategoryId === item.id;
-                  const subImgSrc = item?.image || item?.icon;
-                  return (
-                    <TouchableOpacity
-                      onPress={() => handleSubCategoryClick(item.id)}
-                      style={[
-                        styles.subCategoryCard,
-                        isSelected && styles.activeSubCategoryCard
-                      ]}
-                    >
-                      <View style={styles.subCategoryImageContainer}>
-                        {subImgSrc ? (
-                          <Image
-                            source={{ uri: subImgSrc }}
-                            style={styles.subCategoryImage}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <Ionicons
-                            name="pricetag-outline"
-                            size={20}
-                            color={isSelected ? AllColors.primary : '#64748B'}
-                          />
-                        )}
-                      </View>
-                      <Text
-                        numberOfLines={1}
-                        style={[
-                          styles.subCategoryText,
-                          isSelected && styles.activeSubCategoryText
-                        ]}
-                      >
-                        {item.name}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                }}
+                renderItem={({ item }) => (
+                  <SubCategoryCardItem
+                    item={item}
+                    isSelected={String(selectedSubCategoryId) === String(item.id)}
+                    onPress={() => handleSubCategoryClick(item.id)}
+                  />
+                )}
               />
             </View>
           )
@@ -2551,46 +2649,56 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 8,
   },
-  subCategoryCard: {
+  subCategoryItemContainer: {
     alignItems: 'center',
+    marginRight: 14,
+    width: 80,
+  },
+  subCategoryWrapper: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     justifyContent: 'center',
-    marginRight: 16,
-    padding: 8,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    padding: 3,
+  },
+  activeSubCategoryWrapper: {
+    borderWidth: 3,
+    borderColor: AllColors.primary,
+    borderRadius: 38,
+    transform: [{ translateY: -4 }],
+    elevation: 6,
+    shadowColor: AllColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+  },
+  subCategoryCard: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    overflow: 'hidden',
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    width: 80,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
-  activeSubCategoryCard: {
-    borderColor: AllColors.primary,
-    backgroundColor: '#FFF1F7',
-  },
-  subCategoryImageContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    overflow: 'hidden',
-    backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 6,
+    position: 'relative',
   },
   subCategoryImage: {
-    width: '100%',
-    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
   },
-  subCategoryText: {
+  subCategoryItemText: {
     fontSize: 11,
     fontWeight: '600',
     color: '#475569',
+    marginTop: 4,
     textAlign: 'center',
-    width: '100%',
   },
   activeSubCategoryText: {
     color: AllColors.primary,
