@@ -11,9 +11,12 @@ import { BASE_URL, getToken, getuserId } from '../../Api/Api';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
+import AllColors from '../../Constants/Color';
+import { useTheme } from '../../Context/ThemeContext';
 export default function AllAddress() {
   const [addressList, setAddressList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const { theme } = useTheme();
 const [menuId, setMenuId] = useState(null);
 const Navigation=useNavigation()
 
@@ -136,14 +139,14 @@ const openAddAddress =()=>{
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={styles.loadingContainer}>
         <Text>Loading...</Text>
       </View>
     );
   }
 
 return (
-  <View style={{ flex: 1, padding: 15 }}>
+  <View style={[styles.screenContainer, { backgroundColor: theme.bg }]}>
     {/* Header */}
     <View style={styles.headerContainer}>
       <Text style={styles.headerTitle}>My Addresses</Text>
@@ -156,7 +159,7 @@ return (
           <MaterialCommunityIcons
             name="plus"
             size={18}
-            color="#FF4D6D"
+            color={AllColors.primary}
           />
           <Text style={styles.addBtnText}>Add New Address</Text>
         </TouchableOpacity>
@@ -168,7 +171,7 @@ return (
         <MaterialCommunityIcons
           name="map-marker-off-outline"
           size={90}
-          color="#D0D0D0"
+          color={AllColors.lightGrey}
         />
 
         <Text style={styles.emptyTitle}>No Address Found</Text>
@@ -185,7 +188,7 @@ return (
           <MaterialCommunityIcons
             name="plus"
             size={18}
-            color="#fff"
+            color={AllColors.white}
           />
           <Text style={styles.emptyButtonText}>
             Add New Address
@@ -197,13 +200,13 @@ return (
         data={addressList}
         keyExtractor={(item) => item.id.toString()}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 20 }}
+        contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <View style={styles.header}>
               <Text style={styles.name}>{item.name}</Text>
 
-              <View style={{ position: 'relative' }}>
+              <View style={styles.menuWrapper}>
                 <TouchableOpacity
                   onPress={() =>
                     setMenuId(menuId === item.id ? null : item.id)
@@ -211,7 +214,7 @@ return (
                   <MaterialCommunityIcons
                     name="dots-vertical"
                     size={20}
-                    color="#555"
+                    color={AllColors.slateMuted}
                   />
                 </TouchableOpacity>
 
@@ -226,6 +229,7 @@ return (
                       <MaterialCommunityIcons
                         name="pencil-outline"
                         size={17}
+                        color={AllColors.slateText}
                       />
                       <Text style={styles.menuText}>Edit</Text>
                     </TouchableOpacity>
@@ -241,12 +245,12 @@ return (
                       <MaterialCommunityIcons
                         name="delete-outline"
                         size={17}
-                        color="red"
+                        color={AllColors.redLight}
                       />
                       <Text
                         style={[
                           styles.menuText,
-                          { color: 'red' },
+                          styles.deleteMenuText,
                         ]}>
                         Delete
                       </Text>
@@ -278,7 +282,7 @@ return (
 }
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     borderRadius: 10,
     padding: 12,
     marginBottom: 10,
@@ -301,13 +305,13 @@ emptyTitle: {
   marginTop: 18,
   fontSize: 22,
   fontWeight: '700',
-  color: '#222',
+  color: AllColors.slateDark,
 },
 
 emptySubTitle: {
   marginTop: 10,
   fontSize: 15,
-  color: '#777',
+  color: AllColors.textSecondary,
   textAlign: 'center',
   lineHeight: 22,
 },
@@ -315,7 +319,7 @@ emptySubTitle: {
 emptyButton: {
   flexDirection: 'row',
   alignItems: 'center',
-  backgroundColor: '#FF4D6D',
+  backgroundColor: AllColors.primary,
   paddingHorizontal: 22,
   paddingVertical: 12,
   borderRadius: 30,
@@ -323,7 +327,7 @@ emptyButton: {
 },
 
 emptyButtonText: {
-  color: '#fff',
+  color: AllColors.white,
   fontSize: 15,
   fontWeight: '600',
   marginLeft: 8,
@@ -331,7 +335,7 @@ emptyButtonText: {
 headerTitle: {
   fontSize: 20,
   fontWeight: '700',
-  color: '#222',
+  color: AllColors.slateDark,
 },
 
 addBtn: {
@@ -342,7 +346,7 @@ addBtn: {
 
 addBtnText: {
   marginLeft: 4,
-  color: '#FF4D6D',
+  color: AllColors.primary,
   fontSize: 15,
   fontWeight: '600',
 },
@@ -355,33 +359,33 @@ addBtnText: {
   name: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#222',
+    color: AllColors.slateDark,
   },
 
   mobile: {
     marginTop: 3,
     fontSize: 13,
-    color: '#666',
+    color: AllColors.slateSub,
   },
 
   address: {
     marginTop: 5,
     fontSize: 13,
-    color: '#555',
+    color: AllColors.slateMuted,
     lineHeight: 18,
   },
 
   badge: {
     alignSelf: 'flex-start',
     marginTop: 8,
-    backgroundColor: '#FFE8EC',
+    backgroundColor: AllColors.softPinkBg,
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 15,
   },
 
   badgeText: {
-    color: '#FF4D6D',
+    color: AllColors.primary,
     fontSize: 11,
     fontWeight: '600',
   },
@@ -391,7 +395,7 @@ addBtnText: {
     right: 0,
     top: 24,
     width: 130,
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     borderRadius: 10,
     elevation: 8,
     zIndex: 999,
@@ -407,11 +411,34 @@ addBtnText: {
   menuText: {
     marginLeft: 8,
     fontSize: 14,
-    color: '#333',
+    color: AllColors.slateText,
+  },
+
+  deleteMenuText: {
+    color: AllColors.redLight,
+  },
+
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  screenContainer: {
+    flex: 1,
+    padding: 15,
+  },
+
+  listContent: {
+    paddingBottom: 20,
+  },
+
+  menuWrapper: {
+    position: 'relative',
   },
 
   divider: {
     height: 1,
-    backgroundColor: '#eee',
+    backgroundColor: AllColors.divider,
   },
 });

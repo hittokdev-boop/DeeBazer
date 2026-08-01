@@ -19,6 +19,7 @@ import AntDesign from 'react-native-vector-icons/AntDesign';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import AllColors from '../../Constants/Color';
+import { useTheme } from '../../Context/ThemeContext';
 
 const FAQS = [
   {
@@ -45,6 +46,7 @@ const FAQS = [
 
 export default function HelpCenter() {
   const navigation = useNavigation();
+  const { theme } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedIndex, setExpandedIndex] = useState(null);
 
@@ -69,7 +71,7 @@ export default function HelpCenter() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
 
       {/* Header */}
@@ -78,71 +80,61 @@ export default function HelpCenter() {
           style={styles.backBtn}
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={22} color="#1E293B" />
+          <Ionicons name="arrow-back" size={22} color={AllColors.slateDark} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Help & Support</Text>
-        <View style={{ width: 40 }} />
+        <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Support Banner */}
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Banner Section */}
         <View style={styles.bannerCard}>
-          <Text style={styles.bannerTitle}>How can we help you today?</Text>
+          <Text style={styles.bannerTitle}>How can we help you?</Text>
           <Text style={styles.bannerSubtitle}>
-            Find quick answers to your questions or get in touch with our customer service team.
+            Search our help center or select a topic below to get quick assistance.
           </Text>
 
-          {/* Search Box */}
           <View style={styles.searchBox}>
-            <Ionicons name="search" size={20} color="#94A3B8" />
+            <Feather name="search" size={18} color={AllColors.slateSub} />
             <TextInput
               placeholder="Search help topics..."
-              placeholderTextColor="#94A3B8"
-              style={styles.searchInput}
+              placeholderTextColor={AllColors.slateLight}
               value={searchQuery}
               onChangeText={setSearchQuery}
+              style={styles.searchInput}
             />
           </View>
         </View>
 
-        {/* Quick Contact Options */}
+        {/* Contact Options */}
         <Text style={styles.sectionTitle}>Contact Us</Text>
         <View style={styles.contactRow}>
-          <TouchableOpacity
-            style={styles.contactCard}
-            onPress={() => handleContact('call')}
-            activeOpacity={0.8}>
-            <View style={[styles.iconCircle, { backgroundColor: '#DBEAFE' }]}>
-              <Feather name="phone-call" size={20} color="#2563EB" />
+          <TouchableOpacity style={styles.contactCard} onPress={handleCallSupport} activeOpacity={0.8}>
+            <View style={[styles.iconCircle, { backgroundColor: AllColors.blueSoftBg }]}>
+              <Ionicons name="call-outline" size={22} color={AllColors.blueSoftText} />
             </View>
             <Text style={styles.contactTitle}>Call Us</Text>
-            <Text style={styles.contactSub}>24x7 Assistance</Text>
+            <Text style={styles.contactSub}>24x7 Support</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.contactCard}
-            onPress={() => handleContact('whatsapp')}
-            activeOpacity={0.8}>
-            <View style={[styles.iconCircle, { backgroundColor: '#D1FAE5' }]}>
-              <Ionicons name="logo-whatsapp" size={22} color="#059669" />
+          <TouchableOpacity style={styles.contactCard} onPress={handleChatSupport} activeOpacity={0.8}>
+            <View style={[styles.iconCircle, { backgroundColor: AllColors.greenSoftBg }]}>
+              <Ionicons name="chatbubbles-outline" size={22} color={AllColors.greenLight} />
             </View>
-            <Text style={styles.contactTitle}>WhatsApp</Text>
-            <Text style={styles.contactSub}>Instant Chat</Text>
+            <Text style={styles.contactTitle}>Live Chat</Text>
+            <Text style={styles.contactSub}>Instant help</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.contactCard}
-            onPress={() => handleContact('email')}
-            activeOpacity={0.8}>
-            <View style={[styles.iconCircle, { backgroundColor: AllColors.lightPink || '#FCEBF5' }]}>
-              <Feather name="mail" size={20} color={AllColors.primary} />
+          <TouchableOpacity style={styles.contactCard} onPress={handleEmailSupport} activeOpacity={0.8}>
+            <View style={[styles.iconCircle, { backgroundColor: AllColors.softPinkBg }]}>
+              <MaterialCommunityIcons name="email-outline" size={22} color={AllColors.primary} />
             </View>
             <Text style={styles.contactTitle}>Email Us</Text>
-            <Text style={styles.contactSub}>Get Response</Text>
+            <Text style={styles.contactSub}>Reply in 24h</Text>
           </TouchableOpacity>
         </View>
 
-        {/* FAQs Accordion */}
+        {/* FAQ Section */}
         <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
         <View style={styles.faqList}>
           {filteredFaqs.length > 0 ? (
@@ -158,7 +150,7 @@ export default function HelpCenter() {
                     <AntDesign
                       name={isExpanded ? 'up' : 'down'}
                       size={14}
-                      color="#64748B"
+                      color={AllColors.slateSub}
                     />
                   </TouchableOpacity>
                   {isExpanded ? (
@@ -181,17 +173,17 @@ export default function HelpCenter() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4F5F9',
+    backgroundColor: AllColors.screenBg,
   },
   header: {
     height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     paddingHorizontal: 16,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
@@ -206,7 +198,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
 
   scrollContent: {
@@ -222,7 +214,7 @@ const styles = StyleSheet.create({
   bannerTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: AllColors.white,
   },
   bannerSubtitle: {
     fontSize: 13,
@@ -233,7 +225,7 @@ const styles = StyleSheet.create({
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     borderRadius: 14,
     height: 48,
     paddingHorizontal: 14,
@@ -243,13 +235,13 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 10,
     fontSize: 14,
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
 
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0F172A',
+    color: AllColors.slateDark,
     marginBottom: 12,
   },
 
@@ -260,12 +252,12 @@ const styles = StyleSheet.create({
   },
   contactCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     borderRadius: 16,
     padding: 14,
     alignItems: 'center',
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
@@ -281,11 +273,11 @@ const styles = StyleSheet.create({
   contactTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1E293B',
+    color: AllColors.slateHeader,
   },
   contactSub: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: AllColors.slateLight,
     marginTop: 2,
   },
 
@@ -293,11 +285,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   faqCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     borderRadius: 14,
     padding: 14,
     elevation: 1,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
@@ -311,16 +303,16 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
-    color: '#1E293B',
+    color: AllColors.slateHeader,
     paddingRight: 10,
   },
   faqAnswer: {
     fontSize: 13,
-    color: '#64748B',
+    color: AllColors.slateSub,
     marginTop: 10,
     lineHeight: 19,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: AllColors.divider,
     paddingTop: 10,
   },
 
@@ -330,6 +322,9 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#94A3B8',
+    color: AllColors.slateLight,
+  },
+  headerSpacer: {
+    width: 40,
   },
 });

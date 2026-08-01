@@ -23,7 +23,9 @@ import CustomAlert from './Alert';
 import { BASE_URL, setMobile, setuserId, getDeviceId, setToken, setPassword as saveApiPassword } from '../Api/Api';
 import LottieView from 'lottie-react-native';
 import { useNavigation } from "@react-navigation/native";
+import { useTheme } from '../Context/ThemeContext';
 const CommonLoginModal = () => {
+  const { theme } = useTheme();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -93,7 +95,7 @@ const CommonLoginModal = () => {
   };
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={[styles.container, { backgroundColor: theme.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -115,10 +117,10 @@ const CommonLoginModal = () => {
             </Text>
 
             <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color="#666" style={{ marginLeft: 15, marginRight: 5 }} />
+              <Ionicons name="mail-outline" size={20} color={AllColors.slateSub} style={styles.inputIcon} />
               <TextInput
                 placeholder="Enter Email"
-                placeholderTextColor="#999"
+                placeholderTextColor={AllColors.slateLight}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={email}
@@ -127,18 +129,18 @@ const CommonLoginModal = () => {
               />
             </View>
 
-            <View style={[styles.inputContainer, { marginTop: 15 }]}>
-              <Ionicons name="lock-closed-outline" size={20} color="#666" style={{ marginLeft: 15, marginRight: 5 }} />
+            <View style={[styles.inputContainer, styles.inputContainerMargin]}>
+              <Ionicons name="lock-closed-outline" size={20} color={AllColors.slateSub} style={styles.inputIcon} />
               <TextInput
                 placeholder="Enter Password"
-                placeholderTextColor="#999"
+                placeholderTextColor={AllColors.slateLight}
                 secureTextEntry={!showPassword}
                 value={password}
                 onChangeText={setPassword}
                 style={styles.input}
               />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: 10, marginRight: 5 }}>
-                <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color="#666" />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color={AllColors.slateSub} />
               </TouchableOpacity>
             </View>
 
@@ -148,13 +150,13 @@ const CommonLoginModal = () => {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={AllColors.white} />
               ) : (
                 <>
                   <Ionicons
                     name="log-in-outline"
                     size={20}
-                    color="#fff"
+                    color={AllColors.white}
                   />
                   <Text style={styles.loginText}> Login</Text>
                 </>
@@ -165,16 +167,16 @@ const CommonLoginModal = () => {
               By continuing, you agree to our{" "}
               <Text
                 onPress={() => Navigation.navigate('TermsCondition')}
-                style={{ color: AllColors.primary, fontWeight: "600" }}
+                style={styles.linkText}
               >
                 Terms & Conditions
               </Text>
             </Text>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 15 }}>
-              <Text style={{ color: '#777', fontSize: 14 }}>Don't have an account? </Text>
+            <View style={styles.registerRow}>
+              <Text style={styles.registerPromptText}>Don't have an account? </Text>
               <TouchableOpacity onPress={() => Navigation.navigate('Register')}>
-                <Text style={{ color: AllColors.primary, fontSize: 14, fontWeight: '700' }}>Register</Text>
+                <Text style={styles.registerBtnText}>Register</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -193,15 +195,17 @@ const CommonLoginModal = () => {
 export default CommonLoginModal;
 
 const styles = StyleSheet.create({
-
+  container: {
+    flex: 1,
+  },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: AllColors.modalOverlay,
     justifyContent: 'flex-end',
   },
 
   modalContainer: {
-    backgroundColor: "#fff",
+    backgroundColor: AllColors.white,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     paddingHorizontal: 22,
@@ -212,7 +216,7 @@ const styles = StyleSheet.create({
   line: {
     width: 65,
     height: 5,
-    backgroundColor: "#D8D8D8",
+    backgroundColor: AllColors.lightGrey,
     borderRadius: 20,
     alignSelf: "center",
     marginBottom: 10,
@@ -234,7 +238,7 @@ const styles = StyleSheet.create({
 
   subtitle: {
     fontSize: 15,
-    color: "#666",
+    color: AllColors.slateSub,
     textAlign: "center",
     marginTop: 8,
     marginBottom: 25,
@@ -245,25 +249,61 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E5E5E5",
+    borderColor: AllColors.borderLight,
     borderRadius: 14,
     overflow: "hidden",
-    backgroundColor: "#FAFAFA",
+    backgroundColor: AllColors.inputBg,
+  },
+
+  inputContainerMargin: {
+    marginTop: 15,
+  },
+
+  inputIcon: {
+    marginLeft: 15,
+    marginRight: 5,
+  },
+
+  eyeBtn: {
+    padding: 10,
+    marginRight: 5,
+  },
+
+  linkText: {
+    color: AllColors.primary,
+    fontWeight: "600",
+  },
+
+  registerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 15,
+  },
+
+  registerPromptText: {
+    color: AllColors.textSecondary,
+    fontSize: 14,
+  },
+
+  registerBtnText: {
+    color: AllColors.primary,
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   countryCode: {
-    backgroundColor: "#F2F2F2",
+    backgroundColor: AllColors.lightGrey,
     paddingHorizontal: 15,
     height: 55,
     justifyContent: "center",
     borderRightWidth: 1,
-    borderRightColor: "#E5E5E5",
+    borderRightColor: AllColors.borderLight,
   },
 
   countryText: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#333",
+    color: AllColors.slateText,
   },
 
   input: {
@@ -271,7 +311,7 @@ const styles = StyleSheet.create({
     height: 55,
     paddingHorizontal: 15,
     fontSize: 16,
-    color: "#000",
+    color: AllColors.black,
   },
 
   loginBtn: {
@@ -285,7 +325,7 @@ const styles = StyleSheet.create({
   },
 
   loginText: {
-    color: "#fff",
+    color: AllColors.white,
     fontSize: 17,
     fontWeight: "700",
   },
@@ -293,7 +333,7 @@ const styles = StyleSheet.create({
   footerText: {
     marginTop: 20,
     textAlign: "center",
-    color: "#777",
+    color: AllColors.textSecondary,
     fontSize: 13,
     lineHeight: 20,
   },

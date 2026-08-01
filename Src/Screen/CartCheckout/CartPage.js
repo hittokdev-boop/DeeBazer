@@ -28,7 +28,9 @@ import RazorpayCheckout from "react-native-razorpay";
 import LottieView from 'lottie-react-native';
 
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useTheme } from '../../Context/ThemeContext';
 const CartPage = () => {
+  const { theme } = useTheme();
   const [cartItems, setCartItems] = useState([])
   const [extraData, setExtraData] = useState({})
   const [couponCode, setCouponCode] = useState('')
@@ -660,7 +662,7 @@ const CartPage = () => {
 
   if (!isuser) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
         <View style={loginStyles.container}>
           <View style={loginStyles.iconBox}>
             <AntDesign
@@ -684,7 +686,7 @@ const CartPage = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={{ marginHorizontal: 10 }}
+            style={styles.continueShopBtn}
             onPress={() => navigation.navigate('Profile')}>
             <Text style={loginStyles.skipText}>
               Continue Shopping
@@ -696,9 +698,9 @@ const CartPage = () => {
   }
   if (isuser && (!cartItems || cartItems.length === 0)) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1 }}
+          contentContainerStyle={styles.scrollFlexGrow}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -739,7 +741,7 @@ const CartPage = () => {
 
   return (
 
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
 
       {/* ================= Header ================= */}
 
@@ -753,7 +755,7 @@ const CartPage = () => {
           Checkout
         </Text>
 
-        <View style={{ flexDirection: 'row' }}>
+        <View style={styles.headerRightRow}>
 
           {/* <TouchableOpacity style={styles.iconBtn}>
             <Feather name="search" size={22} color={AllColors.primary} />
@@ -819,37 +821,47 @@ const CartPage = () => {
               <View style={styles.line} />
 
               <View style={styles.productRow}>
-                <Image
-                  source={{ uri: item.image }}
-                  style={styles.image}
-                />
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.productTouchable}
+                  onPress={() =>
+                    navigation.navigate('ProductDetails', {
+                      id: item.product_id || item.id,
+                    })
+                  }
+                >
+                  <Image
+                    source={{ uri: item.image }}
+                    style={styles.image}
+                  />
 
-                <View style={{ flex: 1, marginLeft: 15 }}>
-                  {item.offer ? (
-                    <View style={styles.offerBadge}>
-                      <Text style={styles.offerText}>
-                        {item.offer}
-                      </Text>
-                    </View>
-                  ) : null}
+                  <View style={styles.productInfoWrapper}>
+                    {item.offer ? (
+                      <View style={styles.offerBadge}>
+                        <Text style={styles.offerText}>
+                          {item.offer}
+                        </Text>
+                      </View>
+                    ) : null}
 
-                  <Text
-                    numberOfLines={2}
-                    style={styles.productName}
-                  >
-                    {item.name}
-                  </Text>
-
-                  <Text style={styles.size}>
-                    {item.short_desc02}
-                  </Text>
-
-                  <TouchableOpacity onPress={() => moveToWishlist(item)}>
-                    <Text style={styles.wishlist}>
-                      Move to wishlist
+                    <Text
+                      numberOfLines={2}
+                      style={styles.productName}
+                    >
+                      {item.name}
                     </Text>
-                  </TouchableOpacity>
-                </View>
+
+                    <Text style={styles.size}>
+                      {item.short_desc02}
+                    </Text>
+
+                    <TouchableOpacity onPress={() => moveToWishlist(item)}>
+                      <Text style={styles.wishlist}>
+                        Move to wishlist
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
 
                 <View>
                   <View style={styles.qtyBox}>
@@ -870,7 +882,7 @@ const CartPage = () => {
                     </TouchableOpacity>
                   </View>
 
-                  <View style={{ marginTop: 10 }}>
+                  <View style={styles.priceContainer}>
                     <Text style={styles.oldPrice}>
                       ₹{Number(item.actual_total ?? (Number(item.actual_price || 0) * Number(item.qty || 1))).toFixed(2)}
                     </Text>
@@ -882,7 +894,6 @@ const CartPage = () => {
                   </View>
                 </View>
               </View>
-              {/* <View style={{height:5,backgroundColor:all}}/> */}
             </View>
           )}
           ListFooterComponent={
@@ -966,7 +977,7 @@ const CartPage = () => {
                 </View>
 
               </View>
-              <View style={{ width: '100%', height: 50, backgroundColor: '#f0f0f0' }} />
+              <View style={styles.bottomSectionDivider} />
             </>
 
           }
@@ -1019,7 +1030,7 @@ const CartPage = () => {
 
 
 
-        <View style={{ height: 120 }} />
+        <View style={styles.bottomSpaceHeight} />
 
       </View>
       {/* ================= Fixed Bottom ================= */}
@@ -1034,7 +1045,7 @@ const CartPage = () => {
               color={AllColors.primary}
             />
 
-            <View style={{ marginLeft: 10, flex: 1 }}>
+            <View style={styles.addressInfoWrapper}>
               <Text style={styles.deliverText}>
                 Deliver to
               </Text>
@@ -1084,13 +1095,13 @@ const CartPage = () => {
               Select Delivery Address
             </Text>
             <TouchableOpacity
-              style={{ margin: 10 }}
+              style={styles.addAddressMargin}
               onPress={() => {
                 setIsModal(false);
                 navigation.navigate('SaveAddress');
               }}
             >
-              <Text style={{ color: AllColors.primary, textAlign: 'right', fontSize: 18 }}>+Add New Address</Text>
+              <Text style={styles.addAddressText}>+Add New Address</Text>
             </TouchableOpacity>
 
             <FlatList
@@ -1187,7 +1198,7 @@ const CartPage = () => {
                   <View style={[styles.paymentIconBox, { backgroundColor: '#DCFCE7' }]}>
                     <MaterialCommunityIcons name="cash-multiple" size={24} color="#166534" />
                   </View>
-                  <View style={{ marginLeft: 12, flex: 1 }}>
+                  <View style={styles.paymentTextWrapper}>
                     <Text style={styles.paymentOptionTitle}>Cash on Delivery (COD)</Text>
                     <Text style={styles.paymentOptionSub}>Pay with cash upon order delivery</Text>
                   </View>
@@ -1212,7 +1223,7 @@ const CartPage = () => {
                   <View style={[styles.paymentIconBox, { backgroundColor: '#E0F2FE' }]}>
                     <MaterialCommunityIcons name="credit-card-outline" size={24} color="#075985" />
                   </View>
-                  <View style={{ marginLeft: 12, flex: 1 }}>
+                  <View style={styles.paymentTextWrapper}>
                     <Text style={styles.paymentOptionTitle}>Online Payment (Cashfree / UPI)</Text>
                     <Text style={styles.paymentOptionSub}>Pay securely via UPI, Card or Net Banking</Text>
                   </View>
@@ -1894,7 +1905,7 @@ const styles = StyleSheet.create({
 
   // ===== COUPON STYLES =====
   couponCard: {
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     marginHorizontal: 10,
     marginVertical: 6,
     paddingVertical: 14,
@@ -1911,7 +1922,7 @@ const styles = StyleSheet.create({
   couponHeaderText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1E293B',
+    color: AllColors.slateHeader,
   },
   couponInputRow: {
     flexDirection: 'row',
@@ -1921,14 +1932,14 @@ const styles = StyleSheet.create({
   couponInput: {
     flex: 1,
     height: 46,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: AllColors.screenBg,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: AllColors.lightGrey,
     paddingHorizontal: 14,
     fontSize: 14,
     fontWeight: '600',
-    color: '#0F172A',
+    color: AllColors.slateDark,
     letterSpacing: 0.5,
   },
   applyBtn: {
@@ -1942,19 +1953,19 @@ const styles = StyleSheet.create({
   applyBtnText: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#fff',
+    color: AllColors.white,
     letterSpacing: 0.5,
   },
   appliedCouponRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F0FDF4',
+    backgroundColor: AllColors.greenSoftBg,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#86EFAC',
+    borderColor: AllColors.lightGreen,
   },
   appliedBadge: {
     flexDirection: 'row',
@@ -1965,12 +1976,12 @@ const styles = StyleSheet.create({
   appliedCode: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#059669',
+    color: AllColors.greenSoftText,
     letterSpacing: 0.5,
   },
   appliedSaving: {
     fontSize: 12,
-    color: '#059669',
+    color: AllColors.greenSoftText,
     fontWeight: '600',
   },
   removeBtn: {
@@ -1980,13 +1991,58 @@ const styles = StyleSheet.create({
   removeBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#EF4444',
+    color: AllColors.redLight,
+  },
+  continueShopBtn: {
+    marginHorizontal: 10,
+  },
+  scrollFlexGrow: {
+    flexGrow: 1,
+  },
+  headerRightRow: {
+    flexDirection: 'row',
+  },
+  productTouchable: {
+    flexDirection: 'row',
+    flex: 1,
+    alignItems: 'center',
+  },
+  productInfoWrapper: {
+    flex: 1,
+    marginLeft: 15,
+  },
+  priceContainer: {
+    marginTop: 10,
+  },
+  bottomSectionDivider: {
+    width: '100%',
+    height: 50,
+    backgroundColor: AllColors.divider,
+  },
+  bottomSpaceHeight: {
+    height: 120,
+  },
+  addressInfoWrapper: {
+    marginLeft: 10,
+    flex: 1,
+  },
+  addAddressMargin: {
+    margin: 10,
+  },
+  addAddressText: {
+    color: AllColors.primary,
+    textAlign: 'right',
+    fontSize: 18,
+  },
+  paymentTextWrapper: {
+    marginLeft: 12,
+    flex: 1,
   },
 });
 const loginStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FC",
+    backgroundColor: AllColors.screenBg,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 24,
@@ -2001,14 +2057,14 @@ const loginStyles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: "700",
-    color: "#291A5A",
+    color: AllColors.slateDark,
     marginBottom: 10,
     textAlign: "center",
   },
 
   subtitle: {
     fontSize: 15,
-    color: "#6B7280",
+    color: AllColors.slateSub,
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 35,
@@ -2023,7 +2079,7 @@ const loginStyles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
 
-    shadowColor: "#291A5A",
+    shadowColor: AllColors.shadow,
     shadowOffset: {
       width: 0,
       height: 6,
@@ -2034,7 +2090,7 @@ const loginStyles = StyleSheet.create({
   },
 
   loginText: {
-    color: "#FFFFFF",
+    color: AllColors.white,
     fontSize: 17,
     fontWeight: "700",
   },

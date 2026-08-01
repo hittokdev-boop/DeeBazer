@@ -13,10 +13,12 @@ import { useRoute, useNavigation } from "@react-navigation/native";
 import AntDesign from "react-native-vector-icons/AntDesign";
 
 import AllColors from "../../Constants/Color";
+import { useTheme } from '../../Context/ThemeContext';
 
 export default function ViewAllProducts() {
   const route = useRoute();
   const navigation = useNavigation();
+  const { theme } = useTheme();
 
   const { title, products = [] } = route.params || {};
 
@@ -39,22 +41,17 @@ export default function ViewAllProducts() {
   };
 
   return (
-    <View style={styles.container}>
-      <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar backgroundColor={AllColors.white} barStyle="dark-content" />
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.7}
-        >
-          <AntDesign name="arrowleft" color="#0F172A" size={20} />
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={22} color={AllColors.slateDark} />
         </TouchableOpacity>
-
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>{title}</Text>
-          <Text style={styles.headerSubtitle}>{products.length} Products Found</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>{title || 'Products'}</Text>
+          <Text style={styles.headerSubtitle}>{products ? `${products.length} Items Available` : 'Showing all'}</Text>
         </View>
       </View>
 
@@ -64,15 +61,15 @@ export default function ViewAllProducts() {
         numColumns={2}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
-        keyExtractor={(item) => String(item.id)}
+        keyExtractor={(item) => item.id ? item.id.toString() : Math.random().toString()}
         contentContainerStyle={styles.listContent}
         columnWrapperStyle={styles.columnWrapper}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
-          <TouchableOpacity 
-            style={styles.card} 
+          <TouchableOpacity
+            style={styles.card}
+            activeOpacity={0.8}
             onPress={() => gotoDetails(item)}
-            activeOpacity={0.9}
           >
             {/* Image Container */}
             <View style={styles.cardImageContainer}>
@@ -115,7 +112,7 @@ export default function ViewAllProducts() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: AllColors.screenBg,
   },
   header: {
     flexDirection: "row",
@@ -123,11 +120,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: AllColors.white,
     borderBottomWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: AllColors.lightGrey,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
@@ -136,7 +133,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: AllColors.divider,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -148,11 +145,11 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#0F172A",
+    color: AllColors.slateDark,
   },
   headerSubtitle: {
     fontSize: 12,
-    color: "#64748B",
+    color: AllColors.slateSub,
     marginTop: 2,
     fontWeight: "500",
   },
@@ -167,14 +164,14 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     maxWidth: '48%',
-    backgroundColor: "#FFFFFF",
+    backgroundColor: AllColors.white,
     borderRadius: 12,
     padding: 10,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: AllColors.divider,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
@@ -183,7 +180,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 120,
     borderRadius: 8,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: AllColors.screenBg,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -200,7 +197,7 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#334155",
+    color: AllColors.slateText,
     lineHeight: 18,
     height: 36,
   },
@@ -212,24 +209,24 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#0F172A",
+    color: AllColors.slateDark,
   },
   oldPrice: {
     textDecorationLine: 'line-through',
-    color: '#94A3B8',
+    color: AllColors.slateLight,
     marginLeft: 6,
     fontSize: 11,
   },
   discountBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#ECFDF5',
+    backgroundColor: AllColors.greenSoftBg,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
     marginTop: 6,
   },
   discountText: {
-    color: '#10B981',
+    color: AllColors.greenLight,
     fontWeight: '700',
     fontSize: 10,
   },
@@ -237,22 +234,21 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 76,
     alignSelf: "center",
-    backgroundColor: "rgba(15, 23, 42, 0.8)",
+    backgroundColor: AllColors.modalOverlay,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
-    zIndex: 999,
   },
   counterText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
+    color: AllColors.white,
     fontSize: 14,
+    fontWeight: "700",
   },
 });

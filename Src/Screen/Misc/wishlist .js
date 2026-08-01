@@ -19,10 +19,12 @@ import { BASE_URL, getToken, getuserId } from '../../Api/Api';
 import AllColors from '../../Constants/Color';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LottieView from "lottie-react-native";
+import { useTheme } from '../../Context/ThemeContext';
 
 // import Icon from 'react-native-vector-icons/Icon';
 export default function Wishlist() {
   const navigation = useNavigation();
+  const { theme } = useTheme();
   const [wishlistItems, setWishlistItems] = useState([]);
 
   const [loading, setLoading] = useState(false);
@@ -176,7 +178,7 @@ https://deebazar.com/product/${item.id}`,
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={22} color={AllColors.black} />
@@ -185,10 +187,10 @@ https://deebazar.com/product/${item.id}`,
       </View>
 
       {loading && !refreshing ? (
-        <ActivityIndicator size="large" color={AllColors.primary} style={{ marginTop: 24 }} />
+        <ActivityIndicator size="large" color={AllColors.primary} style={styles.loaderMarginTop} />
       ) : wishlistItems.length === 0 ? (
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1 }}
+          contentContainerStyle={styles.scrollFlexGrow}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -231,7 +233,7 @@ https://deebazar.com/product/${item.id}`,
           data={wishlistItems}
           keyExtractor={(item, index) => (item?.id ? item.id.toString() : index.toString())}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={styles.flatListContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -242,7 +244,15 @@ https://deebazar.com/product/${item.id}`,
           }
           renderItem={({ item }) => (
             <View style={styles.card}>
-              <View style={styles.productRow}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() =>
+                  navigation.navigate('ProductDetails', {
+                    id: item.id || item.product_id,
+                  })
+                }
+                style={styles.productRow}
+              >
                 <Image
                   source={{ uri: item.image }}
                   style={styles.image}
@@ -283,7 +293,7 @@ https://deebazar.com/product/${item.id}`,
                     </Text>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
 
               <View style={styles.bottomRow}>
                 <View style={styles.leftActions}>
@@ -309,14 +319,14 @@ https://deebazar.com/product/${item.id}`,
                     style={styles.removeBtn}
                     onPress={() => removeWishlistItem(item.id)}
                   >
-                    <Text>Remove</Text>
+                    <Text style={styles.removeText}>Remove</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={styles.cartBtn}
                     onPress={() => requestToCart(item.id)}
                   >
-                    <Text style={{ color: AllColors.white, fontWeight: "600" }}>
+                    <Text style={styles.cartBtnText}>
                       Add to cart
                     </Text>
                   </TouchableOpacity>
@@ -325,15 +335,8 @@ https://deebazar.com/product/${item.id}`,
             </View>
           )}
           ListEmptyComponent={
-            <View
-              style={{
-                flex: 1,
-                justifyContent: "center",
-                alignItems: "center",
-                marginTop: 80,
-              }}
-            >
-              <Text style={{ fontSize: 16, color: "#777" }}>
+            <View style={styles.emptyListWrapper}>
+              <Text style={styles.emptyListText}>
                 No wishlist items found
               </Text>
             </View>
@@ -347,7 +350,7 @@ https://deebazar.com/product/${item.id}`,
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F6F7FB",
+    backgroundColor: AllColors.screenBg,
   },
 
   header: {
@@ -355,25 +358,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: "#fff",
+    backgroundColor: AllColors.white,
     elevation: 3,
   },
 
   headerTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#222",
+    color: AllColors.slateDark,
     marginLeft: 15,
   },
 
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: AllColors.white,
     marginHorizontal: 12,
     marginTop: 12,
     borderRadius: 16,
     padding: 12,
     elevation: 4,
-    shadowColor: "#000",
+    shadowColor: AllColors.shadow,
     shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: {
@@ -390,7 +393,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 120,
     borderRadius: 10,
-    backgroundColor: "#F5F5F5",
+    backgroundColor: AllColors.screenBg,
   },
 
   details: {
@@ -402,7 +405,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#222",
+    color: AllColors.slateDark,
     lineHeight: 22,
   },
 
@@ -421,14 +424,14 @@ const styles = StyleSheet.create({
 
   oldPrice: {
     marginLeft: 10,
-    color: "#999",
+    color: AllColors.slateLight,
     textDecorationLine: "line-through",
     fontSize: 14,
   },
 
   discount: {
     marginLeft: 10,
-    color: "#2E7D32",
+    color: AllColors.greenSoftText,
     fontWeight: "700",
     fontSize: 13,
   },
@@ -440,8 +443,8 @@ const styles = StyleSheet.create({
   },
 
   rating: {
-    backgroundColor: "#0BA360",
-    color: "#fff",
+    backgroundColor: AllColors.greenLight,
+    color: AllColors.white,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -455,7 +458,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     borderTopWidth: 1,
-    borderColor: "#F0F0F0",
+    borderColor: AllColors.divider,
     marginTop: 15,
     paddingTop: 15,
   },
@@ -471,7 +474,7 @@ const styles = StyleSheet.create({
   },
 
   removeBtn: {
-    backgroundColor: "#FDECEC",
+    backgroundColor: AllColors.redSoftBg,
     borderRadius: 10,
     paddingHorizontal: 18,
     paddingVertical: 10,
@@ -486,13 +489,13 @@ const styles = StyleSheet.create({
   },
 
   cartBtnText: {
-    color: "#fff",
+    color: AllColors.white,
     fontWeight: "600",
     fontSize: 14,
   },
 
   removeText: {
-    color: "#E53935",
+    color: AllColors.redLight,
     fontWeight: "600",
     fontSize: 14,
   },
@@ -518,7 +521,7 @@ const styles = StyleSheet.create({
 
   emptySubtitle: {
     fontSize: 15,
-    color: "#777",
+    color: AllColors.textSecondary,
     textAlign: "center",
     lineHeight: 22,
     marginTop: 8,
@@ -534,8 +537,27 @@ const styles = StyleSheet.create({
   },
 
   shopBtnText: {
-    color: "#fff",
+    color: AllColors.white,
     fontSize: 16,
     fontWeight: "700",
+  },
+  loaderMarginTop: {
+    marginTop: 24,
+  },
+  scrollFlexGrow: {
+    flexGrow: 1,
+  },
+  flatListContent: {
+    paddingBottom: 100,
+  },
+  emptyListWrapper: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 80,
+  },
+  emptyListText: {
+    fontSize: 16,
+    color: AllColors.textSecondary,
   },
 });

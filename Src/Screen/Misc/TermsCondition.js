@@ -11,7 +11,7 @@ const TermsCondition = () => {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#000" />
+          <Ionicons name="arrow-back" size={24} color={AllColors.black} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Terms & Conditions</Text>
       </View>
@@ -53,14 +53,14 @@ const TermsCondition = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: AllColors.divider,
     marginTop: 30, // For status bar spacing
   },
   backButton: {
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#000',
+    color: AllColors.black,
   },
   content: {
     padding: 20,
@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
   },
   paragraph: {
     fontSize: 15,
-    color: '#555',
+    color: AllColors.slateMuted,
     lineHeight: 24,
   }
 });

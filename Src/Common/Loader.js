@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
 
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: AllColors.modalOverlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
   container: {
     width: 180,
     height: 180,
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',

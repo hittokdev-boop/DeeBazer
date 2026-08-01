@@ -8,3 +8,11 @@
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
 # Add any project specific keep options here:
+
+# React Native & Hermes keep rules
+-keep class com.facebook.react.** { *; }
+-keep class com.facebook.hermes.** { *; }
+-keepclassmembers class * {
+    @com.facebook.react.uimanager.annotations.ReactProp <fields>;
+    @com.facebook.react.uimanager.annotations.ReactPropGroup <fields>;
+}

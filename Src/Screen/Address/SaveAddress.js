@@ -16,9 +16,11 @@ import { useNavigation } from "@react-navigation/native";
 import { BASE_URL, getToken, getuserId } from "../../Api/Api";
 import SuccessModal from "../../Common/SuccessScreen";
 import AllColors from "../../Constants/Color";
+import { useTheme } from '../../Context/ThemeContext';
 
 export default function SaveAddress() {
   const navigation = useNavigation();
+  const { theme } = useTheme();
 
   const [stateName, setStateName] = useState('');
   const [city, setCity] = useState('');
@@ -91,7 +93,7 @@ export default function SaveAddress() {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} showsVerticalScrollIndicator={false}>
       <View style={styles.formContainer}>
         {/* HEADER */}
         <View style={styles.topSection}>
@@ -226,31 +228,21 @@ export default function SaveAddress() {
         {/* Address Type */}
         <View style={styles.inputBox}>
           <Text style={styles.label}>Address Type</Text>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
+          <View style={styles.typeRow}>
             <TouchableOpacity
               onPress={() => setTypeType('Home')}
-              style={{
-                backgroundColor: typeType === 'Home' ? AllColors.primary : '#E5E5E5',
-                paddingHorizontal: 20,
-                paddingVertical: 10,
-                borderRadius: 10,
-              }}
+              style={[styles.typeBadge, typeType === 'Home' && styles.typeBadgeActive]}
             >
-              <Text style={{ color: typeType === 'Home' ? '#FFF' : '#000', fontWeight: '600' }}>
+              <Text style={[styles.typeBadgeText, typeType === 'Home' && styles.typeBadgeTextActive]}>
                 🏠 Home
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => setTypeType('Office')}
-              style={{
-                backgroundColor: typeType === 'Office' ? AllColors.primary : '#E5E5E5',
-                paddingHorizontal: 20,
-                paddingVertical: 10,
-                borderRadius: 10,
-              }}
+              style={[styles.typeBadge, typeType === 'Office' && styles.typeBadgeActive]}
             >
-              <Text style={{ color: typeType === 'Office' ? '#FFF' : '#000', fontWeight: '600' }}>
+              <Text style={[styles.typeBadgeText, typeType === 'Office' && styles.typeBadgeTextActive]}>
                 🏢 Office
               </Text>
             </TouchableOpacity>
@@ -291,7 +283,7 @@ export default function SaveAddress() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7F8FA',
+    backgroundColor: AllColors.screenBg,
   },
   formContainer: {
     paddingHorizontal: 20,
@@ -304,11 +296,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#111',
+    color: AllColors.textDark,
   },
   subtitle: {
     fontSize: 14,
-    color: '#777',
+    color: AllColors.textSecondary,
     marginTop: 4,
   },
   inputBox: {
@@ -317,25 +309,25 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#222',
+    color: AllColors.slateDark,
     marginBottom: 6,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     borderRadius: 14,
     paddingHorizontal: 15,
     height: 52,
     elevation: 1,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: AllColors.lightGrey,
   },
   input: {
     flex: 1,
     marginLeft: 10,
     fontSize: 15,
-    color: '#111',
+    color: AllColors.textDark,
   },
   saveBtn: {
     height: 52,
@@ -347,9 +339,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   saveText: {
-    color: '#FFFFFF',
+    color: AllColors.white,
     fontSize: 16,
     fontWeight: '700',
     marginLeft: 8,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  typeBadge: {
+    backgroundColor: AllColors.borderLight,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  typeBadgeActive: {
+    backgroundColor: AllColors.primary,
+  },
+  typeBadgeText: {
+    color: AllColors.black,
+    fontWeight: '600',
+  },
+  typeBadgeTextActive: {
+    color: AllColors.white,
   },
 });

@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   },
   box: {
     width: 280,
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     borderRadius: 20,
     padding: 20,
     alignItems: 'center',
@@ -50,15 +50,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginVertical: 15,
     textAlign: 'center',
+    color: AllColors.slateDark,
   },
   button: {
-    backgroundColor: '#fc0394',
+    backgroundColor: AllColors.primary,
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 10,
   },
   btnText: {
-    color: '#fff',
+    color: AllColors.white,
     fontWeight: 'bold',
   },
 });

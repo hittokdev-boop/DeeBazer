@@ -14,21 +14,23 @@ import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import AllColors from '../../Constants/Color';
+import { useTheme } from '../../Context/ThemeContext';
 
 export default function OrderDetails() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { theme } = useTheme();
   const { order } = route.params || {};
 
   if (!order) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={22} color="#0F172A" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Order Details</Text>
-          <View style={{ width: 40 }} />
+          <View style={styles.headerSpacer} />
         </View>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Order details not found.</Text>
@@ -68,58 +70,63 @@ export default function OrderDetails() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar backgroundColor={AllColors.white} barStyle="dark-content" />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color="#0F172A" />
+          <Ionicons name="arrow-back" size={22} color={AllColors.slateDark} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Order Details</Text>
-        <View style={{ width: 40 }} />
+        <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* Order Status Banner */}
-        <View style={[styles.statusBanner, { backgroundColor: badge.bg }]}>
-          <Ionicons name={badge.icon} size={28} color={badge.color} />
+        {/* Status Hero Card */}
+        <View style={[styles.statusBanner, { backgroundColor: config.bg }]}>
+          <Ionicons name={config.icon} size={28} color={config.color} />
           <View style={styles.statusTextContainer}>
-            <Text style={[styles.statusTitle, { color: badge.color }]}>{badge.label}</Text>
-            <Text style={[styles.statusSubtitle, { color: badge.color }]}>
-              {badge.label === 'Delivered' 
-                ? 'Your order has been delivered successfully.' 
-                : badge.label === 'Cancelled' 
-                ? 'This order was cancelled.' 
-                : 'Your order is currently being processed.'}
-            </Text>
+            <Text style={[styles.statusTitle, { color: config.color }]}>{config.title}</Text>
+            <Text style={[styles.statusSubtitle, { color: config.color }]}>{config.subtitle}</Text>
           </View>
         </View>
 
         {/* Order Info Card */}
         <View style={styles.card}>
           <View style={styles.rowBetween}>
-            <Text style={styles.sectionTitle}>Order Information</Text>
+            <Text style={styles.sectionTitle}>Order #{orderId}</Text>
           </View>
           <View style={styles.divider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Order ID</Text>
-            <Text style={styles.infoValue}>#{orderId}</Text>
-          </View>
+          
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Order Date</Text>
-            <Text style={styles.infoValue}>{formatDate(order.created_at || order.date)}</Text>
+            <Text style={styles.infoValue}>{dateText}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Payment Method</Text>
-            <Text style={styles.infoValue}>{order.payment_method || 'Online'}</Text>
+            <Text style={styles.infoLabel}>Payment Mode</Text>
+            <Text style={styles.infoValue}>{order.payment_method || order.payment_type || 'Online / Prepaid'}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Total Items</Text>
+            <Text style={styles.infoValue}>{itemsList.length > 0 ? itemsList.length : (order.itemsCount || 1)}</Text>
           </View>
         </View>
 
-        {/* Items Card */}
+        {/* Delivery Address Card */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Items in your order</Text>
+          <Text style={styles.sectionTitle}>Delivery Address</Text>
           <View style={styles.divider} />
+          <Text style={styles.infoValue}>{name}</Text>
+          <Text style={[styles.infoLabel, { marginTop: 4 }]}>{address}</Text>
+          <Text style={[styles.infoLabel, { marginTop: 4 }]}>Mobile: {mobile}</Text>
+        </View>
+
+        {/* Ordered Items Card */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Items Ordered</Text>
+          <View style={styles.divider} />
+
           {itemsList.map((prod, index) => (
             <View key={prod.id || index} style={styles.productRow}>
               <Image
@@ -177,14 +184,14 @@ export default function OrderDetails() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: AllColors.screenBg },
   header: {
     height: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF', paddingHorizontal: 16, elevation: 2,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3,
+    backgroundColor: AllColors.white, paddingHorizontal: 16, elevation: 2,
+    shadowColor: AllColors.shadow, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3,
   },
   backBtn: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: AllColors.slateDark },
   scrollContent: { padding: 16, paddingBottom: 40 },
   
   statusBanner: {
@@ -195,37 +202,38 @@ const styles = StyleSheet.create({
   statusSubtitle: { fontSize: 13, lineHeight: 18, opacity: 0.9, marginTop: 2 },
 
   card: {
-    backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 16,
-    elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4,
-    borderWidth: 1, borderColor: '#F1F5F9',
+    backgroundColor: AllColors.white, borderRadius: 16, padding: 16, marginBottom: 16,
+    elevation: 2, shadowColor: AllColors.shadow, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4,
+    borderWidth: 1, borderColor: AllColors.divider,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1E293B' },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: AllColors.slateHeader },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  divider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 12 },
-  dividerDashed: { height: 1, backgroundColor: '#E2E8F0', marginVertical: 12, borderStyle: 'dashed', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 1 },
+  divider: { height: 1, backgroundColor: AllColors.divider, marginVertical: 12 },
+  dividerDashed: { height: 1, backgroundColor: AllColors.lightGrey, marginVertical: 12, borderStyle: 'dashed', borderWidth: 1, borderColor: AllColors.lightGrey, borderRadius: 1 },
   
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  infoLabel: { fontSize: 13, color: '#64748B', fontWeight: '500' },
-  infoValue: { fontSize: 13, color: '#0F172A', fontWeight: '600' },
+  infoLabel: { fontSize: 13, color: AllColors.slateSub, fontWeight: '500' },
+  infoValue: { fontSize: 13, color: AllColors.slateDark, fontWeight: '600' },
 
   productRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  productThumb: { width: 64, height: 64, borderRadius: 12, backgroundColor: '#F8FAFC' },
+  productThumb: { width: 64, height: 64, borderRadius: 12, backgroundColor: AllColors.screenBg },
   productDetailsContainer: { flex: 1, marginLeft: 12 },
-  productTitleText: { fontSize: 14, fontWeight: '600', color: '#1E293B', lineHeight: 20, marginBottom: 6 },
+  productTitleText: { fontSize: 14, fontWeight: '600', color: AllColors.slateHeader, lineHeight: 20, marginBottom: 6 },
   productPriceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  productPriceText: { fontSize: 15, fontWeight: '700', color: '#0F172A' },
-  productQtyText: { fontSize: 13, color: '#64748B', fontWeight: '500', backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, overflow: 'hidden' },
-  noItemsText: { fontSize: 14, color: '#64748B', fontStyle: 'italic', textAlign: 'center', marginVertical: 10 },
+  productPriceText: { fontSize: 15, fontWeight: '700', color: AllColors.slateDark },
+  productQtyText: { fontSize: 13, color: AllColors.slateSub, fontWeight: '500', backgroundColor: AllColors.divider, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, overflow: 'hidden' },
+  noItemsText: { fontSize: 14, color: AllColors.slateSub, fontStyle: 'italic', textAlign: 'center', marginVertical: 10 },
 
   priceRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  priceLabel: { fontSize: 14, color: '#475569' },
-  priceValue: { fontSize: 14, color: '#1E293B', fontWeight: '600' },
-  priceValueDiscount: { fontSize: 14, color: '#16A34A', fontWeight: '600' },
-  priceValueFree: { fontSize: 14, color: '#16A34A', fontWeight: '600' },
+  priceLabel: { fontSize: 14, color: AllColors.slateMuted },
+  priceValue: { fontSize: 14, color: AllColors.slateHeader, fontWeight: '600' },
+  priceValueDiscount: { fontSize: 14, color: AllColors.greenLight, fontWeight: '600' },
+  priceValueFree: { fontSize: 14, color: AllColors.greenLight, fontWeight: '600' },
   priceRowTotal: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  priceLabelTotal: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
+  priceLabelTotal: { fontSize: 16, fontWeight: '700', color: AllColors.slateDark },
   priceValueTotal: { fontSize: 18, fontWeight: '800', color: AllColors.primary },
 
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  errorText: { fontSize: 16, color: '#64748B' },
+  errorText: { fontSize: 16, color: AllColors.slateSub },
+  headerSpacer: { width: 40 },
 });

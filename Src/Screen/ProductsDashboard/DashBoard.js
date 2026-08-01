@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { useTheme } from '../../Context/ThemeContext';
 
 import {
   View,
@@ -123,6 +124,7 @@ const SubCategoryCardItem = ({ item, isSelected, onPress }) => {
 
 export default function DashBoard() {
   const Navigation = useNavigation();
+  const { theme, isDarkMode } = useTheme();
 
   const [id, setId] = useState('')
   const [open, setOpen] = useState(false)
@@ -1272,9 +1274,9 @@ export default function DashBoard() {
       <View style={styles.skeletonContainer}>
         {/* Header Skeleton */}
         <View style={styles.skeletonHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={styles.flexRowGap12}>
             <Animated.View style={[styles.skeletonAvatar, { opacity: skeletonOpacity }]} />
-            <View style={{ gap: 6 }}>
+            <View style={styles.gap6}>
               <Animated.View style={[styles.skeletonTextLine, { width: 120, height: 16, opacity: skeletonOpacity }]} />
               <Animated.View style={[styles.skeletonTextLine, { width: 200, height: 12, opacity: skeletonOpacity }]} />
             </View>
@@ -1333,7 +1335,7 @@ export default function DashBoard() {
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={gotoEditProfile}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
+              style={styles.flexRowGap12}
             >
               <Image
                 source={{
@@ -1432,11 +1434,7 @@ export default function DashBoard() {
                 {imgSrc ? (
                   <Image
                     source={{ uri: imgSrc }}
-                    style={{
-                      width: 20,
-                      height: 20,
-                      marginRight: 6,
-                    }}
+                    style={styles.catImageStyle}
                     resizeMode="contain"
                   />
                 ) : (
@@ -1444,16 +1442,12 @@ export default function DashBoard() {
                     name={item.id === 'all' ? 'grid-outline' : 'pricetag-outline'}
                     size={16}
                     color={isSelected ? AllColors.primary : '#64748B'}
-                    style={{ marginRight: 6 }}
+                    style={styles.catIconMargin}
                   />
                 )}
 
                 <Text
-                  style={{
-                    color: isSelected ? AllColors.primary : '#334155',
-                    fontWeight: isSelected ? '700' : '600',
-                    fontSize: 13,
-                  }}
+                  style={[styles.catNameText, isSelected ? styles.catNameSelected : styles.catNameUnselected]}
                 >
                   {item.name}
                 </Text>
@@ -1464,7 +1458,7 @@ export default function DashBoard() {
 
         {/* SUB CATEGORY LIST */}
         {subCategoriesLoading ? (
-          <ActivityIndicator size="small" color={AllColors.primary} style={{ marginVertical: 10 }} />
+          <ActivityIndicator size="small" color={AllColors.primary} style={styles.subCatLoader} />
         ) : (
           subCategories && subCategories.length > 0 && (
             <View style={styles.subCategoryContainer}>
@@ -1475,11 +1469,7 @@ export default function DashBoard() {
                 showsHorizontalScrollIndicator={false}
                 keyExtractor={(item) => item.id.toString()}
                 extraData={selectedSubCategoryId}
-                contentContainerStyle={{
-                  paddingHorizontal: 16,
-                  paddingTop: 10,
-                  paddingBottom: 14,
-                }}
+                contentContainerStyle={styles.subCatContentContainer}
                 nestedScrollEnabled={true}
                 directionalLockEnabled={true}
                 bounces={false}
@@ -1496,7 +1486,7 @@ export default function DashBoard() {
         )}
 
         {productLoading ? (
-          <ActivityIndicator size="large" color={AllColors.primary} style={{ marginVertical: 40 }} />
+          <ActivityIndicator size="large" color={AllColors.primary} style={styles.productLoader} />
         ) : (
           <>
             {isFilterActive ? (
@@ -1518,9 +1508,9 @@ export default function DashBoard() {
             )}
 
             {((isFilterActive && filteredProducts.length === 0) || (searchText.trim() && searchProducts.length === 0 && !loading)) && (
-              <View style={{ padding: 40, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={styles.emptySearchContainer}>
                 <Ionicons name="search-outline" size={48} color="#94A3B8" />
-                <Text style={{ marginTop: 12, color: '#64748B', fontSize: 15, fontWeight: '500', textAlign: 'center' }}>
+                <Text style={styles.emptySearchText}>
                   {isFilterActive ? "No products match the selected filters" : `No products found for "${searchText}"`}
                 </Text>
               </View>
@@ -1982,7 +1972,7 @@ export default function DashBoard() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <FlatList
         data={isFilterActive ? filteredProducts : (searchText.trim() ? searchProducts : product)}
         numColumns={2}
@@ -2056,7 +2046,7 @@ export default function DashBoard() {
 
             <View style={styles.viewCartButtonContainer}>
               <Text style={styles.viewCartText}>View Cart</Text>
-              <Ionicons name="arrow-forward" size={16} color="#FFFFFF" style={{ marginLeft: 4 }} />
+              <Ionicons name="arrow-forward" size={16} color="#FFFFFF" style={styles.cartArrowMargin} />
             </View>
           </TouchableOpacity>
         </Animated.View>
@@ -2078,7 +2068,7 @@ export default function DashBoard() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.filterModalScroll}>
               {/* Price Range Filter */}
               <Text style={styles.filterSectionLabel}>Price Range</Text>
               <View style={styles.chipRow}>
@@ -2100,7 +2090,7 @@ export default function DashBoard() {
               </View>
 
               {/* Sort by Price */}
-              <Text style={[styles.filterSectionLabel, { marginTop: 16 }]}>Sort by Price</Text>
+              <Text style={[styles.filterSectionLabel, styles.mt16]}>Sort by Price</Text>
               <View style={styles.chipRow}>
                 {[
                   { label: 'Default', val: 'none' },
@@ -2121,8 +2111,8 @@ export default function DashBoard() {
               {/* Brand Filter */}
               {availableBrands.length > 0 && (
                 <>
-                  <Text style={[styles.filterSectionLabel, { marginTop: 16 }]}>Brand</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                  <Text style={[styles.filterSectionLabel, styles.mt16]}>Brand</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.brandScrollMb}>
                     <TouchableOpacity
                       style={[styles.chip, selectedBrand === 'all' && styles.activeChip]}
                       onPress={() => setSelectedBrand('all')}>
@@ -2169,16 +2159,16 @@ export default function DashBoard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: AllColors.screenBg,
   },
   topHeader: {
     paddingTop: 16,
     paddingBottom: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
@@ -2199,18 +2189,18 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
   logoSubtext: {
     fontSize: 11,
-    color: '#64748B',
+    color: AllColors.slateSub,
     marginTop: 2,
   },
   bellBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: AllColors.divider,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -2222,7 +2212,7 @@ const styles = StyleSheet.create({
   },
   searchBox: {
     flex: 1,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: AllColors.divider,
     height: 46,
     borderRadius: 12,
     flexDirection: 'row',
@@ -2234,7 +2224,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
     paddingVertical: 0,
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
   filterBtn: {
     width: 46,
@@ -2258,29 +2248,29 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#10B981',
+    backgroundColor: AllColors.greenLight,
     borderWidth: 1.5,
-    borderColor: '#FFFFFF',
+    borderColor: AllColors.white,
   },
   categoryBtn: {
     flexDirection: 'row',
     paddingHorizontal: 16,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
     elevation: 1,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: AllColors.divider,
   },
   activeCategory: {
-    backgroundColor: '#FFF1F7',
+    backgroundColor: AllColors.softPinkBg,
     borderColor: AllColors.primary,
   },
   sectionHeader: {
@@ -2294,7 +2284,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
   sectionViewAll: {
     fontSize: 13,
@@ -2303,41 +2293,41 @@ const styles = StyleSheet.create({
   },
   dealCard: {
     width: 156,
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     borderRadius: 12,
     padding: 10,
     marginRight: 10,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: AllColors.divider,
     marginBottom: 8,
   },
   gridCard: {
     flex: 1,
     maxWidth: '48%',
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     borderRadius: 12,
     padding: 10,
     marginHorizontal: '1%',
     marginVertical: 6,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: AllColors.divider,
   },
   cardImageContainer: {
     width: '100%',
     height: 110,
     borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: AllColors.screenBg,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -2360,7 +2350,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     zIndex: 10,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 1,
@@ -2371,7 +2361,7 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#334155',
+    color: AllColors.slateText,
     lineHeight: 16,
     height: 32,
   },
@@ -2383,11 +2373,11 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
   oldPrice: {
     textDecorationLine: 'line-through',
-    color: '#94A3B8',
+    color: AllColors.slateLight,
     marginLeft: 4,
     fontSize: 10,
   },
@@ -2398,7 +2388,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   offer: {
-    color: '#10B981',
+    color: AllColors.greenLight,
     fontWeight: '700',
     fontSize: 10,
   },
@@ -2410,7 +2400,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#FFF1F7',
+    backgroundColor: AllColors.softPinkBg,
     borderWidth: 1,
     borderColor: AllColors.primary,
     justifyContent: 'center',
@@ -2453,7 +2443,7 @@ const styles = StyleSheet.create({
     minWidth: 14,
   },
   outOfStockBadge: {
-    backgroundColor: '#FFE4E6',
+    backgroundColor: AllColors.redSoftBg,
     paddingHorizontal: 6,
     paddingVertical: 3,
     borderRadius: 6,
@@ -2461,17 +2451,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   outOfStockText: {
-    color: '#E11D48',
+    color: AllColors.redLight,
     fontSize: 9,
     fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    backgroundColor: AllColors.modalOverlay,
     justifyContent: 'flex-end',
   },
   filterModalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
@@ -2486,17 +2476,17 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: AllColors.divider,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
   filterSectionLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#334155',
+    color: AllColors.slateText,
     marginBottom: 8,
   },
   chipRow: {
@@ -2508,7 +2498,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: AllColors.divider,
     marginRight: 6,
     marginBottom: 6,
   },
@@ -2518,10 +2508,10 @@ const styles = StyleSheet.create({
   chipText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#475569',
+    color: AllColors.slateMuted,
   },
   activeChipText: {
-    color: '#FFFFFF',
+    color: AllColors.white,
   },
   modalFooter: {
     flexDirection: 'row',
@@ -2530,7 +2520,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: AllColors.divider,
   },
   resetBtn: {
     flex: 1,
@@ -2540,7 +2530,7 @@ const styles = StyleSheet.create({
     borderColor: AllColors.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
   },
   resetBtnText: {
     fontSize: 14,
@@ -2561,7 +2551,7 @@ const styles = StyleSheet.create({
   applyBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: AllColors.white,
   },
   floatingCartBar: {
     position: 'absolute',
@@ -2576,7 +2566,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     elevation: 8,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 6,
@@ -2590,26 +2580,26 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
-    backgroundColor: '#F8FAFC',
+    borderColor: AllColors.white,
+    backgroundColor: AllColors.screenBg,
   },
   miniCartMoreBadge: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: -8,
     zIndex: 5,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: AllColors.lightGrey,
   },
   miniCartMoreText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
   cartQuantityInfo: {
     marginLeft: 12,
@@ -2920,5 +2910,67 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 10,
     fontWeight: '800',
+  },
+  flexRowGap12: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  gap6: {
+    gap: 6,
+  },
+  catImageStyle: {
+    width: 20,
+    height: 20,
+    marginRight: 6,
+  },
+  catIconMargin: {
+    marginRight: 6,
+  },
+  catNameText: {
+    fontSize: 13,
+  },
+  catNameSelected: {
+    color: AllColors.primary,
+    fontWeight: '700',
+  },
+  catNameUnselected: {
+    color: '#334155',
+    fontWeight: '600',
+  },
+  subCatLoader: {
+    marginVertical: 10,
+  },
+  subCatContentContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 14,
+  },
+  productLoader: {
+    marginVertical: 40,
+  },
+  emptySearchContainer: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptySearchText: {
+    marginTop: 12,
+    color: '#64748B',
+    fontSize: 15,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  cartArrowMargin: {
+    marginLeft: 4,
+  },
+  filterModalScroll: {
+    maxHeight: 420,
+  },
+  mt16: {
+    marginTop: 16,
+  },
+  brandScrollMb: {
+    marginBottom: 12,
   },
 });

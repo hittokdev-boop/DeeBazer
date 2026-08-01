@@ -19,9 +19,11 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { BASE_URL, getToken, getuserId } from '../../Api/Api';
 import AllColors from '../../Constants/Color';
+import { useTheme } from '../../Context/ThemeContext';
 
 const EditProfileScreen = () => {
     const navigation = useNavigation();
+    const { theme } = useTheme();
 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -175,14 +177,14 @@ const EditProfileScreen = () => {
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-                    <Ionicons name="arrow-back" size={22} color="#0F172A" />
+                    <Ionicons name="arrow-back" size={22} color={AllColors.slateDark} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Edit Profile</Text>
-                <View style={{ width: 40 }} />
+                <View style={styles.headerSpacer} />
             </View>
 
             {loading ? (
@@ -196,24 +198,24 @@ const EditProfileScreen = () => {
                         <View style={styles.avatarContainer}>
                             <Image source={{ uri: profileImage }} style={styles.avatarImage} resizeMode="cover" />
                             <TouchableOpacity style={styles.cameraBtn} onPress={handlePickImage} activeOpacity={0.85}>
-                                <Ionicons name="camera-outline" size={18} color="#FFFFFF" />
+                                <Ionicons name="camera-outline" size={18} color={AllColors.white} />
                             </TouchableOpacity>
                         </View>
-                        <Text style={styles.changePhotoText}>Tap camera icon to change photo</Text>
+                        <Text style={styles.changePhotoText}>Tap camera to change photo</Text>
                     </View>
 
                     {/* Form Fields */}
                     <View style={styles.formCard}>
                         {/* FULL NAME */}
                         <View style={styles.inputBox}>
-                            <Text style={styles.label}>Full Name *</Text>
+                            <Text style={styles.label}>Full Name</Text>
                             <View style={styles.inputWrapper}>
-                                <Ionicons name="person-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                <Ionicons name="person-outline" size={18} color={AllColors.slateSub} style={styles.inputIcon} />
                                 <TextInput
                                     value={name}
                                     onChangeText={setName}
-                                    placeholder="Enter Full Name"
-                                    placeholderTextColor="#94A3B8"
+                                    placeholder="Enter your name"
+                                    placeholderTextColor={AllColors.slateLight}
                                     style={styles.input}
                                 />
                             </View>
@@ -223,12 +225,12 @@ const EditProfileScreen = () => {
                         <View style={styles.inputBox}>
                             <Text style={styles.label}>Email Address</Text>
                             <View style={styles.inputWrapper}>
-                                <Ionicons name="mail-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                <Ionicons name="mail-outline" size={18} color={AllColors.slateSub} style={styles.inputIcon} />
                                 <TextInput
                                     value={email}
                                     onChangeText={setEmail}
-                                    placeholder="Enter Email Address"
-                                    placeholderTextColor="#94A3B8"
+                                    placeholder="Enter your email"
+                                    placeholderTextColor={AllColors.slateLight}
                                     keyboardType="email-address"
                                     autoCapitalize="none"
                                     style={styles.input}
@@ -240,29 +242,12 @@ const EditProfileScreen = () => {
                         <View style={styles.inputBox}>
                             <Text style={styles.label}>Mobile Number</Text>
                             <View style={styles.inputWrapper}>
-                                <Ionicons name="call-outline" size={20} color="#64748B" style={styles.inputIcon} />
+                                <Ionicons name="call-outline" size={18} color={AllColors.slateSub} style={styles.inputIcon} />
                                 <TextInput
                                     value={mobile}
                                     onChangeText={(text) => setMobile(text.replace(/[^0-9]/g, '').slice(0, 10))}
-                                    placeholder="Enter 10-digit Mobile Number"
-                                    placeholderTextColor="#94A3B8"
-                                    keyboardType="phone-pad"
-                                    maxLength={10}
-                                    style={styles.input}
-                                />
-                            </View>
-                        </View>
-
-                        {/* ALTERNATIVE PHONE */}
-                        <View style={styles.inputBox}>
-                            <Text style={styles.label}>Alternative Phone (Optional)</Text>
-                            <View style={styles.inputWrapper}>
-                                <Ionicons name="call-outline" size={20} color="#64748B" style={styles.inputIcon} />
-                                <TextInput
-                                    value={alternativePhone}
-                                    onChangeText={(text) => setAlternativePhone(text.replace(/[^0-9]/g, '').slice(0, 10))}
-                                    placeholder="Enter 10-digit Alternative Phone"
-                                    placeholderTextColor="#94A3B8"
+                                    placeholder="Enter mobile number"
+                                    placeholderTextColor={AllColors.slateLight}
                                     keyboardType="phone-pad"
                                     maxLength={10}
                                     style={styles.input}
@@ -278,7 +263,7 @@ const EditProfileScreen = () => {
                             activeOpacity={0.85}
                         >
                             {saving ? (
-                                <ActivityIndicator size="small" color="#FFFFFF" />
+                                <ActivityIndicator size="small" color={AllColors.white} />
                             ) : (
                                 <Text style={styles.saveText}>Save Changes</Text>
                             )}
@@ -295,17 +280,17 @@ export default EditProfileScreen;
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8FAFC',
+        backgroundColor: AllColors.screenBg,
     },
     header: {
         height: 56,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: AllColors.white,
         paddingHorizontal: 16,
         elevation: 2,
-        shadowColor: '#000',
+        shadowColor: AllColors.shadow,
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.05,
         shadowRadius: 3,
@@ -320,11 +305,11 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 18,
         fontWeight: '700',
-        color: '#0F172A',
+        color: AllColors.slateDark,
     },
     loadingContainer: {
         flex: 1,
-        justify: 'center',
+        justifyContent: 'center',
         alignItems: 'center',
     },
     scrollContent: {
@@ -346,7 +331,7 @@ const styles = StyleSheet.create({
         borderRadius: 50,
         borderWidth: 3,
         borderColor: AllColors.primary,
-        backgroundColor: '#E2E8F0',
+        backgroundColor: AllColors.lightGrey,
     },
     cameraBtn: {
         position: 'absolute',
@@ -356,28 +341,28 @@ const styles = StyleSheet.create({
         width: 32,
         height: 32,
         borderRadius: 16,
-        justify: 'center',
+        justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 2,
-        borderColor: '#FFFFFF',
+        borderColor: AllColors.white,
         elevation: 4,
     },
     changePhotoText: {
         fontSize: 12,
-        color: '#64748B',
+        color: AllColors.slateSub,
         marginTop: 8,
     },
     formCard: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: AllColors.white,
         borderRadius: 16,
         padding: 18,
         elevation: 2,
-        shadowColor: '#000',
+        shadowColor: AllColors.shadow,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 4,
         borderWidth: 1,
-        borderColor: '#F1F5F9',
+        borderColor: AllColors.divider,
     },
     inputBox: {
         marginBottom: 18,
@@ -385,16 +370,16 @@ const styles = StyleSheet.create({
     label: {
         fontSize: 13,
         fontWeight: '600',
-        color: '#334155',
+        color: AllColors.slateText,
         marginBottom: 6,
     },
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F8FAFC',
+        backgroundColor: AllColors.screenBg,
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: '#E2E8F0',
+        borderColor: AllColors.lightGrey,
         paddingHorizontal: 12,
         height: 48,
     },
@@ -404,7 +389,7 @@ const styles = StyleSheet.create({
     input: {
         flex: 1,
         fontSize: 14,
-        color: '#0F172A',
+        color: AllColors.slateDark,
         paddingVertical: 0,
     },
     saveBtn: {
@@ -421,8 +406,11 @@ const styles = StyleSheet.create({
         shadowRadius: 6,
     },
     saveText: {
-        color: '#FFFFFF',
+        color: AllColors.white,
         fontSize: 16,
         fontWeight: '700',
+    },
+    headerSpacer: {
+        width: 40,
     },
 });

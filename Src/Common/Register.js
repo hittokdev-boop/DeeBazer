@@ -19,8 +19,10 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import { BASE_URL, setToken, getDeviceId, setuserId, setMobile as saveMobile, setPassword as saveApiPassword } from '../Api/Api';
 import { useNavigation } from "@react-navigation/native";
 import LottieView from 'lottie-react-native';
+import { useTheme } from '../Context/ThemeContext';
 
 const Register = () => {
+  const { theme } = useTheme();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
@@ -128,23 +130,23 @@ const Register = () => {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#fff' }}
+      style={styles.keyboardView}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <ScrollView contentContainerStyle={styles.container}>
+        <ScrollView contentContainerStyle={[styles.container, { backgroundColor: theme.bg }]}>
           <TouchableOpacity 
              style={styles.backBtn}
              onPress={() => navigation.goBack()}
           >
-             <Ionicons name="arrow-back" size={24} color="#000" />
+             <Ionicons name="arrow-back" size={24} color={AllColors.black} />
           </TouchableOpacity>
 
           <LottieView
             source={require("../Assets/register.json")}
             autoPlay
             loop
-            style={{ width: '100%', height: 200, alignSelf: 'center', marginBottom: 10 }}
+            style={styles.animation}
           />
 
           <Text style={styles.title}>Create Account</Text>
@@ -153,10 +155,10 @@ const Register = () => {
           </Text>
 
           <View style={styles.inputContainer}>
-            <Ionicons name="person-outline" size={20} color="#666" style={styles.icon} />
+            <Ionicons name="person-outline" size={20} color={AllColors.slateSub} style={styles.icon} />
             <TextInput
               placeholder="Full Name *"
-              placeholderTextColor="#999"
+              placeholderTextColor={AllColors.slateLight}
               value={name}
               onChangeText={setName}
               style={styles.input}
@@ -164,10 +166,10 @@ const Register = () => {
           </View>
 
           <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color="#666" style={styles.icon} />
+            <Ionicons name="mail-outline" size={20} color={AllColors.slateSub} style={styles.icon} />
             <TextInput
               placeholder="Email *"
-              placeholderTextColor="#999"
+              placeholderTextColor={AllColors.slateLight}
               keyboardType="email-address"
               autoCapitalize="none"
               value={email}
@@ -177,10 +179,10 @@ const Register = () => {
           </View>
 
           <View style={styles.inputContainer}>
-            <Ionicons name="call-outline" size={20} color="#666" style={styles.icon} />
+            <Ionicons name="call-outline" size={20} color={AllColors.slateSub} style={styles.icon} />
             <TextInput
               placeholder="Mobile Number *"
-              placeholderTextColor="#999"
+              placeholderTextColor={AllColors.slateLight}
               keyboardType="number-pad"
               maxLength={10}
               value={mobile}
@@ -190,17 +192,17 @@ const Register = () => {
           </View>
 
           <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.icon} />
+            <Ionicons name="lock-closed-outline" size={20} color={AllColors.slateSub} style={styles.icon} />
             <TextInput
               placeholder="Password *"
-              placeholderTextColor="#999"
+              placeholderTextColor={AllColors.slateLight}
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
               style={styles.input}
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{padding: 5}}>
-              <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color="#666" />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+              <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color={AllColors.slateSub} />
             </TouchableOpacity>
           </View>
 
@@ -210,7 +212,7 @@ const Register = () => {
             disabled={loading}
           >
             {loading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={AllColors.white} />
             ) : (
               <Text style={styles.registerText}>Register</Text>
             )}
@@ -238,12 +240,25 @@ const Register = () => {
 export default Register;
 
 const styles = StyleSheet.create({
+  keyboardView: {
+    flex: 1,
+    backgroundColor: AllColors.white,
+  },
   container: {
     flexGrow: 1,
     paddingHorizontal: 22,
     paddingTop: 60,
     paddingBottom: 40,
-    backgroundColor: '#fff'
+    backgroundColor: AllColors.white,
+  },
+  animation: {
+    width: '100%',
+    height: 200,
+    alignSelf: 'center',
+    marginBottom: 10,
+  },
+  eyeBtn: {
+    padding: 5,
   },
   backBtn: {
     marginBottom: 20
@@ -256,14 +271,14 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 15,
-    color: "#666",
+    color: AllColors.slateSub,
     marginBottom: 30,
     lineHeight: 22,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
+    color: AllColors.slateText,
     marginTop: 10,
     marginBottom: 15
   },
@@ -271,9 +286,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E5E5E5",
+    borderColor: AllColors.borderLight,
     borderRadius: 14,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: AllColors.inputBg,
     marginBottom: 15,
     paddingHorizontal: 15,
     height: 55,
@@ -284,15 +299,15 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: "#000",
+    color: AllColors.black,
   },
   logoBtn: {
     flexDirection: "row",
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E5E5E5",
+    borderColor: AllColors.borderLight,
     borderRadius: 14,
-    backgroundColor: "#FAFAFA",
+    backgroundColor: AllColors.inputBg,
     marginBottom: 15,
     paddingHorizontal: 15,
     height: 55,
@@ -308,7 +323,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   registerText: {
-    color: "#fff",
+    color: AllColors.white,
     fontSize: 17,
     fontWeight: "700",
   },
@@ -318,7 +333,7 @@ const styles = StyleSheet.create({
     marginTop: 25,
   },
   footerText: {
-    color: "#777",
+    color: AllColors.textSecondary,
     fontSize: 15,
   },
   loginLink: {

@@ -18,6 +18,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useNavigation } from '@react-navigation/native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import AllColors from '../../Constants/Color';
+import { useTheme } from '../../Context/ThemeContext';
 
 const COUPONS_DATA = [
   {
@@ -64,6 +65,7 @@ const COUPONS_DATA = [
 
 export default function Coupons() {
   const navigation = useNavigation();
+  const { theme } = useTheme();
   const [promoCode, setPromoCode] = useState('');
   const [copiedCode, setCopiedCode] = useState(null);
 
@@ -113,8 +115,8 @@ export default function Coupons() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar backgroundColor={AllColors.white} barStyle="dark-content" />
 
       {/* Header */}
       <View style={styles.header}>
@@ -122,10 +124,10 @@ export default function Coupons() {
           style={styles.backBtn}
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={22} color="#1E293B" />
+          <Ionicons name="arrow-back" size={22} color={AllColors.slateDark} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Coupons & Offers</Text>
-        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>Apply Coupon</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
       <FlatList
@@ -135,11 +137,11 @@ export default function Coupons() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.inputCard}>
-            <Text style={styles.inputTitle}>Have a Coupon Code?</Text>
+            <Text style={styles.inputTitle}>Have a Promo Code?</Text>
             <View style={styles.inputRow}>
               <TextInput
                 placeholder="Enter Promo Code"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={AllColors.slateLight}
                 style={styles.input}
                 value={promoCode}
                 onChangeText={setPromoCode}
@@ -160,7 +162,7 @@ export default function Coupons() {
             <View style={styles.couponCard}>
               {/* Left Tag */}
               <View style={styles.leftTag}>
-                <MaterialCommunityIcons name="ticket-percent-outline" size={26} color="#FFFFFF" />
+                <MaterialCommunityIcons name="ticket-percent-outline" size={26} color={AllColors.white} />
                 <Text style={styles.discountText}>{item.discount}</Text>
               </View>
 
@@ -181,10 +183,10 @@ export default function Coupons() {
                     <Feather 
                       name={isCopied ? "check" : "copy"} 
                       size={14} 
-                      color={isCopied ? "#10B981" : AllColors.primary} 
-                      style={{ marginRight: 4 }} 
+                      color={isCopied ? AllColors.greenLight : AllColors.primary} 
+                      style={styles.iconMarginRight} 
                     />
-                    <Text style={[styles.copyBtnText, isCopied && { color: "#10B981" }]}>
+                    <Text style={[styles.copyBtnText, isCopied && styles.copiedText]}>
                       {isCopied ? "COPIED" : "COPY"}
                     </Text>
                   </TouchableOpacity>
@@ -203,17 +205,17 @@ export default function Coupons() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4F5F9',
+    backgroundColor: AllColors.screenBg,
   },
   header: {
     height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     paddingHorizontal: 16,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
@@ -228,7 +230,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
 
   listContainer: {
@@ -236,12 +238,12 @@ const styles = StyleSheet.create({
   },
 
   inputCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
@@ -249,7 +251,7 @@ const styles = StyleSheet.create({
   inputTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1E293B',
+    color: AllColors.slateHeader,
     marginBottom: 10,
   },
   inputRow: {
@@ -260,14 +262,14 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     height: 46,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: AllColors.screenBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: AllColors.lightGrey,
     paddingHorizontal: 14,
     fontSize: 14,
     fontWeight: '600',
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
   applyBtn: {
     height: 46,
@@ -280,17 +282,17 @@ const styles = StyleSheet.create({
   applyBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: AllColors.white,
   },
 
   couponCard: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     borderRadius: 16,
     marginBottom: 14,
     overflow: 'hidden',
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
@@ -305,7 +307,7 @@ const styles = StyleSheet.create({
   discountText: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: AllColors.white,
     marginTop: 6,
     textAlign: 'center',
   },
@@ -317,11 +319,11 @@ const styles = StyleSheet.create({
   couponTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
   couponDesc: {
     fontSize: 12,
-    color: '#64748B',
+    color: AllColors.slateSub,
     marginTop: 3,
     lineHeight: 16,
   },
@@ -333,7 +335,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   codeBox: {
-    backgroundColor: AllColors.lightPink || '#FCEBF5',
+    backgroundColor: AllColors.lightPink,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
@@ -361,7 +363,16 @@ const styles = StyleSheet.create({
 
   expiryText: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: AllColors.slateLight,
     marginTop: 8,
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  iconMarginRight: {
+    marginRight: 4,
+  },
+  copiedText: {
+    color: AllColors.greenLight,
   },
 });

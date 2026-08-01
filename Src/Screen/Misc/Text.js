@@ -12,6 +12,7 @@ import { useRoute,useNavigation } from "@react-navigation/native";
 import AntDesign from "react-native-vector-icons/AntDesign";
 import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityIcons";
 import Feather from "react-native-vector-icons/Feather";
+import AllColors from "../../Constants/Color";
 export default function ViewAllProducts(){
 
 const route=useRoute();
@@ -28,7 +29,7 @@ id:item.id
 
 return(
 
-<View style={{flex:1,backgroundColor:"#fff"}}>
+<View style={styles.container}>
 
 <Text style={styles.title}>
 {title}
@@ -70,7 +71,7 @@ style={styles.name}
 
 )}
 />
-<View style={{flexDirection:"row",justifyContent:"space-between"}}>
+<View style={styles.counterRow}>
   <TouchableOpacity>
   <Text>+</Text>
 </TouchableOpacity>
@@ -87,17 +88,26 @@ style={styles.name}
 }
 
 const styles=StyleSheet.create({
+container: {
+flex: 1,
+backgroundColor: AllColors.white
+},
+counterRow: {
+flexDirection: "row",
+justifyContent: "space-between"
+},
 
 title:{
 fontSize:22,
 fontWeight:"bold",
-padding:15
+padding:15,
+color: AllColors.slateDark,
 },
 
 card:{
 flex:1,
 margin:8,
-backgroundColor:"#fff",
+backgroundColor: AllColors.white,
 borderRadius:10,
 padding:10,
 elevation:3
@@ -116,24 +126,25 @@ priceRow: {
 
 oldPrice: {
   textDecorationLine: 'line-through',
-  color: '#999',
+  color: AllColors.slateLight,
   marginRight: 8,
   fontSize: 12,
 },
 
 offer: {
-  color: 'green',
+  color: AllColors.greenLight,
   fontWeight: '700',
   fontSize: 12,
 },
 name:{
 marginTop:8,
-fontWeight:"600"
+fontWeight:"600",
+color: AllColors.slateDark,
 },
 
 price:{
 marginTop:5,
-color:"red",
+color: AllColors.redLight,
 fontWeight:"bold"
 }
 

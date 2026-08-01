@@ -8,8 +8,9 @@ import Account from './Screen/AuthProfile/Account';
 import CartPage from './Screen/CartCheckout/CartPage';
 import AllColors from './Constants/Color';
 import VerifyOTP from './Common/VerifyOTP'
+import { useTheme } from './Context/ThemeContext';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import CommonLoginModal from './Common/Login';
 import TextView from './Screen/Misc/Text';
 import EditProfileScreen from './Screen/AuthProfile/EditProfile'
@@ -42,8 +43,14 @@ const Stack=createStackNavigator()
 
 const AppStack=()=>{
     return(
-      <Stack.Navigator  initialRouteName='Splash' screenOptions={{
-        headerShown:false
+      <Stack.Navigator initialRouteName='Splash' screenOptions={{
+        headerShown: false,
+        cardStyle: { backgroundColor: '#FFFFFF' },
+        cardStyleInterpolator: CardStyleInterpolators.forFadeFromBottomAndroid,
+        transitionSpec: {
+          open: { animation: 'timing', config: { duration: 350 } },
+          close: { animation: 'timing', config: { duration: 300 } },
+        },
       }}>
         <Stack.Screen name='Splash' component={SplashScreen}/>
         <Stack.Screen name='AppTab' component={AppTab}/>
@@ -69,13 +76,18 @@ const AppStack=()=>{
     )
 }
 const AppTab=()=>{
+    const { theme, isDarkMode } = useTheme();
     return(
 <Tab.Navigator
   screenOptions={{
     headerShown: false,
     tabBarShowLabel: false,
+    tabBarStyle: {
+      backgroundColor: theme.bottomTabBg,
+      borderTopColor: theme.divider,
+    },
     tabBarActiveTintColor:AllColors.primary,
-    tabBarInactiveTintColor:AllColors.grey,
+    tabBarInactiveTintColor:isDarkMode ? '#64748B' : AllColors.grey,
     // tabBarStyle: {
     //   position: 'absolute',
     //   bottom: 15,

@@ -21,11 +21,13 @@ import Feather from 'react-native-vector-icons/Feather';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AllColors from '../../Constants/Color';
 import { BASE_URL, getToken, getuserId } from '../../Api/Api';
+import { useTheme } from '../../Context/ThemeContext';
 
 const { width } = Dimensions.get('window');
 const slideWidth = width - 32;
 
 export default function ProductDetails({ route }) {
+  const { theme } = useTheme();
   const [product, setProduct] = useState({});
   const [productImage, setProductImage] = useState(null);
   const [isAddedToCart, setIsAddedToCart] = useState(false);
@@ -288,7 +290,7 @@ export default function ProductDetails({ route }) {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar backgroundColor="#F4F5F9" barStyle="dark-content" />
 
       {/* Top Header & Product Image Section */}
@@ -437,7 +439,7 @@ export default function ProductDetails({ route }) {
             name={isAddedToCart ? 'bag-check-outline' : 'cart-outline'}
             size={20}
             color={AllColors.primary}
-            style={{ marginRight: 6 }}
+            style={styles.btnIconMarginRight}
           />
           <Text style={styles.cartButtonText}>
             {isAddedToCart ? 'Go To Cart' : 'Add To Cart'}
@@ -449,11 +451,11 @@ export default function ProductDetails({ route }) {
           onPress={handleBuyNow}
           activeOpacity={0.85}>
           <LinearGradient
-            colors={[AllColors.primary, '#D8065B']}
+            colors={[AllColors.primary, AllColors.primaryGradientEnd]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.buyGradient}>
-            <Feather name="zap" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Feather name="zap" size={18} color={AllColors.white} style={styles.btnIconMarginRight} />
             <Text style={styles.buyButtonText}>Buy Now</Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -465,31 +467,31 @@ export default function ProductDetails({ route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F4F5F9',
+    backgroundColor: AllColors.screenBg,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: '#64748B',
+    color: AllColors.slateSub,
     fontWeight: '500',
   },
 
   /* Image Header Card */
   imageHeaderCard: {
     height: '38%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     borderBottomLeftRadius: 26,
     borderBottomRightRadius: 26,
     paddingTop: Platform.OS === 'ios' ? 44 : 12,
     paddingHorizontal: 16,
     elevation: 4,
-    shadowColor: '#000000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -510,11 +512,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 3,
-    shadowColor: '#000000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.12,
     shadowRadius: 4,
@@ -546,7 +548,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#CBD5E1',
+    backgroundColor: AllColors.slateBorder,
     marginHorizontal: 4,
   },
   paginationDotActive: {
@@ -564,7 +566,7 @@ const styles = StyleSheet.create({
   },
   categoryBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: AllColors.lightPink || '#FCEBF5',
+    backgroundColor: AllColors.lightPink,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
@@ -578,7 +580,7 @@ const styles = StyleSheet.create({
   discountBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#D1FAE5',
+    backgroundColor: AllColors.greenSoftBg,
     paddingHorizontal: 9,
     paddingVertical: 3.5,
     borderRadius: 20,
@@ -587,13 +589,13 @@ const styles = StyleSheet.create({
   discountBadgeText: {
     fontSize: 10.5,
     fontWeight: '700',
-    color: '#059669',
+    color: AllColors.greenSoftText,
   },
 
   productTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#0F172A',
+    color: AllColors.slateDark,
     lineHeight: 26,
   },
   priceContainer: {
@@ -609,12 +611,12 @@ const styles = StyleSheet.create({
   oldPriceText: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#94A3B8',
+    color: AllColors.slateLight,
     textDecorationLine: 'line-through',
   },
   shortDescText: {
     fontSize: 12.5,
-    color: '#64748B',
+    color: AllColors.slateSub,
     lineHeight: 18,
   },
 
@@ -625,12 +627,12 @@ const styles = StyleSheet.create({
   descTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1E293B',
+    color: AllColors.slateHeader,
     marginBottom: 4,
   },
   fullDescText: {
     fontSize: 13.5,
-    color: '#475569',
+    color: AllColors.slateMuted,
     lineHeight: 20,
   },
 
@@ -638,7 +640,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     borderRadius: 12,
     paddingVertical: 11,
     paddingHorizontal: 8,
@@ -651,26 +653,26 @@ const styles = StyleSheet.create({
   featureText: {
     fontSize: 12.5,
     fontWeight: '600',
-    color: '#1E293B',
+    color: AllColors.slateHeader,
   },
   featureDivider: {
     width: 1,
     height: 18,
-    backgroundColor: '#CBD5E1',
+    backgroundColor: AllColors.slateBorder,
   },
 
   /* Bottom Bar */
   bottomBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     gap: 12,
     elevation: 10,
-    shadowColor: '#000000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
@@ -684,7 +686,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: AllColors.primary,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
   },
   cartButtonText: {
     fontSize: 15,
@@ -706,6 +708,9 @@ const styles = StyleSheet.create({
   buyButtonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: AllColors.white,
   },
-});
+  btnIconMarginRight: {
+    marginRight: 6,
+  },
+});

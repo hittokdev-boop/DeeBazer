@@ -7,7 +7,9 @@ import {
   View,
   Alert as RNAlert,
   Modal,
+  Switch,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import Feather from 'react-native-vector-icons/Feather';
@@ -19,8 +21,10 @@ import CustomLoader from '../../Common/Loader';
 import { BASE_URL, getToken, removemobile, removeToken, removeuserId, getPassword, removePassword } from '../../Api/Api';
 import CustomAlert from '../../Common/Alert';
 import SuccessModal from '../../Common/SuccessScreen';
+import { useTheme } from '../../Context/ThemeContext';
 
 export default function Account() {
+  const { isDarkMode, toggleDarkMode, theme } = useTheme();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showAlert, setShowAlert] = useState(false);
@@ -41,13 +45,13 @@ export default function Account() {
 
   const Navigation = useNavigation();
 
-
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(false);
     }, 1500);
     return () => clearTimeout(timer);
   }, []);
+
 
   useFocusEffect(
     React.useCallback(() => {
@@ -79,11 +83,10 @@ export default function Account() {
   const goToHelpCenter = () => handleNavigate('HelpCenter');
   const gotoEditProfile = () => handleNavigate('editProfile');
   const gotoSaveAddress = () => handleNavigate('AllAddress');
-  // 7631192321
+
   const checkLogin = async () => {
     try {
       const token = await getToken();
-      // console.log(token)
       if (token) {
         setIsLoggedIn(true);
         const response = await fetch(`${BASE_URL}me`, {
@@ -161,7 +164,6 @@ export default function Account() {
       });
 
       const data = await response.json();
-      // console.log("Delete Account API response:", data)
 
       if (response.ok) {
         await removeToken();
@@ -208,18 +210,18 @@ export default function Account() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       {/* HEADER */}
-      <View style={styles.header}>
-        <Text style={styles.headerText}>My Account</Text>
+      <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
+        <Text style={[styles.headerText, { color: theme.headerText }]}>My Account</Text>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {!isLoggedIn ? (
           /* LOGGED OUT BANNER */
-          <View style={styles.loginBanner}>
+          <View style={[styles.loginBanner, { backgroundColor: theme.bannerBg }]}>
             <View style={styles.avatarCircle}>
-              <AntDesign name="user" size={34} color="#fff" />
+              <AntDesign name="user" size={34} color={AllColors.white} />
             </View>
             <Text style={styles.loginTitle}>Welcome to DeeBazer</Text>
             <Text style={styles.loginSubtitle}>
@@ -234,130 +236,158 @@ export default function Account() {
           </View>
         ) : (
           /* LOGGED IN USER INFO HEADER */
-          <View style={styles.content}>
-            <Text style={styles.userName}>Hey! {userName}</Text>
+          <View style={[styles.content, { backgroundColor: theme.cardBg, borderBottomColor: theme.divider }]}>
+            <Text style={[styles.userName, { color: theme.textPrimary }]}>Hey! {userName}</Text>
           </View>
         )}
 
         {/* QUICK MENU GRID / BUTTONS */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Access</Text>
+        <View style={[styles.section, { backgroundColor: theme.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Quick Access</Text>
           <View style={styles.gridContainer}>
             <TouchableOpacity
-              style={styles.box}
+              style={[styles.box, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
               activeOpacity={0.7}
               onPress={goToOrders}>
               <MaterialCommunityIcons
                 name="clipboard-text-outline"
                 size={28}
-                color={AllColors.primary}
+                color={theme.iconPrimary}
               />
-              <Text style={styles.boxText}>Orders</Text>
+              <Text style={[styles.boxText, { color: theme.textSecondary }]}>Orders</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.box}
+              style={[styles.box, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
               activeOpacity={0.7}
               onPress={goToWishList}>
               <AntDesign
                 name="hearto"
                 size={26}
-                color={AllColors.primary}
+                color={theme.iconPrimary}
               />
-              <Text style={styles.boxText}>Wishlist</Text>
+              <Text style={[styles.boxText, { color: theme.textSecondary }]}>Wishlist</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.box}
+              style={[styles.box, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
               activeOpacity={0.7}
               onPress={goToCoupons}>
               <MaterialCommunityIcons
                 name="ticket-percent-outline"
                 size={28}
-                color={AllColors.primary}
+                color={theme.iconPrimary}
               />
-              <Text style={styles.boxText}>Coupons</Text>
+              <Text style={[styles.boxText, { color: theme.textSecondary }]}>Coupons</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.box}
+              style={[styles.box, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
               activeOpacity={0.7}
               onPress={goToHelpCenter}>
               <Feather
                 name="headphones"
                 size={26}
-                color={AllColors.primary}
+                color={theme.iconPrimary}
               />
-              <Text style={styles.boxText}>Help Center</Text>
+              <Text style={[styles.boxText, { color: theme.textSecondary }]}>Help Center</Text>
             </TouchableOpacity>
           </View>
         </View>
 
+        {/* PREFERENCES & THEME */}
+        <View style={[styles.section, { backgroundColor: theme.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>App Theme</Text>
+
+          {/* Light/Dark mode buttons removed */}
+
+          <View style={[styles.row, { borderBottomWidth: 0 }]}>
+            <View style={styles.rowLeft}>
+              <Ionicons
+                name={isDarkMode ? "moon" : "sunny"}
+                size={22}
+                color={theme.iconPrimary}
+              />
+              <View style={{ marginLeft: 12 }}>
+                <Text style={[styles.rowText, { color: theme.textSecondary, marginLeft: 0 }]}>Theme Preference</Text>
+                <Text style={{ fontSize: 12, color: theme.modalSubText, marginTop: 2 }}>
+                  {isDarkMode ? 'Dark theme active' : 'Light theme active'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={isDarkMode}
+              onValueChange={toggleDarkMode}
+              trackColor={{ false: '#CBD5E1', true: AllColors.primary }}
+              thumbColor={isDarkMode ? '#FFFFFF' : '#F1F5F9'}
+            />
+          </View>
+        </View>
+
+
         {/* ACCOUNT SETTINGS (Only if logged in) */}
         {isLoggedIn && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Account Settings</Text>
+          <View style={[styles.section, { backgroundColor: theme.cardBg }]}>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Account Settings</Text>
             <TouchableOpacity
-              style={styles.row}
+              style={[styles.row, { borderBottomColor: theme.divider }]}
               activeOpacity={0.7}
               onPress={gotoEditProfile}>
               <View style={styles.rowLeft}>
-                <AntDesign name="user" size={22} color={AllColors.primary} />
-                <Text style={styles.rowText}>Edit Profile</Text>
+                <AntDesign name="user" size={22} color={theme.iconPrimary} />
+                <Text style={[styles.rowText, { color: theme.textSecondary }]}>Edit Profile</Text>
               </View>
-              <AntDesign name="right" size={18} color="#777" />
+              <AntDesign name="right" size={18} color={theme.modalSubText} />
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.row}
+              style={[styles.row, { borderBottomColor: theme.divider }]}
               activeOpacity={0.7}
               onPress={gotoSaveAddress}>
               <View style={styles.rowLeft}>
-                <Ionicons name="location-outline" size={22} color={AllColors.primary} />
-                <Text style={styles.rowText}>Saved Address</Text>
+                <Ionicons name="location-outline" size={22} color={theme.iconPrimary} />
+                <Text style={[styles.rowText, { color: theme.textSecondary }]}>Saved Address</Text>
               </View>
-              <AntDesign name="right" size={18} color="#777" />
+              <AntDesign name="right" size={18} color={theme.modalSubText} />
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.row}
+              style={[styles.row, { borderBottomColor: theme.divider }]}
               activeOpacity={0.7}
               onPress={confirmDeleteAccount}>
               <View style={styles.rowLeft}>
-                <AntDesign name="delete" size={22} color={AllColors.primary} />
-                <Text style={styles.rowText}>Delete Account</Text>
+                <AntDesign name="delete" size={22} color={theme.iconPrimary} />
+                <Text style={[styles.rowText, { color: theme.textSecondary }]}>Delete Account</Text>
               </View>
-              <AntDesign name="right" size={18} color="#777" />
+              <AntDesign name="right" size={18} color={theme.modalSubText} />
             </TouchableOpacity>
           </View>
         )}
 
         {/* FEEDBACK & SUPPORT */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Feedback & Support</Text>
-
-
+        <View style={[styles.section, { backgroundColor: theme.cardBg }]}>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Feedback & Support</Text>
 
           <TouchableOpacity
-            style={styles.row}
+            style={[styles.row, { borderBottomColor: theme.divider }]}
             activeOpacity={0.7}
             onPress={goToCoupons}>
             <View style={styles.rowLeft}>
-              <MaterialCommunityIcons name="ticket-percent-outline" size={22} color={AllColors.primary} />
-              <Text style={styles.rowText}>Coupons & Offers</Text>
+              <MaterialCommunityIcons name="ticket-percent-outline" size={22} color={theme.iconPrimary} />
+              <Text style={[styles.rowText, { color: theme.textSecondary }]}>Coupons & Offers</Text>
             </View>
-            <AntDesign name="right" size={18} color="#777" />
+            <AntDesign name="right" size={18} color={theme.modalSubText} />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.row}
+            style={[styles.row, { borderBottomColor: theme.divider }]}
             activeOpacity={0.7}
             onPress={goToHelpCenter}>
             <View style={styles.rowLeft}>
-              <AntDesign name="questioncircleo" size={22} color={AllColors.primary} />
-              <Text style={styles.rowText}>Browse FAQs</Text>
+              <AntDesign name="questioncircleo" size={22} color={theme.iconPrimary} />
+              <Text style={[styles.rowText, { color: theme.textSecondary }]}>Browse FAQs</Text>
             </View>
-            <AntDesign name="right" size={18} color="#777" />
+            <AntDesign name="right" size={18} color={theme.modalSubText} />
           </TouchableOpacity>
         </View>
 
@@ -365,15 +395,15 @@ export default function Account() {
         {isLoggedIn && (
           <View style={styles.logoutContainer}>
             <TouchableOpacity
-              style={styles.logoutBtn}
+              style={[styles.logoutBtn, { backgroundColor: theme.cardBg, borderColor: theme.iconPrimary }]}
               activeOpacity={0.7}
               onPress={requestForLogout}>
-              <Text style={styles.logoutText}>Log Out</Text>
+              <Text style={[styles.logoutText, { color: theme.iconPrimary }]}>Log Out</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        <View style={{ height: 40 }} />
+        <View style={styles.bottomSpacer} />
       </ScrollView>
 
       <CustomAlert
@@ -395,9 +425,9 @@ export default function Account() {
         onRequestClose={() => setIsDeleteModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Delete Account</Text>
-            <Text style={styles.modalSub}>Please select a reason for deleting your account:</Text>
+          <View style={[styles.modalContent, { backgroundColor: theme.modalBg }]}>
+            <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Delete Account</Text>
+            <Text style={[styles.modalSub, { color: theme.modalSubText }]}>Please select a reason for deleting your account:</Text>
             {deleteReasons.map((reason, index) => (
               <TouchableOpacity
                 key={index}
@@ -405,10 +435,10 @@ export default function Account() {
                 onPress={() => setSelectedReason(reason)}
                 activeOpacity={0.7}
               >
-                <View style={styles.radioCircle}>
-                  {selectedReason === reason && <View style={styles.radioInner} />}
+                <View style={[styles.radioCircle, { borderColor: theme.iconPrimary }]}>
+                  {selectedReason === reason && <View style={[styles.radioInner, { backgroundColor: theme.iconPrimary }]} />}
                 </View>
-                <Text style={styles.radioText}>{reason}</Text>
+                <Text style={[styles.radioText, { color: theme.textSecondary }]}>{reason}</Text>
               </TouchableOpacity>
             ))}
             <View style={styles.modalActions}>
@@ -416,7 +446,7 @@ export default function Account() {
                 style={styles.modalCancelBtn}
                 onPress={() => setIsDeleteModalVisible(false)}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={[styles.modalCancelText, { color: theme.modalSubText }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalDeleteBtn, !selectedReason && { opacity: 0.5 }]}
@@ -435,6 +465,7 @@ export default function Account() {
     </SafeAreaView>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {
@@ -470,7 +501,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loginTitle: {
-    color: '#fff',
+    color: AllColors.white,
     fontSize: 22,
     fontWeight: '700',
     marginTop: 12,
@@ -481,7 +512,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   loginBtn: {
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     height: 48,
     borderRadius: 14,
     justifyContent: 'center',
@@ -495,19 +526,19 @@ const styles = StyleSheet.create({
   },
 
   content: {
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: AllColors.divider,
   },
   userName: {
     fontSize: 20,
-    color: '#0F172A',
+    color: AllColors.slateDark,
     fontWeight: '700',
   },
 
   section: {
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     marginTop: 10,
     paddingHorizontal: 16,
     paddingTop: 16,
@@ -515,7 +546,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    color: '#0F172A',
+    color: AllColors.slateDark,
     marginBottom: 14,
     fontWeight: '700',
   },
@@ -529,15 +560,15 @@ const styles = StyleSheet.create({
     width: '48%',
     height: 64,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: AllColors.lightGrey,
     borderRadius: 16,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     elevation: 1,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
     shadowRadius: 2,
@@ -545,7 +576,7 @@ const styles = StyleSheet.create({
   boxText: {
     fontSize: 15,
     marginLeft: 10,
-    color: '#334155',
+    color: AllColors.slateText,
     fontWeight: '600',
   },
 
@@ -555,7 +586,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: AllColors.divider,
   },
   rowLeft: {
     flexDirection: 'row',
@@ -563,7 +594,7 @@ const styles = StyleSheet.create({
   },
   rowText: {
     fontSize: 15,
-    color: '#334155',
+    color: AllColors.slateText,
     marginLeft: 12,
     fontWeight: '500',
   },
@@ -579,7 +610,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
   },
   logoutText: {
     fontSize: 16,
@@ -588,17 +619,17 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: AllColors.modalOverlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     width: '85%',
     borderRadius: 16,
     padding: 20,
     elevation: 5,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -606,12 +637,12 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#0F172A',
+    color: AllColors.slateDark,
     marginBottom: 8,
   },
   modalSub: {
     fontSize: 14,
-    color: '#64748B',
+    color: AllColors.slateSub,
     marginBottom: 20,
   },
   radioRow: {
@@ -637,7 +668,7 @@ const styles = StyleSheet.create({
   },
   radioText: {
     fontSize: 15,
-    color: '#334155',
+    color: AllColors.slateText,
   },
   modalActions: {
     flexDirection: 'row',
@@ -650,20 +681,43 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   modalCancelText: {
-    color: '#64748B',
+    color: AllColors.slateSub,
     fontSize: 15,
     fontWeight: '600',
   },
   modalDeleteBtn: {
-    backgroundColor: '#EF4444',
+    backgroundColor: AllColors.redLight,
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
     justifyContent: 'center',
   },
   modalDeleteText: {
-    color: '#fff',
+    color: AllColors.white,
     fontSize: 15,
     fontWeight: '600',
+  },
+  bottomSpacer: {
+    height: 40,
+  },
+  themeToggleContainer: {
+    flexDirection: 'row',
+    borderRadius: 14,
+    padding: 4,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  themeOptionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  themeOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 });

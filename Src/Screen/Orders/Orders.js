@@ -19,11 +19,13 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { BASE_URL, getToken, getuserId } from '../../Api/Api';
 import AllColors from '../../Constants/Color';
+import { useTheme } from '../../Context/ThemeContext';
 
 const TABS = ['All', 'Processing', 'Delivered', 'Cancelled'];
 
 export default function Orders() {
   const navigation = useNavigation();
+  const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState('All');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -155,7 +157,7 @@ export default function Orders() {
           </View>
 
           <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
-            <Ionicons name={badge.icon} size={14} color={badge.color} style={{ marginRight: 4 }} />
+            <Ionicons name={badge.icon} size={14} color={badge.color} style={styles.iconMarginRight} />
             <Text style={[styles.statusBadgeText, { color: badge.color }]}>{badge.label}</Text>
           </View>
         </View>
@@ -190,7 +192,7 @@ export default function Orders() {
             <View style={styles.singleOrderIconBox}>
               <Feather name="package" size={24} color="#64748B" />
             </View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
+            <View style={styles.orderInfoWrapper}>
               <Text style={styles.productTitleText}>Package #{orderId}</Text>
               <Text style={styles.productQtyText}>Standard Delivery</Text>
             </View>
@@ -211,7 +213,7 @@ export default function Orders() {
               style={styles.helpBtn}
               onPress={() => navigation.navigate('HelpCenter')}
               activeOpacity={0.7}>
-              <Feather name="help-circle" size={14} color="#475569" style={{ marginRight: 4 }} />
+              <Feather name="help-circle" size={14} color="#475569" style={styles.iconMarginRight} />
               <Text style={styles.helpBtnText}>Help</Text>
             </TouchableOpacity>
 
@@ -220,7 +222,7 @@ export default function Orders() {
               onPress={() => navigation.navigate('OrderDetails', { order: item })}
               activeOpacity={0.8}>
               <Text style={styles.reorderBtnText}>View Details</Text>
-              <Ionicons name="chevron-forward" size={14} color="#FFFFFF" style={{ marginLeft: 2 }} />
+              <Ionicons name="chevron-forward" size={14} color="#FFFFFF" style={styles.iconMarginLeft} />
             </TouchableOpacity>
           </View>
         </View>
@@ -230,14 +232,14 @@ export default function Orders() {
 
   if (!isLoggedIn) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
         <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
         <View style={styles.header}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={22} color="#0F172A" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>My Orders</Text>
-          <View style={{ width: 40 }} />
+          <View style={styles.headerSpacer} />
         </View>
 
         <View style={styles.emptyContainer}>
@@ -257,38 +259,45 @@ export default function Orders() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar backgroundColor={AllColors.white} barStyle="dark-content" />
 
-      {/* Navigation Header */}
+      {/* Top App Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color="#0F172A" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Orders</Text>
         <TouchableOpacity
           style={styles.backBtn}
-          onPress={() => navigation.navigate('HelpCenter')}>
-          <Feather name="help-circle" size={20} color="#0F172A" />
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={22} color={AllColors.slateDark} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>My Orders</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.tabsContainer}>
-        {TABS.map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tabItem, activeTab === tab && styles.activeTabItem]}
-            onPress={() => setActiveTab(tab)}
-            activeOpacity={0.8}>
-            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-              {tab}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      {/* Filter Tabs Bar */}
+      <View style={styles.tabContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabScrollContent}>
+          {TABS.map((tabId) => {
+            const isActive = activeTab === tabId;
+            return (
+              <TouchableOpacity
+                key={tabId}
+                style={[styles.tabItem, isActive && styles.activeTabItem]}
+                onPress={() => setActiveTab(tabId)}
+                activeOpacity={0.8}>
+                <Text style={[styles.tabText, isActive && styles.activeTabText]}>
+                  {tabId}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
-      {/* Content Body */}
+      {/* Main Orders List */}
       {loading && !refreshing ? (
         <View style={styles.loaderContainer}>
           <ActivityIndicator size="large" color={AllColors.primary} />
@@ -311,22 +320,111 @@ export default function Orders() {
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <View style={styles.emptyIconBox}>
-                <MaterialCommunityIcons name="shopping-search" size={54} color="#94A3B8" />
+                <Feather name="package" size={40} color={AllColors.slateLight} />
               </View>
-              <Text style={styles.emptyTitle}>No {activeTab !== 'All' ? activeTab : ''} Orders</Text>
+              <Text style={styles.emptyTitle}>No Orders Found</Text>
               <Text style={styles.emptySubtitle}>
-                {activeTab === 'All'
-                  ? "You haven't placed any orders yet. Start exploring our wide range of products!"
-                  : `You don't have any orders with status "${activeTab}".`}
+                You haven't placed any orders in this category yet.
               </Text>
               <TouchableOpacity
                 style={styles.shopNowBtn}
-                onPress={() => navigation.navigate('AppTab')}>
-                <Text style={styles.shopNowBtnText}>Explore Products</Text>
+                onPress={() => navigation.navigate('AppTab')}
+                activeOpacity={0.85}>
+                <Text style={styles.shopNowBtnText}>Start Shopping</Text>
               </TouchableOpacity>
             </View>
           }
-          renderItem={renderOrderItem}
+          renderItem={({ item }) => {
+            const config = getStatusConfig(item.order_status || item.status);
+            const orderId = item.order_id_generate || item.id || item.order_id || 'ORD-000';
+            const amount = item.net_amount || item.amount || item.total_amount || item.price || 0;
+            const itemsList = item.items || item.products || [];
+            const dateText = formatDate(item.created_at || item.date);
+
+            return (
+              <TouchableOpacity
+                style={styles.orderCard}
+                onPress={() => navigation.navigate('OrderDetails', { order: item })}
+                activeOpacity={0.88}>
+                <View style={styles.cardHeaderRow}>
+                  <View style={styles.orderMetaContainer}>
+                    <View style={styles.orderIconWrapper}>
+                      <Feather name="package" size={18} color={AllColors.primary} />
+                    </View>
+                    <View>
+                      <Text style={styles.orderNumberText}>Order #{orderId}</Text>
+                      <Text style={styles.orderDateText}>{dateText}</Text>
+                    </View>
+                  </View>
+
+                  <View style={[styles.statusBadge, { backgroundColor: config.bg }]}>
+                    <Text style={[styles.statusBadgeText, { color: config.color }]}>
+                      {config.label}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.cardDivider} />
+
+                {itemsList.length > 0 ? (
+                  itemsList.map((prod, idx) => (
+                    <View key={prod.id || idx} style={styles.productRow}>
+                      <Image
+                        source={{ uri: prod.image || prod.product_image || 'https://via.placeholder.com/100' }}
+                        style={styles.productThumb}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.productDetailsContainer}>
+                        <Text style={styles.productTitleText} numberOfLines={1}>
+                          {prod.name || prod.product_name || 'Item'}
+                        </Text>
+                        <Text style={styles.productQtyText}>Qty: {prod.qty || prod.quantity || 1}</Text>
+                        <Text style={styles.productPriceText}>₹{prod.selling_price || prod.price || prod.total_amount || 0}</Text>
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.singleOrderInfoRow}>
+                    <View style={styles.singleOrderIconBox}>
+                      <Feather name="shopping-bag" size={22} color={AllColors.slateSub} />
+                    </View>
+                    <View style={styles.orderInfoWrapper}>
+                      <Text style={styles.productTitleText}>Order #{orderId}</Text>
+                      <Text style={styles.productQtyText}>Tap to view complete details</Text>
+                    </View>
+                  </View>
+                )}
+
+                <View style={styles.cardDivider} />
+
+                <View style={styles.cardFooterRow}>
+                  <View>
+                    <Text style={styles.totalPriceLabel}>Total Amount</Text>
+                    <Text style={styles.totalPriceValue}>₹{amount}</Text>
+                  </View>
+
+                  <View style={styles.customerActionRow}>
+                    <TouchableOpacity
+                      style={styles.helpBtn}
+                      onPress={() => navigation.navigate('HelpCenter')}
+                      activeOpacity={0.8}>
+                      <Feather name="headphones" size={13} color={AllColors.slateMuted} style={styles.iconMarginRight} />
+                      <Text style={styles.helpBtnText}>Help</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.reorderBtn}
+                      onPress={() => navigation.navigate('OrderDetails', { order: item })}
+                      activeOpacity={0.85}>
+                      <Feather name="refresh-cw" size={13} color={AllColors.white} style={styles.iconMarginRight} />
+                      <Text style={styles.reorderBtnText}>Details</Text>
+                      <Feather name="chevron-right" size={16} color={AllColors.white} style={styles.iconMarginLeft} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
         />
       )}
     </SafeAreaView>
@@ -336,17 +434,17 @@ export default function Orders() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: AllColors.screenBg,
   },
   header: {
     height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     paddingHorizontal: 16,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
@@ -361,24 +459,23 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
-
-  tabsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingBottom: 10,
-    paddingTop: 4,
-    gap: 8,
+  tabContainer: {
+    backgroundColor: AllColors.white,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: AllColors.divider,
+  },
+  tabScrollContent: {
+    paddingHorizontal: 16,
+    gap: 8,
   },
   tabItem: {
-    flex: 1,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: AllColors.divider,
     alignItems: 'center',
   },
   activeTabItem: {
@@ -387,13 +484,12 @@ const styles = StyleSheet.create({
   tabText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#64748B',
+    color: AllColors.slateSub,
   },
   activeTabText: {
-    color: '#FFFFFF',
+    color: AllColors.white,
     fontWeight: '700',
   },
-
   listContainer: {
     padding: 16,
     paddingBottom: 40,
@@ -406,23 +502,22 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    color: '#64748B',
+    color: AllColors.slateSub,
     fontSize: 14,
     fontWeight: '500',
   },
-
   orderCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: AllColors.white,
     borderRadius: 16,
     padding: 14,
     marginBottom: 14,
     elevation: 2,
-    shadowColor: '#000',
+    shadowColor: AllColors.shadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 5,
     borderWidth: 1,
-    borderColor: '#F1F5F9',
+    borderColor: AllColors.divider,
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -437,7 +532,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#FFF1F7',
+    backgroundColor: AllColors.softPinkBg,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
@@ -445,11 +540,11 @@ const styles = StyleSheet.create({
   orderNumberText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0F172A',
+    color: AllColors.slateDark,
   },
   orderDateText: {
     fontSize: 11,
-    color: '#64748B',
+    color: AllColors.slateSub,
     marginTop: 1,
   },
   statusBadge: {
@@ -463,13 +558,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-
   cardDivider: {
     height: 1,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: AllColors.divider,
     marginVertical: 12,
   },
-
   productRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -479,7 +572,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 10,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: AllColors.screenBg,
   },
   productDetailsContainer: {
     flex: 1,
@@ -488,12 +581,12 @@ const styles = StyleSheet.create({
   productTitleText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#1E293B',
+    color: AllColors.slateHeader,
     lineHeight: 18,
   },
   productQtyText: {
     fontSize: 11,
-    color: '#64748B',
+    color: AllColors.slateSub,
     marginTop: 2,
   },
   productPriceText: {
@@ -502,7 +595,6 @@ const styles = StyleSheet.create({
     color: AllColors.primary,
     marginTop: 2,
   },
-
   singleOrderInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -511,11 +603,10 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 10,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: AllColors.divider,
     justifyContent: 'center',
     alignItems: 'center',
   },
-
   cardFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -523,15 +614,14 @@ const styles = StyleSheet.create({
   },
   totalPriceLabel: {
     fontSize: 11,
-    color: '#64748B',
+    color: AllColors.slateSub,
   },
   totalPriceValue: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#0F172A',
+    color: AllColors.slateDark,
     marginTop: 1,
   },
-
   customerActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -543,12 +633,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 10,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: AllColors.divider,
   },
   helpBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#475569',
+    color: AllColors.slateMuted,
   },
   reorderBtn: {
     flexDirection: 'row',
@@ -561,9 +651,8 @@ const styles = StyleSheet.create({
   reorderBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: AllColors.white,
   },
-
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -574,7 +663,7 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: AllColors.divider,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -582,11 +671,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1E293B',
+    color: AllColors.slateHeader,
   },
   emptySubtitle: {
     fontSize: 13,
-    color: '#64748B',
+    color: AllColors.slateSub,
     marginTop: 6,
     textAlign: 'center',
     lineHeight: 18,
@@ -600,8 +689,21 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   shopNowBtnText: {
-    color: '#FFFFFF',
+    color: AllColors.white,
     fontSize: 14,
     fontWeight: '700',
+  },
+  iconMarginRight: {
+    marginRight: 4,
+  },
+  iconMarginLeft: {
+    marginLeft: 2,
+  },
+  orderInfoWrapper: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  headerSpacer: {
+    width: 40,
   },
 });

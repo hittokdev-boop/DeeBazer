@@ -220,7 +220,7 @@ export default function VerifyOTP() {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
+      style={styles.keyboardContainer}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
 
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -314,9 +314,12 @@ export default function VerifyOTP() {
 }
 
 const styles = StyleSheet.create({
+  keyboardContainer: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     justifyContent: 'center',
     paddingHorizontal: 25,
   },
@@ -331,7 +334,7 @@ const styles = StyleSheet.create({
     width: 95,
     height: 95,
     borderRadius: 50,
-    backgroundColor: '#EEF6FF',
+    backgroundColor: AllColors.blueSoftBg,
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
@@ -341,13 +344,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 30,
     fontWeight: '700',
-    color: '#000',
+    color: AllColors.black,
     textAlign: 'center',
   },
 
   subtitle: {
     fontSize: 15,
-    color: '#777',
+    color: AllColors.textSecondary,
     textAlign: 'center',
     marginTop: 12,
   },
@@ -358,20 +361,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 8,
     marginBottom: 35,
-    color: '#000',
+    color: AllColors.black,
   },
 
   input: {
     height: 60,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#E5E5E5',
-    backgroundColor: '#FAFAFA',
+    borderColor: AllColors.borderLight,
+    backgroundColor: AllColors.inputBg,
     textAlign: 'center',
     fontSize: 28,
     letterSpacing: 15,
     fontWeight: '700',
-    color: '#000',
+    color: AllColors.black,
   },
 
   verifyBtn: {
@@ -385,7 +388,7 @@ const styles = StyleSheet.create({
   },
 
   verifyText: {
-    color: '#fff',
+    color: AllColors.white,
     fontWeight: '700',
     fontSize: 17,
   },
@@ -393,7 +396,7 @@ const styles = StyleSheet.create({
   timer: {
     textAlign: 'center',
     marginTop: 22,
-    color: '#888',
+    color: AllColors.grey,
     fontSize: 15,
   },
 

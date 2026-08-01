@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import AllColors from '../Constants/Color';
 
 const SuccessModal = ({
   visible,
@@ -50,14 +51,14 @@ export default SuccessModal;
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: AllColors.modalOverlay,
     justifyContent: 'center',
     alignItems: 'center',
   },
 
   container: {
     width: '85%',
-    backgroundColor: '#fff',
+    backgroundColor: AllColors.white,
     borderRadius: 25,
     padding: 25,
     alignItems: 'center',
@@ -68,7 +69,7 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: '#E8F9EE',
+    backgroundColor: AllColors.greenSoftBg,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
@@ -76,27 +77,27 @@ const styles = StyleSheet.create({
 
   icon: {
     fontSize: 50,
-    color: '#28A745',
+    color: AllColors.greenSoftText,
     fontWeight: 'bold',
   },
 
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#222',
+    color: AllColors.slateDark,
     marginBottom: 10,
   },
 
   message: {
     fontSize: 15,
-    color: '#666',
+    color: AllColors.slateSub,
     textAlign: 'center',
     marginBottom: 25,
     lineHeight: 22,
   },
 
   button: {
-    backgroundColor: '#28A745',
+    backgroundColor: AllColors.greenSoftText,
     width: '100%',
     paddingVertical: 14,
     borderRadius: 12,
@@ -104,7 +105,7 @@ const styles = StyleSheet.create({
   },
 
   buttonText: {
-    color: '#fff',
+    color: AllColors.white,
     fontSize: 16,
     fontWeight: '600',
   },
