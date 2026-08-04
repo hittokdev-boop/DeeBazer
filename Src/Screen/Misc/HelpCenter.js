@@ -46,7 +46,7 @@ const FAQS = [
 
 export default function HelpCenter() {
   const navigation = useNavigation();
-  const { theme } = useTheme();
+  const { theme, isDarkMode } = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedIndex, setExpandedIndex] = useState(null);
 
@@ -60,29 +60,37 @@ export default function HelpCenter() {
       faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleContact = (type) => {
-    if (type === 'call') {
-      Linking.openURL('tel:+919876543210');
-    } else if (type === 'whatsapp') {
-      Linking.openURL('https://wa.me/919876543210');
-    } else if (type === 'email') {
-      Linking.openURL('mailto:support@deebazer.com');
-    }
+  const handleCallSupport = () => {
+    Linking.openURL('tel:+919876543210').catch(() => {
+      Alert.alert('Error', 'Unable to place call');
+    });
+  };
+
+  const handleChatSupport = () => {
+    Linking.openURL('https://wa.me/919876543210').catch(() => {
+      Alert.alert('Error', 'Unable to open WhatsApp chat');
+    });
+  };
+
+  const handleEmailSupport = () => {
+    Linking.openURL('mailto:support@deebazer.com').catch(() => {
+      Alert.alert('Error', 'Unable to open email client');
+    });
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
+      <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
         <TouchableOpacity
-          style={styles.backBtn}
+          style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]}
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={22} color={AllColors.slateDark} />
+          <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Help & Support</Text>
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Help & Support</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -94,74 +102,74 @@ export default function HelpCenter() {
             Search our help center or select a topic below to get quick assistance.
           </Text>
 
-          <View style={styles.searchBox}>
-            <Feather name="search" size={18} color={AllColors.slateSub} />
+          <View style={[styles.searchBox, { backgroundColor: isDarkMode ? '#334155' : AllColors.white }]}>
+            <Feather name="search" size={18} color={isDarkMode ? '#94A3B8' : AllColors.slateSub} />
             <TextInput
               placeholder="Search help topics..."
-              placeholderTextColor={AllColors.slateLight}
+              placeholderTextColor={isDarkMode ? '#94A3B8' : AllColors.slateLight}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: isDarkMode ? '#F8FAFC' : AllColors.slateDark }]}
             />
           </View>
         </View>
 
         {/* Contact Options */}
-        <Text style={styles.sectionTitle}>Contact Us</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Contact Us</Text>
         <View style={styles.contactRow}>
-          <TouchableOpacity style={styles.contactCard} onPress={handleCallSupport} activeOpacity={0.8}>
-            <View style={[styles.iconCircle, { backgroundColor: AllColors.blueSoftBg }]}>
-              <Ionicons name="call-outline" size={22} color={AllColors.blueSoftText} />
+          <TouchableOpacity style={[styles.contactCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]} onPress={handleCallSupport} activeOpacity={0.8}>
+            <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? 'rgba(59, 130, 246, 0.2)' : AllColors.blueSoftBg }]}>
+              <Ionicons name="call-outline" size={22} color={isDarkMode ? '#60A5FA' : AllColors.blueSoftText} />
             </View>
-            <Text style={styles.contactTitle}>Call Us</Text>
-            <Text style={styles.contactSub}>24x7 Support</Text>
+            <Text style={[styles.contactTitle, { color: theme.textPrimary }]}>Call Us</Text>
+            <Text style={[styles.contactSub, { color: theme.textSecondary }]}>24x7 Support</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.contactCard} onPress={handleChatSupport} activeOpacity={0.8}>
-            <View style={[styles.iconCircle, { backgroundColor: AllColors.greenSoftBg }]}>
-              <Ionicons name="chatbubbles-outline" size={22} color={AllColors.greenLight} />
+          <TouchableOpacity style={[styles.contactCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]} onPress={handleChatSupport} activeOpacity={0.8}>
+            <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.2)' : AllColors.greenSoftBg }]}>
+              <Ionicons name="chatbubbles-outline" size={22} color={isDarkMode ? '#4ADE80' : AllColors.greenLight} />
             </View>
-            <Text style={styles.contactTitle}>Live Chat</Text>
-            <Text style={styles.contactSub}>Instant help</Text>
+            <Text style={[styles.contactTitle, { color: theme.textPrimary }]}>Live Chat</Text>
+            <Text style={[styles.contactSub, { color: theme.textSecondary }]}>Instant help</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.contactCard} onPress={handleEmailSupport} activeOpacity={0.8}>
-            <View style={[styles.iconCircle, { backgroundColor: AllColors.softPinkBg }]}>
+          <TouchableOpacity style={[styles.contactCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]} onPress={handleEmailSupport} activeOpacity={0.8}>
+            <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.2)' : AllColors.softPinkBg }]}>
               <MaterialCommunityIcons name="email-outline" size={22} color={AllColors.primary} />
             </View>
-            <Text style={styles.contactTitle}>Email Us</Text>
-            <Text style={styles.contactSub}>Reply in 24h</Text>
+            <Text style={[styles.contactTitle, { color: theme.textPrimary }]}>Email Us</Text>
+            <Text style={[styles.contactSub, { color: theme.textSecondary }]}>Reply in 24h</Text>
           </TouchableOpacity>
         </View>
 
         {/* FAQ Section */}
-        <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Frequently Asked Questions</Text>
         <View style={styles.faqList}>
           {filteredFaqs.length > 0 ? (
             filteredFaqs.map((faq, index) => {
               const isExpanded = expandedIndex === index;
               return (
-                <View key={index} style={styles.faqCard}>
+                <View key={index} style={[styles.faqCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
                   <TouchableOpacity
                     style={styles.faqHeader}
                     onPress={() => toggleFaq(index)}
                     activeOpacity={0.8}>
-                    <Text style={styles.faqQuestion}>{faq.question}</Text>
+                    <Text style={[styles.faqQuestion, { color: theme.textPrimary }]}>{faq.question}</Text>
                     <AntDesign
                       name={isExpanded ? 'up' : 'down'}
                       size={14}
-                      color={AllColors.slateSub}
+                      color={theme.textSecondary}
                     />
                   </TouchableOpacity>
                   {isExpanded ? (
-                    <Text style={styles.faqAnswer}>{faq.answer}</Text>
+                    <Text style={[styles.faqAnswer, { color: theme.textSecondary, borderTopColor: isDarkMode ? '#334155' : AllColors.divider }]}>{faq.answer}</Text>
                   ) : null}
                 </View>
               );
             })
           ) : (
             <View style={styles.emptyFaq}>
-              <Text style={styles.emptyText}>No matching questions found.</Text>
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No matching questions found.</Text>
             </View>
           )}
         </View>

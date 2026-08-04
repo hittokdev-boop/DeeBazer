@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
+  ScrollView,
   Alert,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -25,7 +26,7 @@ const TABS = ['All', 'Processing', 'Delivered', 'Cancelled'];
 
 export default function Orders() {
   const navigation = useNavigation();
-  const { theme } = useTheme();
+  const { theme, isDarkMode } = useTheme();
   const [activeTab, setActiveTab] = useState('All');
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,36 +90,27 @@ export default function Orders() {
     const s = String(status || '').toLowerCase();
     if (s.includes('delivered') || s.includes('success') || s.includes('completed')) {
       return {
-        bg: '#DCFCE7',
-        color: '#166534',
+        bg: isDarkMode ? 'rgba(22, 101, 52, 0.25)' : '#DCFCE7',
+        color: isDarkMode ? '#4ADE80' : '#166534',
         label: 'Delivered',
         icon: 'checkmark-circle-outline',
       };
     }
     if (s.includes('cancel')) {
       return {
-        bg: '#FEE2E2',
-        color: '#991B1B',
+        bg: isDarkMode ? 'rgba(153, 27, 27, 0.25)' : '#FEE2E2',
+        color: isDarkMode ? '#F87171' : '#991B1B',
         label: 'Cancelled',
         icon: 'close-circle-outline',
       };
     }
     return {
-      bg: '#E0F2FE',
-      color: '#075985',
+      bg: isDarkMode ? 'rgba(7, 89, 133, 0.25)' : '#E0F2FE',
+      color: isDarkMode ? '#38BDF8' : '#075985',
       label: status || 'Processing',
       icon: 'time-outline',
     };
   };
-
-  const filteredOrders = orders.filter((order) => {
-    if (activeTab === 'All') return true;
-    const badge = getStatusBadgeStyle(order.order_status || order.status);
-    if (activeTab === 'Processing') {
-      return badge.label !== 'Delivered' && badge.label !== 'Cancelled';
-    }
-    return badge.label.toLowerCase() === activeTab.toLowerCase();
-  });
 
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Recently Ordered';
@@ -135,117 +127,31 @@ export default function Orders() {
     }
   };
 
-  const renderOrderItem = ({ item }) => {
-    const badge = getStatusBadgeStyle(item.order_status || item.status);
-    const orderId = item.order_id_generate || item.id || item.order_id || 'ORD-000';
-    const amount = item.net_amount || item.amount || item.total_amount || item.price || 0;
-    const itemsList = item.items || item.products || [];
-    const dateText = formatDate(item.created_at || item.date);
-
-    return (
-      <View style={styles.orderCard}>
-        {/* Order Card Top Banner */}
-        <View style={styles.cardHeaderRow}>
-          <View style={styles.orderMetaContainer}>
-            <View style={styles.orderIconWrapper}>
-              <MaterialCommunityIcons name="shopping" size={20} color={AllColors.primary} />
-            </View>
-            <View>
-              <Text style={styles.orderNumberText}>Order #{orderId}</Text>
-              <Text style={styles.orderDateText}>Placed on {dateText}</Text>
-            </View>
-          </View>
-
-          <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
-            <Ionicons name={badge.icon} size={14} color={badge.color} style={styles.iconMarginRight} />
-            <Text style={[styles.statusBadgeText, { color: badge.color }]}>{badge.label}</Text>
-          </View>
-        </View>
-
-        <View style={styles.cardDivider} />
-
-        {/* Order Items Preview */}
-        {itemsList.length > 0 ? (
-          itemsList.map((prod, index) => (
-            <View key={prod.id || index} style={styles.productRow}>
-              <Image
-                source={{
-                  uri:
-                    prod.image ||
-                    prod.product_image ||
-                    'https://via.placeholder.com/100',
-                }}
-                style={styles.productThumb}
-                resizeMode="cover"
-              />
-              <View style={styles.productDetailsContainer}>
-                <Text style={styles.productTitleText} numberOfLines={2}>
-                  {prod.name || prod.product_name || 'Item'}
-                </Text>
-                <Text style={styles.productQtyText}>Qty: {prod.qty || prod.quantity || 1}</Text>
-                <Text style={styles.productPriceText}>₹{prod.selling_price || prod.price || prod.total_amount || 0}</Text>
-              </View>
-            </View>
-          ))
-        ) : (
-          <View style={styles.singleOrderInfoRow}>
-            <View style={styles.singleOrderIconBox}>
-              <Feather name="package" size={24} color="#64748B" />
-            </View>
-            <View style={styles.orderInfoWrapper}>
-              <Text style={styles.productTitleText}>Package #{orderId}</Text>
-              <Text style={styles.productQtyText}>Standard Delivery</Text>
-            </View>
-          </View>
-        )}
-
-        <View style={styles.cardDivider} />
-
-        {/* Order Footer & Actions */}
-        <View style={styles.cardFooterRow}>
-          <View>
-            <Text style={styles.totalPriceLabel}>Total Amount</Text>
-            <Text style={styles.totalPriceValue}>₹{amount}</Text>
-          </View>
-
-          <View style={styles.customerActionRow}>
-            <TouchableOpacity
-              style={styles.helpBtn}
-              onPress={() => navigation.navigate('HelpCenter')}
-              activeOpacity={0.7}>
-              <Feather name="help-circle" size={14} color="#475569" style={styles.iconMarginRight} />
-              <Text style={styles.helpBtnText}>Help</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.reorderBtn}
-              onPress={() => navigation.navigate('OrderDetails', { order: item })}
-              activeOpacity={0.8}>
-              <Text style={styles.reorderBtnText}>View Details</Text>
-              <Ionicons name="chevron-forward" size={14} color="#FFFFFF" style={styles.iconMarginLeft} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  };
+  const filteredOrders = orders.filter((ord) => {
+    if (activeTab === 'All') return true;
+    const st = String(ord.order_status || ord.status || '').toLowerCase();
+    if (activeTab === 'Processing') return !st.includes('delivered') && !st.includes('cancel');
+    if (activeTab === 'Delivered') return st.includes('delivered') || st.includes('success') || st.includes('completed');
+    if (activeTab === 'Cancelled') return st.includes('cancel');
+    return true;
+  });
 
   if (!isLoggedIn) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-        <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={22} color="#0F172A" />
+        <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+        <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+          <TouchableOpacity style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>My Orders</Text>
+          <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>My Orders</Text>
           <View style={styles.headerSpacer} />
         </View>
 
-        <View style={styles.emptyContainer}>
+        <View style={[styles.emptyContainer, { backgroundColor: theme.bg }]}>
           <MaterialCommunityIcons name="account-lock-outline" size={70} color={AllColors.primary} />
-          <Text style={styles.emptyTitle}>Login Required</Text>
-          <Text style={styles.emptySubtitle}>
+          <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>Login Required</Text>
+          <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
             Please sign in to your account to view your past orders and track current shipments.
           </Text>
           <TouchableOpacity
@@ -260,22 +166,22 @@ export default function Orders() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar backgroundColor={AllColors.white} barStyle="dark-content" />
+      <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
       {/* Top App Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
         <TouchableOpacity
-          style={styles.backBtn}
+          style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]}
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={22} color={AllColors.slateDark} />
+          <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Orders</Text>
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>My Orders</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       {/* Filter Tabs Bar */}
-      <View style={styles.tabContainer}>
+      <View style={[styles.tabContainer, { backgroundColor: theme.cardBg, borderBottomColor: theme.borderColor }]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -285,10 +191,18 @@ export default function Orders() {
             return (
               <TouchableOpacity
                 key={tabId}
-                style={[styles.tabItem, isActive && styles.activeTabItem]}
+                style={[
+                  styles.tabItem,
+                  { backgroundColor: isDarkMode ? '#334155' : AllColors.divider },
+                  isActive && styles.activeTabItem,
+                ]}
                 onPress={() => setActiveTab(tabId)}
                 activeOpacity={0.8}>
-                <Text style={[styles.tabText, isActive && styles.activeTabText]}>
+                <Text style={[
+                  styles.tabText,
+                  { color: isDarkMode ? '#CBD5E1' : AllColors.slateSub },
+                  isActive && styles.activeTabText,
+                ]}>
                   {tabId}
                 </Text>
               </TouchableOpacity>
@@ -301,7 +215,7 @@ export default function Orders() {
       {loading && !refreshing ? (
         <View style={styles.loaderContainer}>
           <ActivityIndicator size="large" color={AllColors.primary} />
-          <Text style={styles.loadingText}>Fetching your orders...</Text>
+          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Fetching your orders...</Text>
         </View>
       ) : (
         <FlatList
@@ -318,12 +232,12 @@ export default function Orders() {
             />
           }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <View style={styles.emptyIconBox}>
-                <Feather name="package" size={40} color={AllColors.slateLight} />
+            <View style={[styles.emptyContainer, { backgroundColor: theme.bg }]}>
+              <View style={[styles.emptyIconBox, { backgroundColor: isDarkMode ? '#1E293B' : undefined }]}>
+                <Feather name="package" size={40} color={isDarkMode ? '#64748B' : AllColors.slateLight} />
               </View>
-              <Text style={styles.emptyTitle}>No Orders Found</Text>
-              <Text style={styles.emptySubtitle}>
+              <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>No Orders Found</Text>
+              <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
                 You haven't placed any orders in this category yet.
               </Text>
               <TouchableOpacity
@@ -343,17 +257,17 @@ export default function Orders() {
 
             return (
               <TouchableOpacity
-                style={styles.orderCard}
+                style={[styles.orderCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
                 onPress={() => navigation.navigate('OrderDetails', { order: item })}
                 activeOpacity={0.88}>
                 <View style={styles.cardHeaderRow}>
                   <View style={styles.orderMetaContainer}>
-                    <View style={styles.orderIconWrapper}>
+                    <View style={[styles.orderIconWrapper, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.2)' : AllColors.softPinkBg }]}>
                       <Feather name="package" size={18} color={AllColors.primary} />
                     </View>
                     <View>
-                      <Text style={styles.orderNumberText}>Order #{orderId}</Text>
-                      <Text style={styles.orderDateText}>{dateText}</Text>
+                      <Text style={[styles.orderNumberText, { color: theme.textPrimary }]}>Order #{orderId}</Text>
+                      <Text style={[styles.orderDateText, { color: theme.textSecondary }]}>{dateText}</Text>
                     </View>
                   </View>
 
@@ -364,52 +278,52 @@ export default function Orders() {
                   </View>
                 </View>
 
-                <View style={styles.cardDivider} />
+                <View style={[styles.cardDivider, { backgroundColor: isDarkMode ? '#334155' : AllColors.divider }]} />
 
                 {itemsList.length > 0 ? (
                   itemsList.map((prod, idx) => (
                     <View key={prod.id || idx} style={styles.productRow}>
                       <Image
                         source={{ uri: prod.image || prod.product_image || 'https://via.placeholder.com/100' }}
-                        style={styles.productThumb}
+                        style={[styles.productThumb, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}
                         resizeMode="cover"
                       />
                       <View style={styles.productDetailsContainer}>
-                        <Text style={styles.productTitleText} numberOfLines={1}>
+                        <Text style={[styles.productTitleText, { color: theme.textPrimary }]} numberOfLines={1}>
                           {prod.name || prod.product_name || 'Item'}
                         </Text>
-                        <Text style={styles.productQtyText}>Qty: {prod.qty || prod.quantity || 1}</Text>
+                        <Text style={[styles.productQtyText, { color: theme.textSecondary }]}>Qty: {prod.qty || prod.quantity || 1}</Text>
                         <Text style={styles.productPriceText}>₹{prod.selling_price || prod.price || prod.total_amount || 0}</Text>
                       </View>
                     </View>
                   ))
                 ) : (
                   <View style={styles.singleOrderInfoRow}>
-                    <View style={styles.singleOrderIconBox}>
-                      <Feather name="shopping-bag" size={22} color={AllColors.slateSub} />
+                    <View style={[styles.singleOrderIconBox, { backgroundColor: isDarkMode ? '#334155' : undefined }]}>
+                      <Feather name="shopping-bag" size={22} color={isDarkMode ? '#94A3B8' : AllColors.slateSub} />
                     </View>
                     <View style={styles.orderInfoWrapper}>
-                      <Text style={styles.productTitleText}>Order #{orderId}</Text>
-                      <Text style={styles.productQtyText}>Tap to view complete details</Text>
+                      <Text style={[styles.productTitleText, { color: theme.textPrimary }]}>Order #{orderId}</Text>
+                      <Text style={[styles.productQtyText, { color: theme.textSecondary }]}>Tap to view complete details</Text>
                     </View>
                   </View>
                 )}
 
-                <View style={styles.cardDivider} />
+                <View style={[styles.cardDivider, { backgroundColor: isDarkMode ? '#334155' : AllColors.divider }]} />
 
                 <View style={styles.cardFooterRow}>
                   <View>
-                    <Text style={styles.totalPriceLabel}>Total Amount</Text>
-                    <Text style={styles.totalPriceValue}>₹{amount}</Text>
+                    <Text style={[styles.totalPriceLabel, { color: theme.textSecondary }]}>Total Amount</Text>
+                    <Text style={[styles.totalPriceValue, { color: theme.textPrimary }]}>₹{amount}</Text>
                   </View>
 
                   <View style={styles.customerActionRow}>
                     <TouchableOpacity
-                      style={styles.helpBtn}
+                      style={[styles.helpBtn, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}
                       onPress={() => navigation.navigate('HelpCenter')}
                       activeOpacity={0.8}>
-                      <Feather name="headphones" size={13} color={AllColors.slateMuted} style={styles.iconMarginRight} />
-                      <Text style={styles.helpBtnText}>Help</Text>
+                      <Feather name="headphones" size={13} color={isDarkMode ? '#CBD5E1' : AllColors.slateMuted} style={styles.iconMarginRight} />
+                      <Text style={[styles.helpBtnText, { color: isDarkMode ? '#CBD5E1' : '#475569' }]}>Help</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity

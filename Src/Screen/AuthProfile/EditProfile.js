@@ -12,6 +12,7 @@ import {
     Alert,
     Platform,
     ToastAndroid,
+    StatusBar,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Feather from 'react-native-vector-icons/Feather';
@@ -23,7 +24,7 @@ import { useTheme } from '../../Context/ThemeContext';
 
 const EditProfileScreen = () => {
     const navigation = useNavigation();
-    const { theme } = useTheme();
+    const { theme, isDarkMode } = useTheme();
 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -101,27 +102,18 @@ const EditProfileScreen = () => {
             return;
         }
 
-        if (mobile.trim() && mobile.trim().length !== 10) {
-            Alert.alert('Validation', 'Please enter a valid 10-digit mobile number.');
-            return;
-        }
-
-        if (alternativePhone.trim() && alternativePhone.trim().length !== 10) {
-            Alert.alert('Validation', 'Please enter a valid 10-digit alternative phone number.');
-            return;
-        }
-
         setSaving(true);
         try {
             const token = await getToken();
             const userId = await getuserId();
 
             const formData = new FormData();
-            formData.append('user_id', String(userId || ''));
             formData.append('name', name.trim());
             formData.append('email', email.trim());
             formData.append('mobile', mobile.trim());
-            formData.append('alternative_phone', alternativePhone.trim());
+            if (alternativePhone.trim()) {
+                formData.append('alternative_phone', alternativePhone.trim());
+            }
 
             if (imageUri) {
                 const filename = imageUri.split('/').pop() || 'profile.jpg';
@@ -134,7 +126,7 @@ const EditProfileScreen = () => {
                 });
             }
 
-            const response = await fetch(`${BASE_URL}update-profile`, {
+            const response = await fetch(`${BASE_URL}profile-update`, {
                 method: 'POST',
                 headers: {
                     Authorization: `Bearer ${token}`,
@@ -178,12 +170,13 @@ const EditProfileScreen = () => {
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+            <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
             {/* Header */}
-            <View style={styles.header}>
-                <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-                    <Ionicons name="arrow-back" size={22} color={AllColors.slateDark} />
+            <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+                <TouchableOpacity style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+                    <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Edit Profile</Text>
+                <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Edit Profile</Text>
                 <View style={styles.headerSpacer} />
             </View>
 
@@ -201,56 +194,56 @@ const EditProfileScreen = () => {
                                 <Ionicons name="camera-outline" size={18} color={AllColors.white} />
                             </TouchableOpacity>
                         </View>
-                        <Text style={styles.changePhotoText}>Tap camera to change photo</Text>
+                        <Text style={[styles.changePhotoText, { color: theme.textSecondary }]}>Tap camera to change photo</Text>
                     </View>
 
                     {/* Form Fields */}
-                    <View style={styles.formCard}>
+                    <View style={[styles.formCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
                         {/* FULL NAME */}
                         <View style={styles.inputBox}>
-                            <Text style={styles.label}>Full Name</Text>
-                            <View style={styles.inputWrapper}>
-                                <Ionicons name="person-outline" size={18} color={AllColors.slateSub} style={styles.inputIcon} />
+                            <Text style={[styles.label, { color: theme.textPrimary }]}>Full Name</Text>
+                            <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#334155' : AllColors.screenBg, borderColor: isDarkMode ? '#475569' : AllColors.lightGrey }]}>
+                                <Ionicons name="person-outline" size={18} color={isDarkMode ? '#94A3B8' : AllColors.slateSub} style={styles.inputIcon} />
                                 <TextInput
                                     value={name}
                                     onChangeText={setName}
                                     placeholder="Enter your name"
-                                    placeholderTextColor={AllColors.slateLight}
-                                    style={styles.input}
+                                    placeholderTextColor={isDarkMode ? '#94A3B8' : AllColors.slateLight}
+                                    style={[styles.input, { color: theme.textPrimary }]}
                                 />
                             </View>
                         </View>
 
                         {/* EMAIL */}
                         <View style={styles.inputBox}>
-                            <Text style={styles.label}>Email Address</Text>
-                            <View style={styles.inputWrapper}>
-                                <Ionicons name="mail-outline" size={18} color={AllColors.slateSub} style={styles.inputIcon} />
+                            <Text style={[styles.label, { color: theme.textPrimary }]}>Email Address</Text>
+                            <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#334155' : AllColors.screenBg, borderColor: isDarkMode ? '#475569' : AllColors.lightGrey }]}>
+                                <Ionicons name="mail-outline" size={18} color={isDarkMode ? '#94A3B8' : AllColors.slateSub} style={styles.inputIcon} />
                                 <TextInput
                                     value={email}
                                     onChangeText={setEmail}
                                     placeholder="Enter your email"
-                                    placeholderTextColor={AllColors.slateLight}
+                                    placeholderTextColor={isDarkMode ? '#94A3B8' : AllColors.slateLight}
                                     keyboardType="email-address"
                                     autoCapitalize="none"
-                                    style={styles.input}
+                                    style={[styles.input, { color: theme.textPrimary }]}
                                 />
                             </View>
                         </View>
 
                         {/* MOBILE */}
                         <View style={styles.inputBox}>
-                            <Text style={styles.label}>Mobile Number</Text>
-                            <View style={styles.inputWrapper}>
-                                <Ionicons name="call-outline" size={18} color={AllColors.slateSub} style={styles.inputIcon} />
+                            <Text style={[styles.label, { color: theme.textPrimary }]}>Mobile Number</Text>
+                            <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#334155' : AllColors.screenBg, borderColor: isDarkMode ? '#475569' : AllColors.lightGrey }]}>
+                                <Ionicons name="call-outline" size={18} color={isDarkMode ? '#94A3B8' : AllColors.slateSub} style={styles.inputIcon} />
                                 <TextInput
                                     value={mobile}
                                     onChangeText={(text) => setMobile(text.replace(/[^0-9]/g, '').slice(0, 10))}
                                     placeholder="Enter mobile number"
-                                    placeholderTextColor={AllColors.slateLight}
+                                    placeholderTextColor={isDarkMode ? '#94A3B8' : AllColors.slateLight}
                                     keyboardType="phone-pad"
                                     maxLength={10}
-                                    style={styles.input}
+                                    style={[styles.input, { color: theme.textPrimary }]}
                                 />
                             </View>
                         </View>

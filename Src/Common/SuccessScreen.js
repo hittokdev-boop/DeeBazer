@@ -8,12 +8,16 @@ import {
 } from 'react-native';
 import AllColors from '../Constants/Color';
 
+import { useTheme } from '../Context/ThemeContext';
+
 const SuccessModal = ({
   visible,
   title ,
   message ,
   onClose,
 }) => {
+  const { theme, isDarkMode } = useTheme();
+
   return (
     <Modal
       transparent
@@ -21,15 +25,15 @@ const SuccessModal = ({
       animationType="fade"
     >
       <View style={styles.overlay}>
-        <View style={styles.container}>
+        <View style={[styles.container, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
           
-          <View style={styles.iconContainer}>
-            <Text style={styles.icon}>✓</Text>
+          <View style={[styles.iconContainer, { backgroundColor: isDarkMode ? 'rgba(34, 197, 94, 0.2)' : AllColors.greenSoftBg }]}>
+            <Text style={[styles.icon, { color: isDarkMode ? '#4ADE80' : AllColors.greenSoftText }]}>✓</Text>
           </View>
 
-          <Text style={styles.title}>{title}</Text>
+          <Text style={[styles.title, { color: theme.textPrimary }]}>{title}</Text>
 
-          <Text style={styles.message}>
+          <Text style={[styles.message, { color: theme.textSecondary }]}>
             {message}
           </Text>
 

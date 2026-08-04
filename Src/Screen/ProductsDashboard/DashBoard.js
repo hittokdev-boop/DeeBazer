@@ -19,7 +19,10 @@ import {
   RefreshControl,
   Animated,
   BackHandler,
+  DeviceEventEmitter,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { handleNotificationRouting } from '../../Services/NotificationService';
 
 import LinearGradient from 'react-native-linear-gradient';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
@@ -50,6 +53,36 @@ const DEFAULT_DUMMY_SUB_CATEGORIES = [
   { id: 'sub_d10', name: 'Fitness', image: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=300&auto=format&fit=crop&q=80' },
 ];
 const DEFAULT_SUB_CAT_IMAGE = 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300';
+
+const DEFAULT_NOTIFICATIONS = [
+  {
+    id: 'notif_1',
+    title: 'Special Offer! 🎉',
+    body: 'Get 20% off on your next purchase at DeeBazer! Use code DEE20.',
+    time: '5m ago',
+    isRead: false,
+    type: 'promo',
+    data: { screen: 'ProductsDashboard' },
+  },
+  {
+    id: 'notif_2',
+    title: 'Order Shipped 🚚',
+    body: 'Your order #DB-84920 has been shipped and is on its way.',
+    time: '2h ago',
+    isRead: false,
+    type: 'order',
+    data: { order_id: '84920' },
+  },
+  {
+    id: 'notif_3',
+    title: 'Items in Cart 🛒',
+    body: 'You have items saved in your cart. Complete purchase now!',
+    time: '1d ago',
+    isRead: true,
+    type: 'cart',
+    data: { type: 'cart' },
+  },
+];
 
 const formatSubCategoryImageUri = (item) => {
   if (!item) return DEFAULT_SUB_CAT_IMAGE;
@@ -82,6 +115,7 @@ const formatSubCategoryImageUri = (item) => {
 };
 
 const SubCategoryCardItem = ({ item, isSelected, onPress }) => {
+  const { theme, isDarkMode } = useTheme();
   const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
@@ -102,11 +136,11 @@ const SubCategoryCardItem = ({ item, isSelected, onPress }) => {
           isSelected && styles.activeSubCategoryWrapper,
         ]}
       >
-        <View style={styles.subCategoryCard}>
+        <View style={[styles.subCategoryCard, { backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC', borderColor: isDarkMode ? '#334155' : '#E2E8F0' }]}>
           <Ionicons
             name="cube-outline"
             size={28}
-            color={isSelected ? AllColors.primary : '#64748B'}
+            color={isSelected ? AllColors.primary : (isDarkMode ? '#94A3B8' : '#64748B')}
           />
           {rawUri && !imgError && (
             <Image
@@ -118,6 +152,11 @@ const SubCategoryCardItem = ({ item, isSelected, onPress }) => {
           )}
         </View>
       </View>
+      {item?.name ? (
+        <Text style={[styles.subCategoryItemText, { color: isSelected ? AllColors.primary : theme.textSecondary }]} numberOfLines={1}>
+          {item.name}
+        </Text>
+      ) : null}
     </TouchableOpacity>
   );
 };
@@ -230,6 +269,178 @@ export default function DashBoard() {
       }
     };
   }, []);
+
+  // Foreground Notification Animation & Notification Drawer History State
+  const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [activeNotification, setActiveNotification] = useState(null);
+  const [isBannerVisible, setIsBannerVisible] = useState(false);
+  const bannerAnim = useRef(new Animated.Value(0)).current;
+  const drawerAnim = useRef(new Animated.Value(0)).current;
+  const bannerTimerRef = useRef(null);
+
+  const updateNotificationsState = useCallback((newList) => {
+    setNotifications(newList);
+    const unread = newList.filter(n => !n.isRead).length;
+    setUnreadCount(unread);
+    AsyncStorage.setItem('NOTIFICATION_HISTORY', JSON.stringify(newList)).catch(() => {});
+    AsyncStorage.setItem('NOTIFICATION_UNREAD_COUNT', String(unread)).catch(() => {});
+  }, []);
+
+  const openNotificationDrawer = useCallback(() => {
+    setIsDrawerOpen(true);
+    drawerAnim.setValue(0);
+    Animated.timing(drawerAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+
+    // Auto mark all notifications as read when drawer is opened
+    setNotifications(prev => {
+      const allRead = prev.map(n => ({ ...n, isRead: true }));
+      AsyncStorage.setItem('NOTIFICATION_HISTORY', JSON.stringify(allRead)).catch(() => {});
+      return allRead;
+    });
+    setUnreadCount(0);
+    AsyncStorage.setItem('NOTIFICATION_UNREAD_COUNT', '0').catch(() => {});
+  }, [drawerAnim]);
+
+  const closeNotificationDrawer = useCallback(() => {
+    Animated.timing(drawerAnim, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setIsDrawerOpen(false);
+    });
+  }, [drawerAnim]);
+
+  const triggerNotificationBanner = useCallback((title, body, data = {}) => {
+    setActiveNotification({ title, body, data });
+    setIsBannerVisible(true);
+
+    if (bannerTimerRef.current) {
+      clearTimeout(bannerTimerRef.current);
+    }
+
+    bannerAnim.setValue(0);
+    Animated.spring(bannerAnim, {
+      toValue: 1,
+      tension: 40,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
+
+    bannerTimerRef.current = setTimeout(() => {
+      dismissNotificationBanner();
+    }, 4500);
+  }, [bannerAnim]);
+
+  const dismissNotificationBanner = useCallback(() => {
+    if (bannerTimerRef.current) {
+      clearTimeout(bannerTimerRef.current);
+    }
+    Animated.timing(bannerAnim, {
+      toValue: 0,
+      duration: 350,
+      useNativeDriver: true,
+    }).start(() => {
+      setIsBannerVisible(false);
+      setActiveNotification(null);
+    });
+  }, [bannerAnim]);
+
+  const handleBellPress = () => {
+    openNotificationDrawer();
+  };
+
+  const handleMarkAllRead = () => {
+    const updated = notifications.map(n => ({ ...n, isRead: true }));
+    updateNotificationsState(updated);
+  };
+
+  const handleClearAll = () => {
+    updateNotificationsState([]);
+  };
+
+  const handleDeleteNotification = (id) => {
+    const updated = notifications.filter(n => n.id !== id);
+    updateNotificationsState(updated);
+  };
+
+  const handleNotificationClick = (item) => {
+    const updated = notifications.map(n => n.id === item.id ? { ...n, isRead: true } : n);
+    updateNotificationsState(updated);
+    closeNotificationDrawer();
+    if (item.data) {
+      handleNotificationRouting(item);
+    }
+  };
+
+  useEffect(() => {
+    AsyncStorage.getItem('NOTIFICATION_HISTORY')
+      .then(val => {
+        if (val) {
+          try {
+            const parsed = JSON.parse(val);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setNotifications(parsed);
+              const unread = parsed.filter(n => !n.isRead).length;
+              setUnreadCount(unread);
+            } else {
+              const unread = DEFAULT_NOTIFICATIONS.filter(n => !n.isRead).length;
+              setUnreadCount(unread);
+            }
+          } catch (e) {}
+        } else {
+          const unread = DEFAULT_NOTIFICATIONS.filter(n => !n.isRead).length;
+          setUnreadCount(unread);
+        }
+      })
+      .catch(() => {});
+
+    const notificationSub = DeviceEventEmitter.addListener(
+      'SHOW_FOREGROUND_NOTIFICATION',
+      remoteMessage => {
+        const title =
+          remoteMessage?.notification?.title ||
+          remoteMessage?.title ||
+          'New Notification';
+        const body =
+          remoteMessage?.notification?.body ||
+          remoteMessage?.body ||
+          'You have a new notification!';
+
+        const newNotif = {
+          id: 'notif_' + Date.now(),
+          title,
+          body,
+          time: 'Just now',
+          isRead: false,
+          type: remoteMessage?.data?.type || 'promo',
+          data: remoteMessage?.data || {},
+        };
+
+        setNotifications(prev => {
+          const updated = [newNotif, ...prev];
+          const unread = updated.filter(n => !n.isRead).length;
+          setUnreadCount(unread);
+          AsyncStorage.setItem('NOTIFICATION_HISTORY', JSON.stringify(updated)).catch(() => {});
+          AsyncStorage.setItem('NOTIFICATION_UNREAD_COUNT', String(unread)).catch(() => {});
+          return updated;
+        });
+
+        triggerNotificationBanner(title, body, remoteMessage?.data || {});
+      },
+    );
+
+    return () => {
+      notificationSub.remove();
+      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+    };
+  }, [triggerNotificationBanner]);
 
   const handleScroll = () => {
     if (isCartBarVisible) {
@@ -1271,52 +1482,52 @@ export default function DashBoard() {
     const productsPlaceholder = Array(4).fill(0);
 
     return (
-      <View style={styles.skeletonContainer}>
+      <View style={[styles.skeletonContainer, { backgroundColor: theme.bg }]}>
         {/* Header Skeleton */}
-        <View style={styles.skeletonHeader}>
+        <View style={[styles.skeletonHeader, { backgroundColor: theme.cardBg }]}>
           <View style={styles.flexRowGap12}>
-            <Animated.View style={[styles.skeletonAvatar, { opacity: skeletonOpacity }]} />
+            <Animated.View style={[styles.skeletonAvatar, { backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
             <View style={styles.gap6}>
-              <Animated.View style={[styles.skeletonTextLine, { width: 120, height: 16, opacity: skeletonOpacity }]} />
-              <Animated.View style={[styles.skeletonTextLine, { width: 200, height: 12, opacity: skeletonOpacity }]} />
+              <Animated.View style={[styles.skeletonTextLine, { width: 120, height: 16, backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
+              <Animated.View style={[styles.skeletonTextLine, { width: 200, height: 12, backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
             </View>
           </View>
-          <Animated.View style={[styles.skeletonBell, { opacity: skeletonOpacity }]} />
+          <Animated.View style={[styles.skeletonBell, { backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
         </View>
 
         {/* Search Bar Skeleton */}
-        <View style={styles.skeletonSearchContainer}>
-          <Animated.View style={[styles.skeletonSearchBox, { opacity: skeletonOpacity }]} />
-          <Animated.View style={[styles.skeletonFilterBtn, { opacity: skeletonOpacity }]} />
+        <View style={[styles.skeletonSearchContainer, { backgroundColor: theme.cardBg }]}>
+          <Animated.View style={[styles.skeletonSearchBox, { backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
+          <Animated.View style={[styles.skeletonFilterBtn, { backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
           {/* Banner Skeleton */}
-          <Animated.View style={[styles.skeletonBanner, { opacity: skeletonOpacity }]} />
+          <Animated.View style={[styles.skeletonBanner, { backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
 
           {/* Categories Skeleton */}
           <View style={styles.skeletonCategoryRow}>
             {categoriesPlaceholder.map((_, index) => (
-              <Animated.View key={index} style={[styles.skeletonCategoryBadge, { opacity: skeletonOpacity }]} />
+              <Animated.View key={index} style={[styles.skeletonCategoryBadge, { backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
             ))}
           </View>
 
           {/* Section Header Skeleton */}
           <View style={styles.skeletonSectionHeader}>
-            <Animated.View style={[styles.skeletonTextLine, { width: 150, height: 18, opacity: skeletonOpacity }]} />
-            <Animated.View style={[styles.skeletonTextLine, { width: 60, height: 14, opacity: skeletonOpacity }]} />
+            <Animated.View style={[styles.skeletonTextLine, { width: 150, height: 18, backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
+            <Animated.View style={[styles.skeletonTextLine, { width: 60, height: 14, backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
           </View>
 
           {/* Products Grid Skeleton */}
           <View style={styles.skeletonGrid}>
             {productsPlaceholder.map((_, index) => (
-              <View key={index} style={styles.skeletonCard}>
-                <Animated.View style={[styles.skeletonCardImage, { opacity: skeletonOpacity }]} />
-                <Animated.View style={[styles.skeletonTextLine, { width: '85%', height: 14, marginTop: 12, opacity: skeletonOpacity }]} />
-                <Animated.View style={[styles.skeletonTextLine, { width: '60%', height: 12, marginTop: 8, opacity: skeletonOpacity }]} />
+              <View key={index} style={[styles.skeletonCard, { backgroundColor: theme.cardBg }]}>
+                <Animated.View style={[styles.skeletonCardImage, { backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
+                <Animated.View style={[styles.skeletonTextLine, { width: '85%', height: 14, marginTop: 12, backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
+                <Animated.View style={[styles.skeletonTextLine, { width: '60%', height: 12, marginTop: 8, backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
                 <View style={styles.skeletonCardFooter}>
-                  <Animated.View style={[styles.skeletonTextLine, { width: 50, height: 16, opacity: skeletonOpacity }]} />
-                  <Animated.View style={[styles.skeletonAddBtn, { opacity: skeletonOpacity }]} />
+                  <Animated.View style={[styles.skeletonTextLine, { width: 50, height: 16, backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
+                  <Animated.View style={[styles.skeletonAddBtn, { backgroundColor: isDarkMode ? '#334155' : '#E2E8F0', opacity: skeletonOpacity }]} />
                 </View>
               </View>
             ))}
@@ -1330,7 +1541,7 @@ export default function DashBoard() {
     return (
       <>
         {/* HEADER */}
-        <View style={styles.topHeader}>
+        <View style={[styles.topHeader, { backgroundColor: theme.cardBg }]}>
           <View style={styles.headerRow}>
             <TouchableOpacity
               activeOpacity={0.8}
@@ -1344,23 +1555,88 @@ export default function DashBoard() {
                 style={styles.logo}
               />
               <View>
-                <Text style={styles.logoText}>Hello, {userName} 👋</Text>
-                <Text style={styles.logoSubtext}>Find your favorite products at the best prices.</Text>
+                <Text style={[styles.logoText, { color: theme.textPrimary }]}>Hello, {userName} 👋</Text>
+                <Text style={[styles.logoSubtext, { color: theme.textSecondary }]}>Find your favorite products at the best prices.</Text>
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.bellBtn}>
+            <TouchableOpacity
+              style={[styles.bellBtn, { backgroundColor: isDarkMode ? '#334155' : AllColors.divider }]}
+              activeOpacity={0.7}
+              onPress={handleBellPress}
+            >
               <FontAwesome
                 name="bell"
-                color={AllColors.drakGray}
+                color={isDarkMode ? '#F8FAFC' : AllColors.drakGray}
                 size={18}
               />
+              {unreadCount > 0 && (
+                <View style={styles.notificationBadgeContainer}>
+                  <Text style={styles.notificationBadgeText}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
 
+          {/* FOREGROUND NOTIFICATION CONTAINER */}
+          {isBannerVisible && activeNotification && (
+            <Animated.View
+              style={[
+                styles.notificationBannerContainer,
+                {
+                  backgroundColor: theme.cardBg,
+                  borderColor: AllColors.primary,
+                  opacity: bannerAnim.interpolate({
+                    inputRange: [0, 0.2, 1],
+                    outputRange: [0, 1, 1],
+                  }),
+                  transform: [
+                    {
+                      translateX: bannerAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [40, 0],
+                      }),
+                    },
+                    {
+                      scale: bannerAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.85, 1],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.bannerInnerContent}
+                onPress={() => {
+                  dismissNotificationBanner();
+                  if (activeNotification?.data) {
+                    handleNotificationRouting(activeNotification);
+                  }
+                }}
+              >
+                <View style={styles.bannerIconCircle}>
+                  <FontAwesome name="bell" color="#FFFFFF" size={14} />
+                </View>
+                <View style={styles.bannerTextColumn}>
+                  <Text numberOfLines={1} style={[styles.bannerTitleText, { color: theme.textPrimary }]}>
+                    {activeNotification.title}
+                  </Text>
+                  <Text numberOfLines={1} style={[styles.bannerBodyText, { color: theme.textSecondary }]}>
+                    {activeNotification.body}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+
           {/* SEARCH */}
           <View style={styles.searchContainer}>
-            <View style={styles.searchBox}>
+            <View style={[styles.searchBox, { backgroundColor: theme.searchBg }]}>
               <FontAwesome
                 name="search"
                 color={AllColors.primary}
@@ -1368,8 +1644,8 @@ export default function DashBoard() {
               />
               <TextInput
                 placeholder="Search your need"
-                placeholderTextColor="#94A3B8"
-                style={[styles.input, { flex: 1 }]}
+                placeholderTextColor={isDarkMode ? '#94A3B8' : '#94A3B8'}
+                style={[styles.input, { flex: 1, color: theme.textPrimary }]}
                 value={searchText}
                 onChangeText={(value) => { getSearchText(value) }}
               />
@@ -1379,7 +1655,7 @@ export default function DashBoard() {
               >
                 <Ionicons name="mic" color={AllColors.primary} size={20} />
               </TouchableOpacity>
-              <View style={styles.verticalDivider} />
+              <View style={[styles.verticalDivider, { backgroundColor: isDarkMode ? '#475569' : '#E2E8F0' }]} />
               <TouchableOpacity
                 style={styles.searchIconButton}
                 onPress={handleCameraSearch}
@@ -1428,7 +1704,14 @@ export default function DashBoard() {
                 onPress={() => getcategoriesProduct(item)}
                 style={[
                   styles.categoryBtn,
-                  isSelected && styles.activeCategory,
+                  {
+                    backgroundColor: isDarkMode
+                      ? (isSelected ? 'rgba(247, 22, 112, 0.25)' : theme.cardBg)
+                      : (isSelected ? AllColors.softPinkBg : AllColors.white),
+                    borderColor: isDarkMode
+                      ? (isSelected ? AllColors.primary : '#334155')
+                      : (isSelected ? AllColors.primary : AllColors.divider),
+                  },
                 ]}
               >
                 {imgSrc ? (
@@ -1441,13 +1724,18 @@ export default function DashBoard() {
                   <Ionicons
                     name={item.id === 'all' ? 'grid-outline' : 'pricetag-outline'}
                     size={16}
-                    color={isSelected ? AllColors.primary : '#64748B'}
+                    color={isSelected ? AllColors.primary : (isDarkMode ? '#CBD5E1' : '#64748B')}
                     style={styles.catIconMargin}
                   />
                 )}
 
                 <Text
-                  style={[styles.catNameText, isSelected ? styles.catNameSelected : styles.catNameUnselected]}
+                  style={[
+                    styles.catNameText,
+                    isSelected
+                      ? styles.catNameSelected
+                      : { color: theme.textPrimary, fontWeight: '600' },
+                  ]}
                 >
                   {item.name}
                 </Text>
@@ -1462,7 +1750,7 @@ export default function DashBoard() {
         ) : (
           subCategories && subCategories.length > 0 && (
             <View style={styles.subCategoryContainer}>
-              <Text style={styles.subCategoryHeaderTitle}>Sub Categories</Text>
+              <Text style={[styles.subCategoryHeaderTitle, { color: theme.textPrimary }]}>Sub Categories</Text>
               <FlatList
                 data={subCategories}
                 horizontal
@@ -1491,26 +1779,26 @@ export default function DashBoard() {
           <>
             {isFilterActive ? (
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Filtered Products ({filteredProducts.length})</Text>
+                <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Filtered Products ({filteredProducts.length})</Text>
                 <TouchableOpacity onPress={resetFilters}>
                   <Text style={styles.sectionViewAll}>Clear Filter</Text>
                 </TouchableOpacity>
               </View>
             ) : searchText.trim() ? (
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Search Results ({searchProducts.length})</Text>
+                <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Search Results ({searchProducts.length})</Text>
                 {loading && <ActivityIndicator size="small" color={AllColors.primary} />}
               </View>
             ) : (
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>All Products</Text>
+                <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>All Products</Text>
               </View>
             )}
 
             {((isFilterActive && filteredProducts.length === 0) || (searchText.trim() && searchProducts.length === 0 && !loading)) && (
               <View style={styles.emptySearchContainer}>
-                <Ionicons name="search-outline" size={48} color="#94A3B8" />
-                <Text style={styles.emptySearchText}>
+                <Ionicons name="search-outline" size={48} color={isDarkMode ? '#64748B' : '#94A3B8'} />
+                <Text style={[styles.emptySearchText, { color: theme.textSecondary }]}>
                   {isFilterActive ? "No products match the selected filters" : `No products found for "${searchText}"`}
                 </Text>
               </View>
@@ -1523,8 +1811,11 @@ export default function DashBoard() {
 
   const renderProductCard = ({ item }) => {
     return (
-      <TouchableOpacity style={styles.gridCard} onPress={() => gotoProductDetails(item)}>
-        <View style={styles.cardImageContainer}>
+      <TouchableOpacity
+        style={[styles.gridCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
+        onPress={() => gotoProductDetails(item)}
+      >
+        <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
           <Image
             source={{ uri: item.image }}
             style={styles.dealImage}
@@ -1532,7 +1823,11 @@ export default function DashBoard() {
           <TouchableOpacity
             style={[
               styles.wishlistButton,
-              isItemWishlisted(item) && styles.wishlistButtonActive,
+              {
+                backgroundColor: isDarkMode
+                  ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
+                  : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
+              },
             ]}
             onPress={() => toggleWishlist(item)}
           >
@@ -1544,13 +1839,13 @@ export default function DashBoard() {
           </TouchableOpacity>
         </View>
 
-        <Text numberOfLines={2} style={styles.productName}>
+        <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
           {item.name}
         </Text>
 
         <View style={styles.priceRow}>
-          <Text style={styles.price}>₹{item.discount_price ?? item.price}</Text>
-          {item.actual_price ? <Text style={styles.oldPrice}>₹{item.actual_price}</Text> : null}
+          <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.discount_price ?? item.price}</Text>
+          {item.actual_price ? <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.actual_price}</Text> : null}
         </View>
 
         <View style={styles.cardFooterRow}>
@@ -1563,24 +1858,24 @@ export default function DashBoard() {
                 <Text style={styles.outOfStockText}>Out of Stock</Text>
               </View>
             ) : getQtyForItem(item) > 0 ? (
-              <View style={styles.qtyContainer}>
+              <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
                 <TouchableOpacity
                   style={styles.qtyBtn}
                   onPress={() => decreaseQty(item.id ?? item.product_id)}>
-                  <Text style={styles.qtyText}>-</Text>
+                  <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
                 </TouchableOpacity>
 
-                <Text style={styles.qtyCount}>{getQtyForItem(item)}</Text>
+                <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{getQtyForItem(item)}</Text>
 
                 <TouchableOpacity
                   style={styles.qtyBtn}
                   onPress={() => increaseQty(item.id ?? item.product_id)}>
-                  <Text style={styles.qtyPlusText}>+</Text>
+                  <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <TouchableOpacity
-                style={styles.iconButton}
+                style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}
                 onPress={() => IsUser(item)}>
                 <Ionicons
                   name="cart"
@@ -1604,7 +1899,7 @@ export default function DashBoard() {
         {dealOfTheDay && dealOfTheDay.length > 0 && (
           <>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Deal of the Day</Text>
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Deal of the Day</Text>
               <TouchableOpacity onPress={() => gotoViewAll('Deal Of The Day', dealOfTheDay)}>
                 <Text style={styles.sectionViewAll}>View all</Text>
               </TouchableOpacity>
@@ -1617,8 +1912,8 @@ export default function DashBoard() {
               keyExtractor={(item) => item.id.toString()}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.dealCard} onPress={() => gotoProductDetails(item)}>
-                  <View style={styles.cardImageContainer}>
+                <TouchableOpacity style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]} onPress={() => gotoProductDetails(item)}>
+                  <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
                     <Image
                       source={{ uri: item.image }}
                       style={styles.dealImage}
@@ -1626,7 +1921,11 @@ export default function DashBoard() {
                     <TouchableOpacity
                       style={[
                         styles.wishlistButton,
-                        isItemWishlisted(item) && styles.wishlistButtonActive,
+                        {
+                          backgroundColor: isDarkMode
+                            ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
+                            : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
+                        },
                       ]}
                       onPress={() => toggleWishlist(item)}
                     >
@@ -1638,13 +1937,13 @@ export default function DashBoard() {
                     </TouchableOpacity>
                   </View>
 
-                  <Text numberOfLines={2} style={styles.productName}>
+                  <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
                     {item.name}
                   </Text>
 
                   <View style={styles.priceRow}>
-                    <Text style={styles.price}>₹{item.originalPrice}</Text>
-                    <Text style={styles.oldPrice}>₹{item.price}</Text>
+                    <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.originalPrice}</Text>
+                    <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.price}</Text>
                   </View>
 
                   <View style={styles.cardFooterRow}>
@@ -1657,29 +1956,29 @@ export default function DashBoard() {
                           <Text style={styles.outOfStockText}>Out of Stock</Text>
                         </View>
                       ) : cartQty[item.id] ? (
-                        <View style={styles.qtyContainer}>
+                        <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
                           <TouchableOpacity
                             style={styles.qtyBtn}
                             onPress={() => decreaseQty(item.id)}>
-                            <Text style={styles.qtyText}>-</Text>
+                            <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
                           </TouchableOpacity>
 
-                          <Text style={styles.qtyCount}>{cartQty[item.id]}</Text>
+                          <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{cartQty[item.id]}</Text>
 
                           <TouchableOpacity
                             style={styles.qtyBtn}
                             onPress={() => increaseQty(item.id)}>
-                            <Text style={styles.qtyPlusText}>+</Text>
+                            <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
                           </TouchableOpacity>
                         </View>
                       ) : (
                         <TouchableOpacity
-                          style={styles.iconButton}
+                          style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}
                           onPress={() => IsUser(item)}>
                           <Ionicons
-                            name="cart-outline"
-                            size={16}
-                            color="#fff"
+                            name="cart"
+                            size={20}
+                            color={AllColors.primary}
                           />
                         </TouchableOpacity>
                       )}
@@ -1695,7 +1994,7 @@ export default function DashBoard() {
         {popularProduct && popularProduct.length > 0 && (
           <>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Popular Products</Text>
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Popular Products</Text>
               <TouchableOpacity onPress={() => gotoViewAll('Popular Products', popularProduct)}>
                 <Text style={styles.sectionViewAll}>View all</Text>
               </TouchableOpacity>
@@ -1708,8 +2007,8 @@ export default function DashBoard() {
               keyExtractor={(item) => item.id.toString()}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.dealCard} onPress={() => gotoProductDetails(item)}>
-                  <View style={styles.cardImageContainer}>
+                <TouchableOpacity style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]} onPress={() => gotoProductDetails(item)}>
+                  <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
                     <Image
                       source={{ uri: item.image }}
                       style={styles.dealImage}
@@ -1717,7 +2016,11 @@ export default function DashBoard() {
                     <TouchableOpacity
                       style={[
                         styles.wishlistButton,
-                        isItemWishlisted(item) && styles.wishlistButtonActive,
+                        {
+                          backgroundColor: isDarkMode
+                            ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
+                            : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
+                        },
                       ]}
                       onPress={() => toggleWishlist(item)}
                     >
@@ -1729,13 +2032,13 @@ export default function DashBoard() {
                     </TouchableOpacity>
                   </View>
 
-                  <Text numberOfLines={2} style={styles.productName}>
+                  <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
                     {item.name}
                   </Text>
 
                   <View style={styles.priceRow}>
-                    <Text style={styles.price}>₹{item.price}</Text>
-                    <Text style={styles.oldPrice}>₹{item.originalPrice}</Text>
+                    <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.price}</Text>
+                    <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.originalPrice}</Text>
                   </View>
 
                   <View style={styles.cardFooterRow}>
@@ -1748,24 +2051,24 @@ export default function DashBoard() {
                           <Text style={styles.outOfStockText}>Out of Stock</Text>
                         </View>
                       ) : getQtyForItem(item) > 0 ? (
-                        <View style={styles.qtyContainer}>
+                        <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
                           <TouchableOpacity
                             style={styles.qtyBtn}
                             onPress={() => decreaseQty(item.id ?? item.product_id)}>
-                            <Text style={styles.qtyText}>-</Text>
+                            <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
                           </TouchableOpacity>
 
-                          <Text style={styles.qtyCount}>{getQtyForItem(item)}</Text>
+                          <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{getQtyForItem(item)}</Text>
 
                           <TouchableOpacity
                             style={styles.qtyBtn}
                             onPress={() => increaseQty(item.id ?? item.product_id)}>
-                            <Text style={styles.qtyPlusText}>+</Text>
+                            <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
                           </TouchableOpacity>
                         </View>
                       ) : (
                         <TouchableOpacity
-                          style={styles.iconButton}
+                          style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}
                           onPress={() => IsUser(item)}>
                           <Ionicons
                             name="cart"
@@ -1786,7 +2089,7 @@ export default function DashBoard() {
         {bestsellingProduct && bestsellingProduct.length > 0 && (
           <>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Best Selling Products</Text>
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Best Selling Products</Text>
               <TouchableOpacity onPress={() => gotoViewAll('Best Selling Products', bestsellingProduct)}>
                 <Text style={styles.sectionViewAll}>View all</Text>
               </TouchableOpacity>
@@ -1799,8 +2102,8 @@ export default function DashBoard() {
               keyExtractor={(item) => item.id.toString()}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.dealCard} onPress={() => gotoProductDetails(item)}>
-                  <View style={styles.cardImageContainer}>
+                <TouchableOpacity style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]} onPress={() => gotoProductDetails(item)}>
+                  <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
                     <Image
                       source={{ uri: item.image }}
                       style={styles.dealImage}
@@ -1808,7 +2111,11 @@ export default function DashBoard() {
                     <TouchableOpacity
                       style={[
                         styles.wishlistButton,
-                        isItemWishlisted(item) && styles.wishlistButtonActive,
+                        {
+                          backgroundColor: isDarkMode
+                            ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
+                            : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
+                        },
                       ]}
                       onPress={() => toggleWishlist(item)}
                     >
@@ -1820,13 +2127,13 @@ export default function DashBoard() {
                     </TouchableOpacity>
                   </View>
 
-                  <Text numberOfLines={2} style={styles.productName}>
+                  <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
                     {item.name}
                   </Text>
 
                   <View style={styles.priceRow}>
-                    <Text style={styles.price}>₹{item.originalPrice}</Text>
-                    <Text style={styles.oldPrice}>₹{item.price}</Text>
+                    <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.originalPrice}</Text>
+                    <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.price}</Text>
                   </View>
 
                   <View style={styles.cardFooterRow}>
@@ -1839,24 +2146,24 @@ export default function DashBoard() {
                           <Text style={styles.outOfStockText}>Out of Stock</Text>
                         </View>
                       ) : getQtyForItem(item) > 0 ? (
-                        <View style={styles.qtyContainer}>
+                        <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
                           <TouchableOpacity
                             style={styles.qtyBtn}
                             onPress={() => decreaseQty(item.id ?? item.product_id)}>
-                            <Text style={styles.qtyText}>-</Text>
+                            <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
                           </TouchableOpacity>
 
-                          <Text style={styles.qtyCount}>{getQtyForItem(item)}</Text>
+                          <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{getQtyForItem(item)}</Text>
 
                           <TouchableOpacity
                             style={styles.qtyBtn}
                             onPress={() => increaseQty(item.id ?? item.product_id)}>
-                            <Text style={styles.qtyPlusText}>+</Text>
+                            <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
                           </TouchableOpacity>
                         </View>
                       ) : (
                         <TouchableOpacity
-                          style={styles.iconButton}
+                          style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}
                           onPress={() => IsUser(item)}>
                           <Ionicons
                             name="cart"
@@ -1877,7 +2184,7 @@ export default function DashBoard() {
         {featuredproducts && featuredproducts.length > 0 && (
           <>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Featured Products</Text>
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Featured Products</Text>
               <TouchableOpacity onPress={() => gotoViewAll('Featured Products', featuredproducts)}>
                 <Text style={styles.sectionViewAll}>View all</Text>
               </TouchableOpacity>
@@ -1890,8 +2197,8 @@ export default function DashBoard() {
               keyExtractor={(item) => item.id.toString()}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.dealCard} onPress={() => gotoProductDetails(item)}>
-                  <View style={styles.cardImageContainer}>
+                <TouchableOpacity style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]} onPress={() => gotoProductDetails(item)}>
+                  <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
                     <Image
                       source={{ uri: item.image }}
                       style={styles.dealImage}
@@ -1899,7 +2206,11 @@ export default function DashBoard() {
                     <TouchableOpacity
                       style={[
                         styles.wishlistButton,
-                        isItemWishlisted(item) && styles.wishlistButtonActive,
+                        {
+                          backgroundColor: isDarkMode
+                            ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
+                            : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
+                        },
                       ]}
                       onPress={() => toggleWishlist(item)}
                     >
@@ -1911,13 +2222,13 @@ export default function DashBoard() {
                     </TouchableOpacity>
                   </View>
 
-                  <Text numberOfLines={2} style={styles.productName}>
+                  <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
                     {item.name}
                   </Text>
 
                   <View style={styles.priceRow}>
-                    <Text style={styles.price}>₹{item.originalPrice}</Text>
-                    <Text style={styles.oldPrice}>₹{item.price}</Text>
+                    <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.originalPrice}</Text>
+                    <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.price}</Text>
                   </View>
 
                   <View style={styles.cardFooterRow}>
@@ -1930,24 +2241,24 @@ export default function DashBoard() {
                           <Text style={styles.outOfStockText}>Out of Stock</Text>
                         </View>
                       ) : getQtyForItem(item) > 0 ? (
-                        <View style={styles.qtyContainer}>
+                        <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
                           <TouchableOpacity
                             style={styles.qtyBtn}
                             onPress={() => decreaseQty(item.id ?? item.product_id)}>
-                            <Text style={styles.qtyText}>-</Text>
+                            <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
                           </TouchableOpacity>
 
-                          <Text style={styles.qtyCount}>{getQtyForItem(item)}</Text>
+                          <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{getQtyForItem(item)}</Text>
 
                           <TouchableOpacity
                             style={styles.qtyBtn}
                             onPress={() => increaseQty(item.id ?? item.product_id)}>
-                            <Text style={styles.qtyPlusText}>+</Text>
+                            <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
                           </TouchableOpacity>
                         </View>
                       ) : (
                         <TouchableOpacity
-                          style={styles.iconButton}
+                          style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}
                           onPress={() => IsUser(item)}>
                           <Ionicons
                             name="cart"
@@ -2059,18 +2370,18 @@ export default function DashBoard() {
         transparent={true}
         onRequestClose={() => setFilterModalVisible(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.filterModalContent}>
+          <View style={[styles.filterModalContent, { backgroundColor: theme.modalBg }]}>
             {/* Modal Header */}
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter Products</Text>
+            <View style={[styles.modalHeader, { borderBottomColor: theme.divider }]}>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Filter Products</Text>
               <TouchableOpacity onPress={() => setFilterModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#1E293B" />
+                <Ionicons name="close" size={24} color={theme.textPrimary} />
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} style={styles.filterModalScroll}>
               {/* Price Range Filter */}
-              <Text style={styles.filterSectionLabel}>Price Range</Text>
+              <Text style={[styles.filterSectionLabel, { color: theme.textPrimary }]}>Price Range</Text>
               <View style={styles.chipRow}>
                 {[
                   { label: 'All Prices', val: 'all' },
@@ -2080,9 +2391,18 @@ export default function DashBoard() {
                 ].map((item) => (
                   <TouchableOpacity
                     key={item.val}
-                    style={[styles.chip, selectedPriceRange === item.val && styles.activeChip]}
+                    style={[
+                      styles.chip,
+                      { backgroundColor: isDarkMode ? '#334155' : AllColors.divider },
+                      selectedPriceRange === item.val && styles.activeChip,
+                    ]}
                     onPress={() => setSelectedPriceRange(item.val)}>
-                    <Text style={[styles.chipText, selectedPriceRange === item.val && styles.activeChipText]}>
+                    <Text
+                      style={[
+                        styles.chipText,
+                        { color: theme.textSecondary },
+                        selectedPriceRange === item.val && styles.activeChipText,
+                      ]}>
                       {item.label}
                     </Text>
                   </TouchableOpacity>
@@ -2090,7 +2410,7 @@ export default function DashBoard() {
               </View>
 
               {/* Sort by Price */}
-              <Text style={[styles.filterSectionLabel, styles.mt16]}>Sort by Price</Text>
+              <Text style={[styles.filterSectionLabel, styles.mt16, { color: theme.textPrimary }]}>Sort by Price</Text>
               <View style={styles.chipRow}>
                 {[
                   { label: 'Default', val: 'none' },
@@ -2099,9 +2419,18 @@ export default function DashBoard() {
                 ].map((item) => (
                   <TouchableOpacity
                     key={item.val}
-                    style={[styles.chip, sortByPrice === item.val && styles.activeChip]}
+                    style={[
+                      styles.chip,
+                      { backgroundColor: isDarkMode ? '#334155' : AllColors.divider },
+                      sortByPrice === item.val && styles.activeChip,
+                    ]}
                     onPress={() => setSortByPrice(item.val)}>
-                    <Text style={[styles.chipText, sortByPrice === item.val && styles.activeChipText]}>
+                    <Text
+                      style={[
+                        styles.chipText,
+                        { color: theme.textSecondary },
+                        sortByPrice === item.val && styles.activeChipText,
+                      ]}>
                       {item.label}
                     </Text>
                   </TouchableOpacity>
@@ -2111,19 +2440,39 @@ export default function DashBoard() {
               {/* Brand Filter */}
               {availableBrands.length > 0 && (
                 <>
-                  <Text style={[styles.filterSectionLabel, styles.mt16]}>Brand</Text>
+                  <Text style={[styles.filterSectionLabel, styles.mt16, { color: theme.textPrimary }]}>Brand</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.brandScrollMb}>
                     <TouchableOpacity
-                      style={[styles.chip, selectedBrand === 'all' && styles.activeChip]}
+                      style={[
+                        styles.chip,
+                        { backgroundColor: isDarkMode ? '#334155' : AllColors.divider },
+                        selectedBrand === 'all' && styles.activeChip,
+                      ]}
                       onPress={() => setSelectedBrand('all')}>
-                      <Text style={[styles.chipText, selectedBrand === 'all' && styles.activeChipText]}>All Brands</Text>
+                      <Text
+                        style={[
+                          styles.chipText,
+                          { color: theme.textSecondary },
+                          selectedBrand === 'all' && styles.activeChipText,
+                        ]}>
+                        All Brands
+                      </Text>
                     </TouchableOpacity>
                     {availableBrands.map((brand) => (
                       <TouchableOpacity
                         key={brand}
-                        style={[styles.chip, selectedBrand === brand && styles.activeChip]}
+                        style={[
+                          styles.chip,
+                          { backgroundColor: isDarkMode ? '#334155' : AllColors.divider },
+                          selectedBrand === brand && styles.activeChip,
+                        ]}
                         onPress={() => setSelectedBrand(brand)}>
-                        <Text style={[styles.chipText, selectedBrand === brand && styles.activeChipText]}>
+                        <Text
+                          style={[
+                            styles.chipText,
+                            { color: theme.textSecondary },
+                            selectedBrand === brand && styles.activeChipText,
+                          ]}>
                           {brand}
                         </Text>
                       </TouchableOpacity>
@@ -2134,8 +2483,8 @@ export default function DashBoard() {
             </ScrollView>
 
             {/* Bottom Actions */}
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.resetBtn} onPress={resetFilters}>
+            <View style={[styles.modalFooter, { borderTopColor: theme.divider }]}>
+              <TouchableOpacity style={[styles.resetBtn, { backgroundColor: theme.modalBg }]} onPress={resetFilters}>
                 <Text style={styles.resetBtnText}>Reset</Text>
               </TouchableOpacity>
 
@@ -2150,6 +2499,190 @@ export default function DashBoard() {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      {/* NOTIFICATION DRAWER MODAL (SLIDE-IN FROM RIGHT) */}
+      <Modal
+        visible={isDrawerOpen}
+        transparent={true}
+        animationType="none"
+        onRequestClose={closeNotificationDrawer}
+      >
+        <View style={styles.drawerOverlayContainer}>
+          {/* Backdrop */}
+          <Animated.View
+            style={[
+              styles.drawerBackdrop,
+              {
+                opacity: drawerAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 0.45],
+                }),
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.flex1}
+              activeOpacity={1}
+              onPress={closeNotificationDrawer}
+            />
+          </Animated.View>
+
+          {/* Drawer Content */}
+          <Animated.View
+            style={[
+              styles.drawerPanel,
+              {
+                backgroundColor: theme.modalBg,
+                transform: [
+                  {
+                    translateX: drawerAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [width * 0.70, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {/* Drawer Header */}
+            <View style={[styles.drawerHeader, { borderBottomColor: theme.divider, backgroundColor: theme.modalBg }]}>
+              <View style={styles.drawerTitleRow}>
+                <View style={styles.drawerHeaderIconCircle}>
+                  <FontAwesome name="bell" color="#FFFFFF" size={15} />
+                </View>
+                <Text style={[styles.drawerTitleText, { color: theme.textPrimary }]}>Notifications</Text>
+                {unreadCount > 0 && (
+                  <View style={styles.drawerUnreadBadgeChip}>
+                    <Text style={styles.drawerUnreadBadgeText}>{unreadCount} New</Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity
+                style={[styles.drawerCloseBtn, { backgroundColor: isDarkMode ? '#334155' : '#F8FAFC' }]}
+                onPress={closeNotificationDrawer}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={22} color={theme.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Subheader */}
+            {notifications.length > 0 && (
+              <View style={[styles.drawerSubHeader, { borderBottomColor: theme.divider, backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC' }]}>
+                <Text style={[styles.drawerCountSummary, { color: theme.textSecondary }]}>
+                  {notifications.length} Notification{notifications.length > 1 ? 's' : ''}
+                </Text>
+                {unreadCount > 0 && (
+                  <TouchableOpacity onPress={handleMarkAllRead}>
+                    <Text style={styles.markAllReadText}>Mark all as read</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* Notifications List */}
+            {notifications.length === 0 ? (
+              <View style={styles.drawerEmptyContainer}>
+                <View style={[styles.emptyBellCircle, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}>
+                  <Ionicons name="notifications-off-outline" size={44} color={isDarkMode ? '#94A3B8' : '#94A3B8'} />
+                </View>
+                <Text style={[styles.drawerEmptyTitle, { color: theme.textPrimary }]}>No Notifications</Text>
+                <Text style={[styles.drawerEmptySub, { color: theme.textSecondary }]}>
+                  You're all caught up! Updates and promos will appear here.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={notifications}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.drawerListPadding}
+                showsVerticalScrollIndicator={false}
+                renderItem={({ item }) => {
+                  const isUnread = !item.isRead;
+                  return (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => handleNotificationClick(item)}
+                      style={[
+                        styles.notificationItemCard,
+                        {
+                          backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
+                          borderColor: isDarkMode ? '#334155' : '#E2E8F0',
+                        },
+                        isUnread && {
+                          backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : 'rgba(255, 235, 243, 0.85)',
+                          borderColor: 'rgba(247, 22, 112, 0.35)',
+                          borderWidth: 1.5,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.itemIconCircle,
+                          isUnread ? styles.unreadIconBg : { backgroundColor: isDarkMode ? '#0F172A' : '#F1F5F9' },
+                        ]}
+                      >
+                        <Ionicons
+                          name={
+                            item.type === 'order'
+                              ? 'cube-outline'
+                              : item.type === 'cart'
+                              ? 'cart-outline'
+                              : 'pricetag-outline'
+                          }
+                          size={16}
+                          color={isUnread ? AllColors.primary : (isDarkMode ? '#94A3B8' : '#64748B')}
+                        />
+                      </View>
+
+                      <View style={styles.itemTextContainer}>
+                        <View style={styles.itemTitleRow}>
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              styles.itemTitleText,
+                              { color: theme.textPrimary },
+                              isUnread && styles.unreadTitleText,
+                            ]}
+                          >
+                            {item.title}
+                          </Text>
+                          {isUnread && <View style={styles.unreadDot} />}
+                        </View>
+                        <Text numberOfLines={2} style={[styles.itemBodyText, { color: theme.textSecondary }]}>
+                          {item.body}
+                        </Text>
+                        <Text style={styles.itemTimeText}>{item.time}</Text>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.itemDeleteBtn}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={() => handleDeleteNotification(item.id)}
+                      >
+                        <Ionicons name="trash-outline" size={16} color={isDarkMode ? '#94A3B8' : '#94A3B8'} />
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+            )}
+
+            {/* Footer */}
+            {notifications.length > 0 && (
+              <View style={[styles.drawerFooter, { borderTopColor: theme.divider, backgroundColor: theme.modalBg }]}>
+                <TouchableOpacity
+                  style={styles.clearAllBtn}
+                  onPress={handleClearAll}
+                >
+                  <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                  <Text style={styles.clearAllText}>Clear All</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </Animated.View>
         </View>
       </Modal>
     </View>
@@ -2203,6 +2736,77 @@ const styles = StyleSheet.create({
     backgroundColor: AllColors.divider,
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+  },
+  notificationBadgeContainer: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    zIndex: 10,
+    elevation: 4,
+  },
+  notificationBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  notificationBannerContainer: {
+    position: 'absolute',
+    top: 10,
+    right: 60,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderTopRightRadius: 0,
+    zIndex: 9999,
+    elevation: 12,
+    shadowColor: AllColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    borderWidth: 1.5,
+    borderColor: AllColors.primary,
+    overflow: 'hidden',
+    maxWidth: width * 0.78,
+  },
+  bannerInnerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 26,
+  },
+  bannerIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: AllColors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  bannerTextColumn: {
+    flexShrink: 1,
+    justifyContent: 'center',
+  },
+  bannerTitleText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 1,
+  },
+  bannerBodyText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#64748B',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -2972,5 +3576,230 @@ const styles = StyleSheet.create({
   },
   brandScrollMb: {
     marginBottom: 12,
+  },
+  flex1: {
+    flex: 1,
+  },
+  drawerOverlayContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  drawerBackdrop: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#000000',
+  },
+  drawerPanel: {
+    width: width * 0.70,
+    height: '100%',
+    backgroundColor: '#FFFFFF',
+    elevation: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: -4, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    borderTopLeftRadius: 18,
+    borderBottomLeftRadius: 18,
+    overflow: 'hidden',
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  drawerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+  },
+  drawerHeaderIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: AllColors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  drawerTitleText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  drawerUnreadBadgeChip: {
+    backgroundColor: 'rgba(247, 22, 112, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(247, 22, 112, 0.3)',
+  },
+  drawerUnreadBadgeText: {
+    color: AllColors.primary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  drawerCloseBtn: {
+    padding: 6,
+    borderRadius: 18,
+    backgroundColor: '#F8FAFC',
+  },
+  drawerSubHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  drawerCountSummary: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  markAllReadText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: AllColors.primary,
+  },
+  drawerListPadding: {
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  notificationItemCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    elevation: 1,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+  },
+  unreadNotificationCard: {
+    backgroundColor: 'rgba(255, 235, 243, 0.85)',
+    borderColor: 'rgba(247, 22, 112, 0.35)',
+    borderWidth: 1.5,
+  },
+  itemIconCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  unreadIconBg: {
+    backgroundColor: 'rgba(247, 22, 112, 0.12)',
+  },
+  readIconBg: {
+    backgroundColor: '#F1F5F9',
+  },
+  itemTextContainer: {
+    flex: 1,
+  },
+  itemTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginRight: 6,
+  },
+  itemTitleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+    flex: 1,
+  },
+  unreadTitleText: {
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: AllColors.primary,
+    marginLeft: 6,
+  },
+  itemBodyText: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: '#64748B',
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  itemTimeText: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#94A3B8',
+    marginTop: 6,
+  },
+  itemDeleteBtn: {
+    padding: 4,
+    marginLeft: 4,
+  },
+  drawerEmptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyBellCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  drawerEmptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  drawerEmptySub: {
+    fontSize: 12,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  drawerFooter: {
+    padding: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
+  },
+  clearAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#FEE2E2',
+    gap: 6,
+  },
+  clearAllText: {
+    color: '#EF4444',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

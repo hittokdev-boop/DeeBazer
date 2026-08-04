@@ -29,13 +29,24 @@ import LottieView from 'lottie-react-native';
 
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../../Context/ThemeContext';
+import CustomAlert from '../../Common/Alert';
 const CartPage = () => {
-  const { theme } = useTheme();
+  const { theme, isDarkMode } = useTheme();
   const [cartItems, setCartItems] = useState([])
   const [extraData, setExtraData] = useState({})
-  const [couponCode, setCouponCode] = useState('')
-  const [appliedCoupon, setAppliedCoupon] = useState(null)
-  const [couponDiscount, setCouponDiscount] = useState(0)
+  const [couponCode, setCouponCode] = useState('DEEBAZER50');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [isCouponModalVisible, setIsCouponModalVisible] = useState(false);
+  const [couponAlert, setCouponAlert] = useState({ visible: false, title: '', message: '' });
+
+  const showCouponAlert = (title, message) => {
+    setCouponAlert({ visible: true, title, message });
+  };
+
+  const closeCouponAlert = () => {
+    setCouponAlert({ visible: false, title: '', message: '' });
+  };
 
   const billSummary = useMemo(() => {
     try {
@@ -246,27 +257,35 @@ const CartPage = () => {
   // compute local extra data (subtotal, discount, total) from cart items
   // ===== COUPON LOGIC =====
   const COUPONS_DATA = [
-    { id: '1', code: 'DEEBAZER50', discount: '50% OFF', title: 'Flat 50% Off', minSpend: 499, type: 'percent', value: 50 },
-    { id: '2', code: 'FESTIVE200', discount: '₹200 OFF', title: 'Festival Discount', minSpend: 999, type: 'flat', value: 200 },
-    { id: '3', code: 'MEGA100', discount: '₹100 OFF', title: 'Super Saver', minSpend: 799, type: 'flat', value: 100 },
+    { id: '1', code: 'DEEBAZER50', discount: '50% OFF', title: 'Flat 50% Off', minSpend: 499, type: 'percent', value: 50, description: 'Use code DEEBAZER50 on orders above ₹499.', validTill: '31 Aug 2026' },
+    { id: '2', code: 'FESTIVE200', discount: '₹200 OFF', title: 'Festival Discount', minSpend: 999, type: 'flat', value: 200, description: 'Save flat ₹200 on all orders above ₹999.', validTill: '15 Aug 2026' },
+    { id: '3', code: 'MEGA100', discount: '₹100 OFF', title: 'Super Saver', minSpend: 799, type: 'flat', value: 100, description: 'Enjoy ₹100 instant discount on orders above ₹799.', validTill: '10 Aug 2026' },
+    { id: '4', code: 'FREESHIP', discount: 'FREE SHIPPING', title: 'Free Delivery', minSpend: 0, type: 'flat', value: 0, description: 'Get free delivery on any order.', validTill: '30 Sep 2026' },
   ];
 
-  const applyCoupon = () => {
-    const code = couponCode.trim().toUpperCase();
+  const applyCoupon = (customCoupon = null) => {
+    const code = customCoupon ? customCoupon.code : couponCode.trim().toUpperCase();
     if (!code) {
-      Alert.alert('Error', 'Please enter a coupon code');
+      setIsCouponModalVisible(false);
+      showCouponAlert('Empty Coupon Code', 'Please enter or select a valid coupon code.');
       return;
     }
-    const matched = COUPONS_DATA.find(c => c.code === code);
+    const matched = customCoupon || COUPONS_DATA.find(c => c.code === code);
     if (!matched) {
-      Alert.alert('Invalid Coupon', 'This coupon code is invalid or expired.');
+      setIsCouponModalVisible(false);
+      showCouponAlert('Invalid Coupon', `The coupon code "${code}" is invalid or expired.`);
       return;
     }
     const cartTotal = cartItems.reduce(
       (sum, it) => sum + Number(it.discount_total ?? it.discount_price ?? 0), 0
     );
     if (cartTotal < matched.minSpend) {
-      Alert.alert('Not Eligible', `Minimum cart value of ₹${matched.minSpend} required for this coupon.`);
+      const neededAmount = (matched.minSpend - cartTotal).toFixed(2);
+      setIsCouponModalVisible(false);
+      showCouponAlert(
+        'Minimum Spend Not Met',
+        `Coupon "${matched.code}" requires a minimum cart value of ₹${matched.minSpend}.\n\nAdd ₹${neededAmount} more worth of items to unlock this coupon!`
+      );
       return;
     }
     let discAmt = 0;
@@ -277,13 +296,17 @@ const CartPage = () => {
     }
     setAppliedCoupon(matched);
     setCouponDiscount(Number(discAmt.toFixed(2)));
-    setCouponCode('');
+    setCouponCode(matched.code);
+    setIsCouponModalVisible(false);
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(`🎉 Coupon ${matched.code} Applied!`, ToastAndroid.SHORT);
+    }
   };
 
   const removeCoupon = () => {
     setAppliedCoupon(null);
     setCouponDiscount(0);
-    setCouponCode('');
+    setCouponCode('DEEBAZER50');
   };
 
   const computeExtraDataFromCart = (items) => {
@@ -663,7 +686,7 @@ const CartPage = () => {
   if (!isuser) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-        <View style={loginStyles.container}>
+        <View style={[loginStyles.container, { backgroundColor: theme.bg }]}>
           <View style={loginStyles.iconBox}>
             <AntDesign
               name="shoppingcart"
@@ -672,9 +695,9 @@ const CartPage = () => {
             />
           </View>
 
-          <Text style={loginStyles.title}>Your Cart is Empty</Text>
+          <Text style={[loginStyles.title, { color: theme.textPrimary }]}>Your Cart is Empty</Text>
 
-          <Text style={loginStyles.subtitle}>
+          <Text style={[loginStyles.subtitle, { color: theme.textSecondary }]}>
             Sign in to add products to your cart, save items for later,
             and place orders easily.
           </Text>
@@ -710,7 +733,7 @@ const CartPage = () => {
             />
           }
         >
-          <View style={loginStyles.container}>
+          <View style={[loginStyles.container, { backgroundColor: theme.bg }]}>
             <LottieView
               source={require("../../Assets/empty.json")}
               autoPlay
@@ -718,9 +741,9 @@ const CartPage = () => {
               style={loginStyles.animation}
             />
 
-            <Text style={loginStyles.title}>Your Cart is Empty</Text>
+            <Text style={[loginStyles.title, { color: theme.textPrimary }]}>Your Cart is Empty</Text>
 
-            <Text style={loginStyles.subtitle}>
+            <Text style={[loginStyles.subtitle, { color: theme.textSecondary }]}>
               Looks like you haven't added any products yet.
               {"\n"}
               Start shopping to fill your cart.
@@ -745,39 +768,24 @@ const CartPage = () => {
 
       {/* ================= Header ================= */}
 
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
 
-        <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.goBack()}>
-          <AntDesign name="arrowleft" size={22} color={AllColors.black} />
+        <TouchableOpacity style={[styles.iconBtn, { backgroundColor: isDarkMode ? '#334155' : '#F5F5F5' }]} onPress={() => navigation.goBack()}>
+          <AntDesign name="arrowleft" size={22} color={theme.textPrimary} />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
           Checkout
         </Text>
 
         <View style={styles.headerRightRow}>
-
-          {/* <TouchableOpacity style={styles.iconBtn}>
-            <Feather name="search" size={22} color={AllColors.primary} />
-          </TouchableOpacity> */}
-
-          {/* <TouchableOpacity style={styles.iconBtn}>
-            <Feather name="share" size={22}/>
-        </TouchableOpacity> */}
-
         </View>
 
       </View>
 
       <View
       >
-
-
-
-
         {/* ================= Product Card ================= */}
-
-
         <FlatList
           data={cartItems}
           keyExtractor={(item) => item.product_id.toString()}
@@ -797,28 +805,10 @@ const CartPage = () => {
             />
           }
           renderItem={({ item }) => (
-            <View style={styles.productCard}>
-              <View style={styles.deliveryTop}>
-                {/* <View style={styles.timeIcon}>
-          <MaterialCommunityIcons
-            name="clock-time-four-outline"
-            size={22}
-            color="#A26B00"
-          />
-        </View> */}
+            <View style={[styles.productCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
+              <View style={styles.deliveryTop} />
 
-                {/* <View>
-       <Text style={styles.deliveryTime}>
-            Delivery in {item.delivery_time || 19} minutes
-          </Text> 
-
-          <Text style={styles.shipment}>
-            Shipment of {item.qty} item
-          </Text>
-        </View> */}
-              </View>
-
-              <View style={styles.line} />
+              <View style={[styles.line, { backgroundColor: isDarkMode ? '#334155' : '#F2F2F2' }]} />
 
               <View style={styles.productRow}>
                 <TouchableOpacity
@@ -832,7 +822,7 @@ const CartPage = () => {
                 >
                   <Image
                     source={{ uri: item.image }}
-                    style={styles.image}
+                    style={[styles.image, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.white }]}
                   />
 
                   <View style={styles.productInfoWrapper}>
@@ -846,17 +836,17 @@ const CartPage = () => {
 
                     <Text
                       numberOfLines={2}
-                      style={styles.productName}
+                      style={[styles.productName, { color: theme.textPrimary }]}
                     >
                       {item.name}
                     </Text>
 
-                    <Text style={styles.size}>
+                    <Text style={[styles.size, { color: theme.textSecondary }]}>
                       {item.short_desc02}
                     </Text>
 
                     <TouchableOpacity onPress={() => moveToWishlist(item)}>
-                      <Text style={styles.wishlist}>
+                      <Text style={[styles.wishlist, { color: isDarkMode ? '#94A3B8' : '#555', borderColor: isDarkMode ? '#64748B' : undefined }]}>
                         Move to wishlist
                       </Text>
                     </TouchableOpacity>
@@ -883,11 +873,11 @@ const CartPage = () => {
                   </View>
 
                   <View style={styles.priceContainer}>
-                    <Text style={styles.oldPrice}>
+                    <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>
                       ₹{Number(item.actual_total ?? (Number(item.actual_price || 0) * Number(item.qty || 1))).toFixed(2)}
                     </Text>
 
-                    <Text style={styles.newPrice}>
+                    <Text style={[styles.newPrice, { color: theme.textPrimary }]}>
                       ₹{Number(item.discount_total ?? item.discount_price ?? 0).toFixed(2)}
                     </Text>
 
@@ -899,18 +889,24 @@ const CartPage = () => {
           ListFooterComponent={
             <>
               {/* ===== COUPON SECTION ===== */}
-              <View style={styles.couponCard}>
+              <View style={[styles.couponCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
                 <View style={styles.couponHeader}>
-                  <MaterialCommunityIcons name="ticket-percent-outline" size={20} color={AllColors.primary} />
-                  <Text style={styles.couponHeaderText}>Apply Coupon</Text>
+                  <View style={styles.couponHeaderLeft}>
+                    <MaterialCommunityIcons name="ticket-percent-outline" size={20} color={AllColors.primary} />
+                    <Text style={[styles.couponHeaderText, { color: theme.textPrimary }]}>Apply Coupon</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setIsCouponModalVisible(true)} activeOpacity={0.7} style={styles.seeAllBtn}>
+                    <Text style={styles.seeAllText}>See All</Text>
+                    <Ionicons name="chevron-forward" size={15} color={AllColors.primary} />
+                  </TouchableOpacity>
                 </View>
 
                 {appliedCoupon ? (
-                  <View style={styles.appliedCouponRow}>
+                  <View style={[styles.appliedCouponRow, { backgroundColor: isDarkMode ? 'rgba(5, 150, 105, 0.15)' : '#F0FDF4', borderColor: isDarkMode ? 'rgba(5, 150, 105, 0.4)' : '#86EFAC' }]}>
                     <View style={styles.appliedBadge}>
-                      <MaterialCommunityIcons name="check-circle" size={16} color="#059669" />
-                      <Text style={styles.appliedCode}>{appliedCoupon.code}</Text>
-                      <Text style={styles.appliedSaving}>- ₹{couponDiscount} saved</Text>
+                      <MaterialCommunityIcons name="check-circle" size={16} color={isDarkMode ? '#34D399' : '#059669'} />
+                      <Text style={[styles.appliedCode, { color: isDarkMode ? '#34D399' : '#059669' }]}>{appliedCoupon.code}</Text>
+                      <Text style={[styles.appliedSaving, { color: isDarkMode ? '#34D399' : '#059669' }]}>- ₹{couponDiscount} saved</Text>
                     </View>
                     <TouchableOpacity onPress={removeCoupon} style={styles.removeBtn}>
                       <Text style={styles.removeBtnText}>Remove</Text>
@@ -920,8 +916,8 @@ const CartPage = () => {
                   <View style={styles.couponInputRow}>
                     <TextInput
                       placeholder="Enter coupon code"
-                      placeholderTextColor="#94A3B8"
-                      style={styles.couponInput}
+                      placeholderTextColor={isDarkMode ? '#94A3B8' : '#94A3B8'}
+                      style={[styles.couponInput, { backgroundColor: isDarkMode ? '#334155' : '#F8FAFC', color: theme.textPrimary, borderColor: isDarkMode ? '#475569' : '#E2E8F0' }]}
                       value={couponCode}
                       onChangeText={setCouponCode}
                       autoCapitalize="characters"
@@ -934,16 +930,16 @@ const CartPage = () => {
               </View>
 
               {/* ===== BILL DETAILS ===== */}
-              <View style={styles.billCard}>
-                <Text style={styles.billTitle}>Bill Details</Text>
+              <View style={[styles.billCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
+                <Text style={[styles.billTitle, { color: theme.textPrimary }]}>Bill Details</Text>
 
                 <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>Item Total</Text>
-                  <Text style={styles.billValue}>₹{billSummary.sub_total}</Text>
+                  <Text style={[styles.billLabel, { color: theme.textSecondary }]}>Item Total</Text>
+                  <Text style={[styles.billValue, { color: theme.textPrimary }]}>₹{billSummary.sub_total}</Text>
                 </View>
 
                 <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>Product Discount</Text>
+                  <Text style={[styles.billLabel, { color: theme.textSecondary }]}>Product Discount</Text>
                   <Text style={styles.discountValue}>
                     - ₹{billSummary.discount}
                   </Text>
@@ -951,7 +947,7 @@ const CartPage = () => {
 
                 {billSummary.coupon_discount > 0 && (
                   <View style={styles.billRow}>
-                    <Text style={styles.billLabel}>Coupon Discount</Text>
+                    <Text style={[styles.billLabel, { color: theme.textSecondary }]}>Coupon Discount</Text>
                     <Text style={styles.discountValue}>
                       - ₹{billSummary.coupon_discount}
                     </Text>
@@ -959,85 +955,38 @@ const CartPage = () => {
                 )}
 
                 <View style={styles.billRow}>
-                  <Text style={styles.billLabel}>Delivery Charge</Text>
-                  <Text style={styles.billValue}>
+                  <Text style={[styles.billLabel, { color: theme.textSecondary }]}>Delivery Charge</Text>
+                  <Text style={[styles.billValue, { color: theme.textPrimary }]}>
                     {Number(billSummary.delivery_charge) === 0
                       ? "FREE"
                       : `₹${billSummary.delivery_charge}`}
                   </Text>
                 </View>
 
-                <View style={styles.billDivider} />
+                <View style={[styles.billDivider, { backgroundColor: isDarkMode ? '#334155' : '#F0F0F0' }]} />
 
                 <View style={styles.billRow}>
-                  <Text style={styles.totalLabel}>Total Amount</Text>
+                  <Text style={[styles.totalLabel, { color: theme.textPrimary }]}>Total Amount</Text>
                   <Text style={styles.totalValue}>
                     ₹{billSummary.total_amount}
                   </Text>
                 </View>
 
               </View>
-              <View style={styles.bottomSectionDivider} />
+              <View style={[styles.bottomSectionDivider, { backgroundColor: theme.bg }]} />
             </>
 
           }
         />
 
-        {/* <View style={styles.billCard}>
-      <Text style={styles.billTitle}>Bill Details</Text>
-
-      <View style={styles.billRow}>
-        <Text style={styles.billLabel}>Item Total</Text>
-        <Text style={styles.billValue}>
-          ₹{billSummary.sub_total}
-        </Text>
-      </View>
-
-      <View style={styles.billRow}>
-        <Text style={styles.billLabel}>Discount</Text>
-        <Text style={styles.discountValue}>
-          - ₹{billSummary.discount}
-        </Text>
-      </View>
-
-      <View style={styles.billRow}>
-        <Text style={styles.billLabel}>Delivery Charge</Text>
-        <Text
-          style={[
-            styles.billValue,
-            Number(billSummary.delivery_charge) === 0 && {
-              color: "green",
-            },
-          ]}
-        >
-          {Number(billSummary.delivery_charge) === 0
-            ? "FREE"
-            : `₹${billSummary.delivery_charge}`}
-        </Text>
-      </View>
-
-      <View style={styles.billDivider} />
-
-      <View style={styles.billRow}>
-        <Text style={styles.totalLabel}>Total Amount</Text>
-        <Text style={styles.totalValue}>
-          ₹{billSummary.total_amount}
-        </Text>
-      </View>
-    </View> */}
-        {/* ======= Second Card ======= */}
-
-
-
-
         <View style={styles.bottomSpaceHeight} />
 
       </View>
       {/* ================= Fixed Bottom ================= */}
-      <View style={styles.bottomContainer}>
+      <View style={[styles.bottomContainer, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
 
         {/* Address */}
-        <TouchableOpacity style={styles.addressCard}>
+        <TouchableOpacity style={[styles.addressCard, { backgroundColor: isDarkMode ? '#1E293B' : AllColors.yellow, borderWidth: isDarkMode ? 1 : 0, borderColor: isDarkMode ? '#334155' : undefined }]}>
           <View style={styles.addressLeft}>
             <Ionicons
               name="location-outline"
@@ -1046,13 +995,13 @@ const CartPage = () => {
             />
 
             <View style={styles.addressInfoWrapper}>
-              <Text style={styles.deliverText}>
+              <Text style={[styles.deliverText, { color: isDarkMode ? '#CBD5E1' : AllColors.grey }]}>
                 Deliver to
               </Text>
 
               <Text
                 numberOfLines={2}
-                style={styles.addressText}
+                style={[styles.addressText, { color: isDarkMode ? '#F8FAFC' : AllColors.black }]}
               >
                 {addressData?.id
                   ? `${addressData?.house_no || ""}, ${addressData?.road_name || ""}, ${addressData?.city || ""}, ${addressData?.state || ""} - ${addressData?.pin || ""}`
@@ -1061,7 +1010,7 @@ const CartPage = () => {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.changeBtn} onPress={openAddAddress}>
+          <TouchableOpacity style={[styles.changeBtn, { backgroundColor: isDarkMode ? '#334155' : '#fff' }]} onPress={openAddAddress}>
             <Text style={styles.changeBtnText}>Change</Text>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -1087,11 +1036,11 @@ const CartPage = () => {
         >
           <TouchableOpacity
             activeOpacity={1}
-            style={styles.modalContainer}
+            style={[styles.modalContainer, { backgroundColor: theme.modalBg }]}
           >
-            <View style={styles.dragBar} />
+            <View style={[styles.dragBar, { backgroundColor: isDarkMode ? '#475569' : '#D9D9D9' }]} />
 
-            <Text style={styles.modalTitle}>
+            <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>
               Select Delivery Address
             </Text>
             <TouchableOpacity
@@ -1112,6 +1061,7 @@ const CartPage = () => {
                 <TouchableOpacity
                   style={[
                     styles.modalAddressCard,
+                    { backgroundColor: isDarkMode ? '#334155' : '#fff', borderColor: isDarkMode ? '#475569' : '#E8E8E8' },
                     addressData?.id === item.id && styles.selectedCard,
                   ]}
                   onPress={() => {
@@ -1121,8 +1071,8 @@ const CartPage = () => {
                   }}
                 >
                   <View style={styles.addressTop}>
-                    <View style={styles.typeBadge}>
-                      <Text style={styles.typeText}>
+                    <View style={[styles.typeBadge, { backgroundColor: isDarkMode ? '#1E293B' : '#F5F5F5' }]}>
+                      <Text style={[styles.typeText, { color: isDarkMode ? '#CBD5E1' : '#444' }]}>
                         {item.type}
                       </Text>
                     </View>
@@ -1136,11 +1086,11 @@ const CartPage = () => {
                     )}
                   </View>
 
-                  <Text style={styles.modalAddressName}>
+                  <Text style={[styles.modalAddressName, { color: theme.textPrimary }]}>
                     {item.name} • {item.mobile}
                   </Text>
 
-                  <Text style={styles.modalAddressText}>
+                  <Text style={[styles.modalAddressText, { color: theme.textSecondary }]}>
                     {item.house_no}, {item.road_name},
                     {"\n"}
                     {item.landmark},
@@ -1179,34 +1129,41 @@ const CartPage = () => {
         >
           <TouchableOpacity
             activeOpacity={1}
-            style={styles.paymentModalContainer}
+            style={[styles.paymentModalContainer, { backgroundColor: theme.modalBg }]}
           >
-            <View style={styles.dragBar} />
-            <Text style={styles.modalTitle}>Choose Payment Method</Text>
+            <View style={[styles.dragBar, { backgroundColor: isDarkMode ? '#475569' : '#D9D9D9' }]} />
+            <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Choose Payment Method</Text>
 
             <View style={styles.paymentOptionList}>
               {/* COD Option */}
               <TouchableOpacity
                 style={[
                   styles.paymentOptionCard,
-                  paymentMethod === 'cod' && styles.selectedPaymentCard,
+                  {
+                    backgroundColor: isDarkMode ? '#334155' : '#F8FAFC',
+                    borderColor: isDarkMode ? '#475569' : '#E2E8F0',
+                  },
+                  paymentMethod === 'cod' && {
+                    borderColor: AllColors.primary,
+                    backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : '#FFF1F7',
+                  },
                 ]}
                 onPress={() => setPaymentMethod('cod')}
                 activeOpacity={0.8}
               >
                 <View style={styles.paymentOptionLeft}>
-                  <View style={[styles.paymentIconBox, { backgroundColor: '#DCFCE7' }]}>
-                    <MaterialCommunityIcons name="cash-multiple" size={24} color="#166534" />
+                  <View style={[styles.paymentIconBox, { backgroundColor: isDarkMode ? 'rgba(22, 101, 52, 0.25)' : '#DCFCE7' }]}>
+                    <MaterialCommunityIcons name="cash-multiple" size={24} color={isDarkMode ? '#4ADE80' : '#166534'} />
                   </View>
                   <View style={styles.paymentTextWrapper}>
-                    <Text style={styles.paymentOptionTitle}>Cash on Delivery (COD)</Text>
-                    <Text style={styles.paymentOptionSub}>Pay with cash upon order delivery</Text>
+                    <Text style={[styles.paymentOptionTitle, { color: theme.textPrimary }]}>Cash on Delivery (COD)</Text>
+                    <Text style={[styles.paymentOptionSub, { color: theme.textSecondary }]}>Pay with cash upon order delivery</Text>
                   </View>
                 </View>
                 <Ionicons
                   name={paymentMethod === 'cod' ? 'radio-button-on' : 'radio-button-off'}
                   size={22}
-                  color={paymentMethod === 'cod' ? AllColors.primary : '#94A3B8'}
+                  color={paymentMethod === 'cod' ? AllColors.primary : (isDarkMode ? '#64748B' : '#94A3B8')}
                 />
               </TouchableOpacity>
 
@@ -1214,31 +1171,38 @@ const CartPage = () => {
               <TouchableOpacity
                 style={[
                   styles.paymentOptionCard,
-                  paymentMethod === 'cashfree' && styles.selectedPaymentCard,
+                  {
+                    backgroundColor: isDarkMode ? '#334155' : '#F8FAFC',
+                    borderColor: isDarkMode ? '#475569' : '#E2E8F0',
+                  },
+                  paymentMethod === 'cashfree' && {
+                    borderColor: AllColors.primary,
+                    backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : '#FFF1F7',
+                  },
                 ]}
                 onPress={() => setPaymentMethod('cashfree')}
                 activeOpacity={0.8}
               >
                 <View style={styles.paymentOptionLeft}>
-                  <View style={[styles.paymentIconBox, { backgroundColor: '#E0F2FE' }]}>
-                    <MaterialCommunityIcons name="credit-card-outline" size={24} color="#075985" />
+                  <View style={[styles.paymentIconBox, { backgroundColor: isDarkMode ? 'rgba(7, 89, 133, 0.25)' : '#E0F2FE' }]}>
+                    <MaterialCommunityIcons name="credit-card-outline" size={24} color={isDarkMode ? '#38BDF8' : '#075985'} />
                   </View>
                   <View style={styles.paymentTextWrapper}>
-                    <Text style={styles.paymentOptionTitle}>Online Payment (Cashfree / UPI)</Text>
-                    <Text style={styles.paymentOptionSub}>Pay securely via UPI, Card or Net Banking</Text>
+                    <Text style={[styles.paymentOptionTitle, { color: theme.textPrimary }]}>Online Payment (Cashfree / UPI)</Text>
+                    <Text style={[styles.paymentOptionSub, { color: theme.textSecondary }]}>Pay securely via UPI, Card or Net Banking</Text>
                   </View>
                 </View>
                 <Ionicons
                   name={paymentMethod === 'cashfree' ? 'radio-button-on' : 'radio-button-off'}
                   size={22}
-                  color={paymentMethod === 'cashfree' ? AllColors.primary : '#94A3B8'}
+                  color={paymentMethod === 'cashfree' ? AllColors.primary : (isDarkMode ? '#64748B' : '#94A3B8')}
                 />
               </TouchableOpacity>
             </View>
 
             {/* Total Summary */}
-            <View style={styles.paymentTotalRow}>
-              <Text style={styles.paymentTotalLabel}>Total Payable:</Text>
+            <View style={[styles.paymentTotalRow, { borderTopColor: theme.divider }]}>
+              <Text style={[styles.paymentTotalLabel, { color: theme.textSecondary }]}>Total Payable:</Text>
               <Text style={styles.paymentTotalValue}>₹{billSummary.total_amount}</Text>
             </View>
 
@@ -1260,8 +1224,91 @@ const CartPage = () => {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
 
+      {/* ================= All Coupons Modal ================= */}
+      <Modal
+        visible={isCouponModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsCouponModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsCouponModalVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.couponModalContainer, { backgroundColor: theme.modalBg }]}
+          >
+            <View style={[styles.dragBar, { backgroundColor: isDarkMode ? '#475569' : '#D9D9D9' }]} />
+            <View style={styles.couponModalHeader}>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary, marginBottom: 0 }]}>Available Coupons</Text>
+              <TouchableOpacity onPress={() => setIsCouponModalVisible(false)} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={22} color={theme.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={COUPONS_DATA}
+              keyExtractor={(item) => item.id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingVertical: 10 }}
+              renderItem={({ item }) => {
+                const isSelected = appliedCoupon?.code === item.code;
+                return (
+                  <View style={[
+                    styles.couponListItem,
+                    {
+                      backgroundColor: isDarkMode ? '#334155' : '#F8FAFC',
+                      borderColor: isSelected ? AllColors.primary : (isDarkMode ? '#475569' : '#E2E8F0'),
+                    }
+                  ]}>
+                    <View style={styles.couponListLeft}>
+                      <View style={styles.couponBadge}>
+                        <Text style={styles.couponBadgeText}>{item.discount}</Text>
+                      </View>
+                      <View>
+                        <Text style={[styles.couponListTitle, { color: theme.textPrimary }]}>{item.title}</Text>
+                        <Text style={[styles.couponListDesc, { color: theme.textSecondary }]}>{item.description}</Text>
+                        <Text style={[styles.couponMinSpend, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>
+                          Min Spend: ₹{item.minSpend} • Valid till {item.validTill}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.couponApplyBtn,
+                        isSelected && styles.couponAppliedBtn,
+                        { backgroundColor: isSelected ? '#10B981' : AllColors.primary }
+                      ]}
+                      onPress={() => applyCoupon(item)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.couponApplyBtnText}>
+                        {isSelected ? 'APPLIED' : 'APPLY'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }}
+            />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ================= Custom Coupon Alert Modal ================= */}
+      <CustomAlert
+        visible={couponAlert.visible}
+        title={couponAlert.title}
+        message={couponAlert.message}
+        type="error"
+        confirmText="Got It"
+        onConfirm={closeCouponAlert}
+        onClose={closeCouponAlert}
+      />
+    </SafeAreaView>
   );
 };
 
@@ -1413,13 +1460,155 @@ const styles = StyleSheet.create({
   couponHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
     marginBottom: 12,
+  },
+  couponHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   couponHeaderText: {
     fontSize: 15,
     fontWeight: '700',
     color: '#1E293B',
+  },
+  seeAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+  },
+  seeAllText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: AllColors.primary,
+  },
+  couponModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 18,
+    paddingBottom: 24,
+    paddingTop: 12,
+    maxHeight: '75%',
+  },
+  couponModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  modalCloseBtn: {
+    padding: 4,
+  },
+  couponListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    marginBottom: 12,
+  },
+  couponListLeft: {
+    flex: 1,
+    marginRight: 10,
+  },
+  couponBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: AllColors.lightPink,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: AllColors.primary,
+    marginBottom: 6,
+  },
+  couponBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: AllColors.primary,
+  },
+  couponListTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  couponListDesc: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  couponMinSpend: {
+    fontSize: 11,
+    marginTop: 4,
+  },
+  couponApplyBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  couponAppliedBtn: {
+    backgroundColor: '#10B981',
+  },
+  couponApplyBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  customAlertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  customAlertBox: {
+    width: '100%',
+    borderRadius: 20,
+    padding: 22,
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+  },
+  alertIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  customAlertTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  customAlertMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  customAlertBtn: {
+    width: '100%',
+    height: 46,
+    backgroundColor: AllColors.primary,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  customAlertBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
   couponInputRow: {
     flexDirection: 'row',

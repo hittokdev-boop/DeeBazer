@@ -13,6 +13,7 @@ import {
   RefreshControl,
   ScrollView,
   Platform,
+  StatusBar,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { BASE_URL, getToken, getuserId } from '../../Api/Api';
@@ -24,7 +25,7 @@ import { useTheme } from '../../Context/ThemeContext';
 // import Icon from 'react-native-vector-icons/Icon';
 export default function Wishlist() {
   const navigation = useNavigation();
-  const { theme } = useTheme();
+  const { theme, isDarkMode } = useTheme();
   const [wishlistItems, setWishlistItems] = useState([]);
 
   const [loading, setLoading] = useState(false);
@@ -96,17 +97,9 @@ https://deebazar.com/product/${item.id}`,
       });
 
       const data = await response.json();
-      //  console.log('data', data);
 
       if (data.status == 200) {
-        //  setIsAddedToCart(true);
-
-        // Toast Message
         if (Platform.OS === 'android') {
-          // ToastAndroid.show(
-          //   '✅ Product added to cart successfully',
-          //   ToastAndroid.SHORT
-          // );
         } else {
           Alert.alert('Success', 'Product added to cart successfully');
         }
@@ -115,10 +108,6 @@ https://deebazar.com/product/${item.id}`,
       console.log('Error:', error);
 
       if (Platform.OS === 'android') {
-        // ToastAndroid.show(
-        //   'Something went wrong',
-        //   ToastAndroid.SHORT
-        // );
       } else {
         Alert.alert('Error', 'Something went wrong');
       }
@@ -138,18 +127,11 @@ https://deebazar.com/product/${item.id}`,
       });
 
       const data = await response.json();
-      // console.log("Remove Response:", data);
 
       if (response.ok && (data.status === 200 || data.success)) {
-
         setWishlistItems((prev) =>
           prev.filter((item) => item.id !== product_id)
         );
-
-        // ToastAndroid.show(
-        //   "Product removed from wishlist",
-        //   ToastAndroid.SHORT
-        // );
       } else {
         Alert.alert("Error", data.message || "Failed to remove product");
       }
@@ -163,27 +145,14 @@ https://deebazar.com/product/${item.id}`,
     }, [])
   );
 
-  const renderItem = ({ item }) => (
-    <View style={styles.card}>
-      <Image source={{ uri: item?.image }} style={styles.image} />
-      <View style={styles.infoContainer}>
-        <Text style={styles.name}>{item?.name || 'Product'}</Text>
-        <Text numberOfLines={2} style={styles.desc}>{item?.short_desc || item?.desc}</Text>
-        <Text style={styles.price}>₹{item?.discount_price || item?.price || item?.actual_price}</Text>
-      </View>
-      <TouchableOpacity style={styles.removeBtn} onPress={() => removeFromWishlist(item)}>
-        <Ionicons name="trash-outline" size={18} color={AllColors.primary} />
-      </TouchableOpacity>
-    </View>
-  );
-
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <View style={styles.header}>
+      <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color={AllColors.black} />
+          <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Wishlist</Text>
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>My Wishlist</Text>
       </View>
 
       {loading && !refreshing ? (
@@ -200,7 +169,7 @@ https://deebazar.com/product/${item.id}`,
             />
           }
         >
-          <View style={styles.emptyContainer}>
+          <View style={[styles.emptyContainer, { backgroundColor: theme.bg }]}>
             <LottieView
               source={require("../../Assets/Wishlist.json")}
               autoPlay
@@ -208,11 +177,11 @@ https://deebazar.com/product/${item.id}`,
               style={styles.emptyAnimation}
             />
 
-            <Text style={styles.emptyTitle}>
+            <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>
               Your Wishlist is Empty
             </Text>
 
-            <Text style={styles.emptySubtitle}>
+            <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
               Save your favourite products here.
               {"\n"}
               Start exploring and add products to your wishlist.
@@ -243,7 +212,7 @@ https://deebazar.com/product/${item.id}`,
             />
           }
           renderItem={({ item }) => (
-            <View style={styles.card}>
+            <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={() =>
@@ -255,21 +224,21 @@ https://deebazar.com/product/${item.id}`,
               >
                 <Image
                   source={{ uri: item.image }}
-                  style={styles.image}
+                  style={[styles.image, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}
                   resizeMode="contain"
                 />
 
                 <View style={styles.details}>
-                  <Text numberOfLines={2} style={styles.title}>
+                  <Text numberOfLines={2} style={[styles.title, { color: theme.textPrimary }]}>
                     {item.name}
                   </Text>
 
                   <View style={styles.priceRow}>
-                    <Text style={styles.price}>
+                    <Text style={[styles.price, { color: theme.textPrimary }]}>
                       ₹{item.discount_price}
                     </Text>
 
-                    <Text style={styles.oldPrice}>
+                    <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>
                       ₹{item.actual_price}
                     </Text>
 
@@ -288,7 +257,7 @@ https://deebazar.com/product/${item.id}`,
                       ⭐ {item.rating || 0}
                     </Text>
 
-                    <Text>
+                    <Text style={{ color: theme.textSecondary, marginLeft: 8 }}>
                       {item.reviews || 0} Ratings
                     </Text>
                   </View>
@@ -297,29 +266,21 @@ https://deebazar.com/product/${item.id}`,
 
               <View style={styles.bottomRow}>
                 <View style={styles.leftActions}>
-                  {/* <TouchableOpacity>
-            <Ionicons
-              name="heart"
-              size={22}
-              color={AllColors.primary}
-            /> */}
-                  {/* </TouchableOpacity> */}
-
                   <TouchableOpacity onPress={() => onShare(item)}>
                     <Ionicons
                       name="share-social-outline"
                       size={22}
-                      color={AllColors.black}
+                      color={theme.textPrimary}
                     />
                   </TouchableOpacity>
                 </View>
 
                 <View style={styles.rightActions}>
                   <TouchableOpacity
-                    style={styles.removeBtn}
+                    style={[styles.removeBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]}
                     onPress={() => removeWishlistItem(item.id)}
                   >
-                    <Text style={styles.removeText}>Remove</Text>
+                    <Text style={[styles.removeText, { color: isDarkMode ? '#CBD5E1' : undefined }]}>Remove</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -336,7 +297,7 @@ https://deebazar.com/product/${item.id}`,
           )}
           ListEmptyComponent={
             <View style={styles.emptyListWrapper}>
-              <Text style={styles.emptyListText}>
+              <Text style={[styles.emptyListText, { color: theme.textSecondary }]}>
                 No wishlist items found
               </Text>
             </View>

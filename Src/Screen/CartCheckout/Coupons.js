@@ -65,7 +65,7 @@ const COUPONS_DATA = [
 
 export default function Coupons() {
   const navigation = useNavigation();
-  const { theme } = useTheme();
+  const { theme, isDarkMode } = useTheme();
   const [promoCode, setPromoCode] = useState('');
   const [copiedCode, setCopiedCode] = useState(null);
 
@@ -116,17 +116,17 @@ export default function Coupons() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar backgroundColor={AllColors.white} barStyle="dark-content" />
+      <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
         <TouchableOpacity
-          style={styles.backBtn}
+          style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]}
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}>
-          <Ionicons name="arrow-back" size={22} color={AllColors.slateDark} />
+          <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Apply Coupon</Text>
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Apply Coupon</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -136,13 +136,13 @@ export default function Coupons() {
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          <View style={styles.inputCard}>
-            <Text style={styles.inputTitle}>Have a Promo Code?</Text>
+          <View style={[styles.inputCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
+            <Text style={[styles.inputTitle, { color: theme.textPrimary }]}>Have a Promo Code?</Text>
             <View style={styles.inputRow}>
               <TextInput
                 placeholder="Enter Promo Code"
-                placeholderTextColor={AllColors.slateLight}
-                style={styles.input}
+                placeholderTextColor={isDarkMode ? '#94A3B8' : AllColors.slateLight}
+                style={[styles.input, { backgroundColor: isDarkMode ? '#334155' : AllColors.screenBg, color: theme.textPrimary, borderColor: isDarkMode ? '#475569' : AllColors.lightGrey }]}
                 value={promoCode}
                 onChangeText={setPromoCode}
                 autoCapitalize="characters"
@@ -159,7 +159,7 @@ export default function Coupons() {
         renderItem={({ item }) => {
           const isCopied = copiedCode === item.code;
           return (
-            <View style={styles.couponCard}>
+            <View style={[styles.couponCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
               {/* Left Tag */}
               <View style={styles.leftTag}>
                 <MaterialCommunityIcons name="ticket-percent-outline" size={26} color={AllColors.white} />
@@ -168,11 +168,11 @@ export default function Coupons() {
 
               {/* Right Details */}
               <View style={styles.rightContent}>
-                <Text style={styles.couponTitle}>{item.title}</Text>
-                <Text style={styles.couponDesc}>{item.description}</Text>
+                <Text style={[styles.couponTitle, { color: theme.textPrimary }]}>{item.title}</Text>
+                <Text style={[styles.couponDesc, { color: theme.textSecondary }]}>{item.description}</Text>
 
                 <View style={styles.codeRow}>
-                  <View style={styles.codeBox}>
+                  <View style={[styles.codeBox, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.2)' : AllColors.lightPink }]}>
                     <Text style={styles.codeText}>{item.code}</Text>
                   </View>
 
@@ -192,7 +192,7 @@ export default function Coupons() {
                   </TouchableOpacity>
                 </View>
 
-                <Text style={styles.expiryText}>Valid till {item.validTill}</Text>
+                <Text style={[styles.expiryText, { color: theme.textSecondary }]}>Valid till {item.validTill}</Text>
               </View>
             </View>
           );

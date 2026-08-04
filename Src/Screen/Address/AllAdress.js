@@ -16,94 +16,89 @@ import { useTheme } from '../../Context/ThemeContext';
 export default function AllAddress() {
   const [addressList, setAddressList] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { theme } = useTheme();
-const [menuId, setMenuId] = useState(null);
-const Navigation=useNavigation()
+  const { theme, isDarkMode } = useTheme();
+  const [menuId, setMenuId] = useState(null);
+  const Navigation = useNavigation();
 
-const confirmUpdate = (addressId) => {
-   Alert.alert(
-    'Update Address',
-    'Are you sure you want to update this location?',
-    [
-      {
-        text: 'Cancel',
-        style: 'cancel',
-      },
-      {
-        text: 'Yes',
-        style: 'destructive',
-        onPress: () => handleUpdatte(addressId),
-      },
-    ],
-    { cancelable: true }
-  );
- 
-};
-const handleUpdatte =()=>{
-  // console.log('no ')
-}
-const confirmDelete = (addressId) => {
-  Alert.alert(
-    'Delete Address',
-    'Are you sure you want to delete this location?',
-    [
-      {
-        text: 'Cancel',
-        style: 'cancel',
-      },
-      {
-        text: 'Yes',
-        style: 'destructive',
-        onPress: () => handleDelete(addressId),
-      },
-    ],
-    { cancelable: true }
-  );
-};
-const handleDelete = async (addressId) => {
-  try {
-    const token = await getToken();
+  const confirmUpdate = (addressId) => {
+    Alert.alert(
+      'Update Address',
+      'Are you sure you want to update this location?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Yes',
+          style: 'destructive',
+          onPress: () => handleUpdatte(addressId),
+        },
+      ],
+      { cancelable: true }
+    );
+  };
 
-    const response = await fetch(`${BASE_URL}delete-address`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        address_id: addressId,
-      }),
-    });
+  const handleUpdatte = () => {
+    // console.log('no ')
+  };
 
-    const result = await response.json();
+  const confirmDelete = (addressId) => {
+    Alert.alert(
+      'Delete Address',
+      'Are you sure you want to delete this location?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Yes',
+          style: 'destructive',
+          onPress: () => handleDelete(addressId),
+        },
+      ],
+      { cancelable: true }
+    );
+  };
 
-    // console.log('Delete Response:', result);
+  const handleDelete = async (addressId) => {
+    try {
+      const token = await getToken();
 
-    if (response.ok && result.status) {
-      // Alert.alert('Success', 'Address deleted successfully.');
-requestForAllAddress()
-    //  requestForChangeAddress()
-      setMenuId(null);
+      const response = await fetch(`${BASE_URL}delete-address`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          address_id: addressId,
+        }),
+      });
 
-    //   if (selectedAddress?.id === addressId) {
-    //     setSelectedAddress(null);
-    //   }
+      const result = await response.json();
 
-    } else {
-      Alert.alert('Error', result.message || 'Failed to delete address.');
+      if (response.ok && result.status) {
+        requestForAllAddress();
+        setMenuId(null);
+      } else {
+        Alert.alert('Error', result.message || 'Failed to delete address.');
+      }
+    } catch (error) {
+      console.log(error);
+      Alert.alert('Error', 'Something went wrong.');
     }
+  };
 
-  } catch (error) {
-    console.log(error);
-    Alert.alert('Error', 'Something went wrong.');
-  }
-};
   useEffect(() => {
     requestForAllAddress();
   }, []);
-const openAddAddress =()=>{
-    Navigation.navigate('MapScreen')
-}
+
+  const openAddAddress = () => {
+    Navigation.navigate('MapScreen');
+  };
+
   const requestForAllAddress = async () => {
     const token = await getToken();
     const ID = await getuserId();
@@ -123,12 +118,8 @@ const openAddAddress =()=>{
 
       const data = await response.json();
 
-      // console.log(data);
-
       if (response.ok) {
         setAddressList(data.data || []);
-      } else {
-        // console.log(data.message);
       }
     } catch (error) {
       console.log(error);
@@ -139,146 +130,146 @@ const openAddAddress =()=>{
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text>Loading...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: theme.bg }]}>
+        <Text style={{ color: theme.textSecondary }}>Loading addresses...</Text>
       </View>
     );
   }
 
-return (
-  <View style={[styles.screenContainer, { backgroundColor: theme.bg }]}>
-    {/* Header */}
-    <View style={styles.headerContainer}>
-      <Text style={styles.headerTitle}>My Addresses</Text>
+  return (
+    <View style={[styles.screenContainer, { backgroundColor: theme.bg }]}>
+      {/* Header */}
+      <View style={styles.headerContainer}>
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>My Addresses</Text>
 
-      {/* Show only when address list has data */}
-      {addressList?.length > 0 && (
-        <TouchableOpacity
-          onPress={openAddAddress}
-          style={styles.addBtn}>
-          <MaterialCommunityIcons
-            name="plus"
-            size={18}
-            color={AllColors.primary}
-          />
-          <Text style={styles.addBtnText}>Add New Address</Text>
-        </TouchableOpacity>
-      )}
-    </View>
-
-    {addressList?.length === 0 ? (
-      <View style={styles.emptyContainer}>
-        <MaterialCommunityIcons
-          name="map-marker-off-outline"
-          size={90}
-          color={AllColors.lightGrey}
-        />
-
-        <Text style={styles.emptyTitle}>No Address Found</Text>
-
-        <Text style={styles.emptySubTitle}>
-          You don't have any saved addresses yet.
-          {"\n"}
-          Add a new address to continue shopping.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.emptyButton}
-          onPress={openAddAddress}>
-          <MaterialCommunityIcons
-            name="plus"
-            size={18}
-            color={AllColors.white}
-          />
-          <Text style={styles.emptyButtonText}>
-            Add New Address
-          </Text>
-        </TouchableOpacity>
+        {/* Show only when address list has data */}
+        {addressList?.length > 0 && (
+          <TouchableOpacity
+            onPress={openAddAddress}
+            style={styles.addBtn}>
+            <MaterialCommunityIcons
+              name="plus"
+              size={18}
+              color={AllColors.primary}
+            />
+            <Text style={styles.addBtnText}>Add New Address</Text>
+          </TouchableOpacity>
+        )}
       </View>
-    ) : (
-      <FlatList
-        data={addressList}
-        keyExtractor={(item) => item.id.toString()}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.header}>
-              <Text style={styles.name}>{item.name}</Text>
 
-              <View style={styles.menuWrapper}>
-                <TouchableOpacity
-                  onPress={() =>
-                    setMenuId(menuId === item.id ? null : item.id)
-                  }>
-                  <MaterialCommunityIcons
-                    name="dots-vertical"
-                    size={20}
-                    color={AllColors.slateMuted}
-                  />
-                </TouchableOpacity>
+      {addressList?.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <MaterialCommunityIcons
+            name="map-marker-off-outline"
+            size={90}
+            color={isDarkMode ? '#64748B' : AllColors.lightGrey}
+          />
 
-                {menuId === item.id && (
-                  <View style={styles.menu}>
-                    <TouchableOpacity
-                      style={styles.menuItem}
-                      onPress={() => {
-                        setMenuId(null);
-                        handleEdit(item);
-                      }}>
-                      <MaterialCommunityIcons
-                        name="pencil-outline"
-                        size={17}
-                        color={AllColors.slateText}
-                      />
-                      <Text style={styles.menuText}>Edit</Text>
-                    </TouchableOpacity>
+          <Text style={[styles.emptyTitle, { color: theme.textPrimary }]}>No Address Found</Text>
 
-                    <View style={styles.divider} />
+          <Text style={[styles.emptySubTitle, { color: theme.textSecondary }]}>
+            You don't have any saved addresses yet.
+            {"\n"}
+            Add a new address to continue shopping.
+          </Text>
 
-                    <TouchableOpacity
-                      style={styles.menuItem}
-                      onPress={() => {
-                        setMenuId(null);
-                        confirmDelete(item.id);
-                      }}>
-                      <MaterialCommunityIcons
-                        name="delete-outline"
-                        size={17}
-                        color={AllColors.redLight}
-                      />
-                      <Text
-                        style={[
-                          styles.menuText,
-                          styles.deleteMenuText,
-                        ]}>
-                        Delete
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+          <TouchableOpacity
+            style={styles.emptyButton}
+            onPress={openAddAddress}>
+            <MaterialCommunityIcons
+              name="plus"
+              size={18}
+              color={AllColors.white}
+            />
+            <Text style={styles.emptyButtonText}>
+              Add New Address
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={addressList}
+          keyExtractor={(item) => item.id.toString()}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item }) => (
+            <View style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
+              <View style={styles.header}>
+                <Text style={[styles.name, { color: theme.textPrimary }]}>{item.name}</Text>
+
+                <View style={styles.menuWrapper}>
+                  <TouchableOpacity
+                    onPress={() =>
+                      setMenuId(menuId === item.id ? null : item.id)
+                    }>
+                    <MaterialCommunityIcons
+                      name="dots-vertical"
+                      size={20}
+                      color={isDarkMode ? '#94A3B8' : AllColors.slateMuted}
+                    />
+                  </TouchableOpacity>
+
+                  {menuId === item.id && (
+                    <View style={[styles.menu, { backgroundColor: isDarkMode ? '#334155' : AllColors.white, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
+                      <TouchableOpacity
+                        style={styles.menuItem}
+                        onPress={() => {
+                          setMenuId(null);
+                          // handleEdit(item);
+                        }}>
+                        <MaterialCommunityIcons
+                          name="pencil-outline"
+                          size={17}
+                          color={theme.textPrimary}
+                        />
+                        <Text style={[styles.menuText, { color: theme.textPrimary }]}>Edit</Text>
+                      </TouchableOpacity>
+
+                      <View style={[styles.divider, { backgroundColor: isDarkMode ? '#475569' : AllColors.divider }]} />
+
+                      <TouchableOpacity
+                        style={styles.menuItem}
+                        onPress={() => {
+                          setMenuId(null);
+                          confirmDelete(item.id);
+                        }}>
+                        <MaterialCommunityIcons
+                          name="delete-outline"
+                          size={17}
+                          color={AllColors.redLight}
+                        />
+                        <Text
+                          style={[
+                            styles.menuText,
+                            styles.deleteMenuText,
+                          ]}>
+                          Delete
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              <Text style={[styles.mobile, { color: theme.textSecondary }]}>{item.mobile}</Text>
+
+              <Text style={[styles.address, { color: theme.textSecondary }]}>
+                {item.house_no}, {item.road_name}
+                {"\n"}
+                {item.landmark}
+                {"\n"}
+                {item.city}, {item.state} - {item.pin}
+              </Text>
+
+              <View style={[styles.badge, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.2)' : AllColors.softPinkBg }]}>
+                <Text style={styles.badgeText}>{item.type}</Text>
               </View>
             </View>
-
-            <Text style={styles.mobile}>{item.mobile}</Text>
-
-            <Text style={styles.address}>
-              {item.house_no}, {item.road_name}
-              {"\n"}
-              {item.landmark}
-              {"\n"}
-              {item.city}, {item.state} - {item.pin}
-            </Text>
-
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{item.type}</Text>
-            </View>
-          </View>
-        )}
-      />
-    )}
-  </View>
-);
+          )}
+        />
+      )}
+    </View>
+  );
 }
 const styles = StyleSheet.create({
   card: {

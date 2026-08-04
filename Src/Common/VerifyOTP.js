@@ -67,16 +67,20 @@ export default function VerifyOTP() {
 
   // Listen for incoming SMS OTP on Android
   useEffect(() => {
-    if (Platform.OS === 'android' && OtpVerify?.getOtp) {
-      OtpVerify.getHash().then(hash => {
-        // console.log('📱 APP SIGNATURE HASH (Add this to backend SMS template):', hash);
-      });
-      OtpVerify.getOtp()
-        .then(() => OtpVerify.addListener(otpHandler))
-        .catch((err) => console.log('OtpVerify error:', err));
+    if (Platform.OS === 'android') {
+      try {
+        if (OtpVerify && typeof OtpVerify.getOtp === 'function') {
+          OtpVerify.getHash()?.then(hash => {})?.catch(() => {});
+          OtpVerify.getOtp()
+            ?.then(() => OtpVerify.addListener?.(otpHandler))
+            ?.catch((err) => console.log('OtpVerify error:', err));
+        }
+      } catch (err) {
+        console.log('OtpVerify native module missing or error:', err);
+      }
 
       return () => {
-        try { OtpVerify.removeListener(); } catch (e) {}
+        try { OtpVerify?.removeListener?.(); } catch (e) {}
       };
     }
   }, []);

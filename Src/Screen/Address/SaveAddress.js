@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  StatusBar,
 } from "react-native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from "@react-navigation/native";
@@ -20,7 +21,7 @@ import { useTheme } from '../../Context/ThemeContext';
 
 export default function SaveAddress() {
   const navigation = useNavigation();
-  const { theme } = useTheme();
+  const { theme, isDarkMode } = useTheme();
 
   const [stateName, setStateName] = useState('');
   const [city, setCity] = useState('');
@@ -93,190 +94,214 @@ export default function SaveAddress() {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.bg }]} showsVerticalScrollIndicator={false}>
-      <View style={styles.formContainer}>
-        {/* HEADER */}
-        <View style={styles.topSection}>
-          <Text style={styles.title}>Save Address</Text>
-          <Text style={styles.subtitle}>Add your delivery address details</Text>
-        </View>
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
-        {/* Name */}
-        <View style={styles.inputBox}>
-          <Text style={styles.label}>Full Name *</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="person-outline" size={20} color="#777" />
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter Full Name"
-              placeholderTextColor="#999"
-              style={styles.input}
-            />
-          </View>
-        </View>
-
-        {/* House No */}
-        <View style={styles.inputBox}>
-          <Text style={styles.label}>House / Flat No *</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="home-outline" size={20} color="#777" />
-            <TextInput
-              value={houseNo}
-              onChangeText={setHouseNo}
-              placeholder="Enter House / Flat No"
-              placeholderTextColor="#999"
-              style={styles.input}
-            />
-          </View>
-        </View>
-
-        {/* Mobile */}
-        <View style={styles.inputBox}>
-          <Text style={styles.label}>Mobile Number (10 digits) *</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="call-outline" size={20} color="#777" />
-            <TextInput
-              value={mobile}
-              onChangeText={(text) => setMobile(text.replace(/[^0-9]/g, '').slice(0, 10))}
-              placeholder="Enter 10-digit Mobile Number"
-              placeholderTextColor="#999"
-              keyboardType="phone-pad"
-              maxLength={10}
-              style={styles.input}
-            />
-          </View>
-        </View>
-
-        {/* Road Name */}
-        <View style={styles.inputBox}>
-          <Text style={styles.label}>Road Name / Area</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="navigate-outline" size={20} color="#777" />
-            <TextInput
-              value={roadName}
-              onChangeText={setRoadName}
-              placeholder="Enter Road Name or Area"
-              placeholderTextColor="#999"
-              style={styles.input}
-            />
-          </View>
-        </View>
-
-        {/* Landmark */}
-        <View style={styles.inputBox}>
-          <Text style={styles.label}>Landmark</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="pin-outline" size={20} color="#777" />
-            <TextInput
-              value={landmark}
-              onChangeText={setLandmark}
-              placeholder="Enter Landmark (Optional)"
-              placeholderTextColor="#999"
-              style={styles.input}
-            />
-          </View>
-        </View>
-
-        {/* City */}
-        <View style={styles.inputBox}>
-          <Text style={styles.label}>City *</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="business-outline" size={20} color="#777" />
-            <TextInput
-              value={city}
-              onChangeText={setCity}
-              placeholder="Enter City"
-              placeholderTextColor="#999"
-              style={styles.input}
-            />
-          </View>
-        </View>
-
-        {/* State */}
-        <View style={styles.inputBox}>
-          <Text style={styles.label}>State *</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="map-outline" size={20} color="#777" />
-            <TextInput
-              value={stateName}
-              onChangeText={setStateName}
-              placeholder="Enter State"
-              placeholderTextColor="#999"
-              style={styles.input}
-            />
-          </View>
-        </View>
-
-        {/* Pin Code */}
-        <View style={styles.inputBox}>
-          <Text style={styles.label}>PIN Code *</Text>
-          <View style={styles.inputWrapper}>
-            <Ionicons name="location-outline" size={20} color="#777" />
-            <TextInput
-              value={zipCode}
-              onChangeText={setpinCode}
-              placeholder="Enter 6-digit PIN Code"
-              placeholderTextColor="#999"
-              keyboardType="number-pad"
-              maxLength={6}
-              style={styles.input}
-            />
-          </View>
-        </View>
-
-        {/* Address Type */}
-        <View style={styles.inputBox}>
-          <Text style={styles.label}>Address Type</Text>
-          <View style={styles.typeRow}>
-            <TouchableOpacity
-              onPress={() => setTypeType('Home')}
-              style={[styles.typeBadge, typeType === 'Home' && styles.typeBadgeActive]}
-            >
-              <Text style={[styles.typeBadgeText, typeType === 'Home' && styles.typeBadgeTextActive]}>
-                🏠 Home
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setTypeType('Office')}
-              style={[styles.typeBadge, typeType === 'Office' && styles.typeBadgeActive]}
-            >
-              <Text style={[styles.typeBadgeText, typeType === 'Office' && styles.typeBadgeTextActive]}>
-                🏢 Office
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* SAVE BUTTON */}
+      {/* Header */}
+      <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
         <TouchableOpacity
-          style={[styles.saveBtn, saving && { opacity: 0.7 }]}
-          activeOpacity={0.8}
-          onPress={saveAddress}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <>
-              <Ionicons name="save-outline" size={20} color="#FFF" />
-              <Text style={styles.saveText}>Save Address</Text>
-            </>
-          )}
+          style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}>
+          <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
         </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Save Address</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
-      <SuccessModal
-        visible={isSuccess}
-        title="Address Saved"
-        message="Your address has been saved successfully."
-        onClose={() => {
-          setIsSuccess(false);
-          navigation.goBack();
-        }}
-      />
-    </ScrollView>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        <View style={styles.formContainer}>
+          {/* HEADER */}
+          <View style={styles.topSection}>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>Save Address</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Add your delivery address details</Text>
+          </View>
+
+          {/* Name */}
+          <View style={styles.inputBox}>
+            <Text style={[styles.label, { color: theme.textPrimary }]}>Full Name *</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#1E293B' : AllColors.white, borderColor: isDarkMode ? '#334155' : AllColors.lightGrey }]}>
+              <Ionicons name="person-outline" size={20} color={isDarkMode ? '#94A3B8' : '#777'} />
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder="Enter Full Name"
+                placeholderTextColor={isDarkMode ? '#94A3B8' : '#999'}
+                style={[styles.input, { color: theme.textPrimary }]}
+              />
+            </View>
+          </View>
+
+          {/* House No */}
+          <View style={styles.inputBox}>
+            <Text style={[styles.label, { color: theme.textPrimary }]}>House / Flat No *</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#1E293B' : AllColors.white, borderColor: isDarkMode ? '#334155' : AllColors.lightGrey }]}>
+              <Ionicons name="home-outline" size={20} color={isDarkMode ? '#94A3B8' : '#777'} />
+              <TextInput
+                value={houseNo}
+                onChangeText={setHouseNo}
+                placeholder="Enter House / Flat No"
+                placeholderTextColor={isDarkMode ? '#94A3B8' : '#999'}
+                style={[styles.input, { color: theme.textPrimary }]}
+              />
+            </View>
+          </View>
+
+          {/* Mobile */}
+          <View style={styles.inputBox}>
+            <Text style={[styles.label, { color: theme.textPrimary }]}>Mobile Number (10 digits) *</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#1E293B' : AllColors.white, borderColor: isDarkMode ? '#334155' : AllColors.lightGrey }]}>
+              <Ionicons name="call-outline" size={20} color={isDarkMode ? '#94A3B8' : '#777'} />
+              <TextInput
+                value={mobile}
+                onChangeText={(text) => setMobile(text.replace(/[^0-9]/g, '').slice(0, 10))}
+                placeholder="Enter 10-digit Mobile Number"
+                placeholderTextColor={isDarkMode ? '#94A3B8' : '#999'}
+                keyboardType="phone-pad"
+                maxLength={10}
+                style={[styles.input, { color: theme.textPrimary }]}
+              />
+            </View>
+          </View>
+
+          {/* Road Name */}
+          <View style={styles.inputBox}>
+            <Text style={[styles.label, { color: theme.textPrimary }]}>Road Name / Area</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#1E293B' : AllColors.white, borderColor: isDarkMode ? '#334155' : AllColors.lightGrey }]}>
+              <Ionicons name="navigate-outline" size={20} color={isDarkMode ? '#94A3B8' : '#777'} />
+              <TextInput
+                value={roadName}
+                onChangeText={setRoadName}
+                placeholder="Enter Road Name or Area"
+                placeholderTextColor={isDarkMode ? '#94A3B8' : '#999'}
+                style={[styles.input, { color: theme.textPrimary }]}
+              />
+            </View>
+          </View>
+
+          {/* Landmark */}
+          <View style={styles.inputBox}>
+            <Text style={[styles.label, { color: theme.textPrimary }]}>Landmark</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#1E293B' : AllColors.white, borderColor: isDarkMode ? '#334155' : AllColors.lightGrey }]}>
+              <Ionicons name="pin-outline" size={20} color={isDarkMode ? '#94A3B8' : '#777'} />
+              <TextInput
+                value={landmark}
+                onChangeText={setLandmark}
+                placeholder="Enter Landmark (Optional)"
+                placeholderTextColor={isDarkMode ? '#94A3B8' : '#999'}
+                style={[styles.input, { color: theme.textPrimary }]}
+              />
+            </View>
+          </View>
+
+          {/* City */}
+          <View style={styles.inputBox}>
+            <Text style={[styles.label, { color: theme.textPrimary }]}>City *</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#1E293B' : AllColors.white, borderColor: isDarkMode ? '#334155' : AllColors.lightGrey }]}>
+              <Ionicons name="business-outline" size={20} color={isDarkMode ? '#94A3B8' : '#777'} />
+              <TextInput
+                value={city}
+                onChangeText={setCity}
+                placeholder="Enter City"
+                placeholderTextColor={isDarkMode ? '#94A3B8' : '#999'}
+                style={[styles.input, { color: theme.textPrimary }]}
+              />
+            </View>
+          </View>
+
+          {/* State */}
+          <View style={styles.inputBox}>
+            <Text style={[styles.label, { color: theme.textPrimary }]}>State *</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#1E293B' : AllColors.white, borderColor: isDarkMode ? '#334155' : AllColors.lightGrey }]}>
+              <Ionicons name="map-outline" size={20} color={isDarkMode ? '#94A3B8' : '#777'} />
+              <TextInput
+                value={stateName}
+                onChangeText={setStateName}
+                placeholder="Enter State"
+                placeholderTextColor={isDarkMode ? '#94A3B8' : '#999'}
+                style={[styles.input, { color: theme.textPrimary }]}
+              />
+            </View>
+          </View>
+
+          {/* Pin Code */}
+          <View style={styles.inputBox}>
+            <Text style={[styles.label, { color: theme.textPrimary }]}>PIN Code *</Text>
+            <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#1E293B' : AllColors.white, borderColor: isDarkMode ? '#334155' : AllColors.lightGrey }]}>
+              <Ionicons name="location-outline" size={20} color={isDarkMode ? '#94A3B8' : '#777'} />
+              <TextInput
+                value={zipCode}
+                onChangeText={setpinCode}
+                placeholder="Enter 6-digit PIN Code"
+                placeholderTextColor={isDarkMode ? '#94A3B8' : '#999'}
+                keyboardType="number-pad"
+                maxLength={6}
+                style={[styles.input, { color: theme.textPrimary }]}
+              />
+            </View>
+          </View>
+
+          {/* Address Type */}
+          <View style={styles.inputBox}>
+            <Text style={[styles.label, { color: theme.textPrimary }]}>Address Type</Text>
+            <View style={styles.typeRow}>
+              <TouchableOpacity
+                onPress={() => setTypeType('Home')}
+                style={[
+                  styles.typeBadge,
+                  { backgroundColor: isDarkMode ? '#1E293B' : AllColors.borderLight, borderColor: isDarkMode ? '#334155' : 'transparent', borderWidth: isDarkMode ? 1 : 0 },
+                  typeType === 'Home' && styles.typeBadgeActive,
+                ]}
+              >
+                <Text style={[styles.typeBadgeText, { color: isDarkMode ? '#CBD5E1' : AllColors.black }, typeType === 'Home' && styles.typeBadgeTextActive]}>
+                  🏠 Home
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setTypeType('Office')}
+                style={[
+                  styles.typeBadge,
+                  { backgroundColor: isDarkMode ? '#1E293B' : AllColors.borderLight, borderColor: isDarkMode ? '#334155' : 'transparent', borderWidth: isDarkMode ? 1 : 0 },
+                  typeType === 'Office' && styles.typeBadgeActive,
+                ]}
+              >
+                <Text style={[styles.typeBadgeText, { color: isDarkMode ? '#CBD5E1' : AllColors.black }, typeType === 'Office' && styles.typeBadgeTextActive]}>
+                  🏢 Office
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* SAVE BUTTON */}
+          <TouchableOpacity
+            style={[styles.saveBtn, saving && { opacity: 0.7 }]}
+            activeOpacity={0.8}
+            onPress={saveAddress}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="save-outline" size={20} color="#FFF" />
+                <Text style={styles.saveText}>Save Address</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <SuccessModal
+          visible={isSuccess}
+          title="Address Saved"
+          message="Your address has been saved successfully."
+          onClose={() => {
+            setIsSuccess(false);
+            navigation.goBack();
+          }}
+        />
+      </ScrollView>
+    </View>
   );
 }
 
@@ -363,5 +388,33 @@ const styles = StyleSheet.create({
   },
   typeBadgeTextActive: {
     color: AllColors.white,
+  },
+  header: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: AllColors.white,
+    paddingHorizontal: 16,
+    elevation: 2,
+    shadowColor: AllColors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: AllColors.slateDark,
+  },
+  headerSpacer: {
+    width: 40,
   },
 });

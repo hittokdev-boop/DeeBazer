@@ -11,6 +11,7 @@ import {
 
 import { useRoute, useNavigation } from "@react-navigation/native";
 import AntDesign from "react-native-vector-icons/AntDesign";
+import Ionicons from "react-native-vector-icons/Ionicons";
 
 import AllColors from "../../Constants/Color";
 import { useTheme } from '../../Context/ThemeContext';
@@ -18,7 +19,7 @@ import { useTheme } from '../../Context/ThemeContext';
 export default function ViewAllProducts() {
   const route = useRoute();
   const navigation = useNavigation();
-  const { theme } = useTheme();
+  const { theme, isDarkMode } = useTheme();
 
   const { title, products = [] } = route.params || {};
 
@@ -42,16 +43,16 @@ export default function ViewAllProducts() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar backgroundColor={AllColors.white} barStyle="dark-content" />
+      <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color={AllColors.slateDark} />
+      <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+        <TouchableOpacity style={[styles.backButton, { backgroundColor: isDarkMode ? '#334155' : AllColors.divider }]} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{title || 'Products'}</Text>
-          <Text style={styles.headerSubtitle}>{products ? `${products.length} Items Available` : 'Showing all'}</Text>
+          <Text style={[styles.headerTitle, { color: theme.textPrimary }]} numberOfLines={1}>{title || 'Products'}</Text>
+          <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>{products ? `${products.length} Items Available` : 'Showing all'}</Text>
         </View>
       </View>
 
@@ -67,25 +68,25 @@ export default function ViewAllProducts() {
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={styles.card}
+            style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
             activeOpacity={0.8}
             onPress={() => gotoDetails(item)}
           >
             {/* Image Container */}
-            <View style={styles.cardImageContainer}>
+            <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
               <Image source={{ uri: item.image }} style={styles.image} />
             </View>
 
             {/* Product Details */}
             <View style={styles.cardContent}>
-              <Text numberOfLines={2} style={styles.name}>
+              <Text numberOfLines={2} style={[styles.name, { color: theme.textPrimary }]}>
                 {item.name}
               </Text>
 
               <View style={styles.priceRow}>
-                <Text style={styles.price}>₹{item.price}</Text>
+                <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.price}</Text>
                 {item.originalPrice ? (
-                  <Text style={styles.oldPrice}>₹{item.originalPrice}</Text>
+                  <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.originalPrice}</Text>
                 ) : null}
               </View>
 
