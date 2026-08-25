@@ -8,7 +8,10 @@ import {
   Animated,
   Dimensions,
   Easing,
+  Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { PlayInstallReferrer } from 'react-native-play-install-referrer';
 import LinearGradient from 'react-native-linear-gradient';
 import AllColors from '../../Constants/Color';
 
@@ -131,12 +134,67 @@ const SplashScreen = ({ navigation }) => {
       useNativeDriver: false,
     }).start();
 
-    // 5. Navigation Delay
-    const timer = setTimeout(() => {
-      navigation.replace('AppTab');
-    }, 2800);
+    // 5. Check Install Referrer and handle deferred deep linking
+    let isMounted = true;
+    let timer;
 
-    return () => clearTimeout(timer);
+    const getQueryParam = (url, name) => {
+      const regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)');
+      const results = regex.exec('?' + url);
+      if (!results) return null;
+      if (!results[2]) return '';
+      return decodeURIComponent(results[2].replace(/\+/g, ' '));
+    };
+
+    const initApp = async () => {
+      let productId = null;
+
+      if (Platform.OS === 'android') {
+        try {
+          const isProcessed = await AsyncStorage.getItem('REFERRER_PROCESSED');
+          if (isProcessed !== 'true') {
+            // Get referrer details from Play Store
+            const referrerInfo = await new Promise((resolve) => {
+              PlayInstallReferrer.getInstallReferrerInfo((info, error) => {
+                if (!error && info?.installReferrer) {
+                  resolve(info.installReferrer);
+                } else {
+                  resolve(null);
+                }
+              });
+            });
+
+            if (referrerInfo) {
+              console.log("Install Referrer received:", referrerInfo);
+              productId = getQueryParam(referrerInfo, 'product_id');
+            }
+
+            // Mark as processed so we don't handle this install referrer again
+            await AsyncStorage.setItem('REFERRER_PROCESSED', 'true');
+          }
+        } catch (err) {
+          console.log("Install referrer reading error:", err);
+        }
+      }
+
+      // Wait for splash screen duration to finish, then navigate
+      timer = setTimeout(() => {
+        if (isMounted) {
+          navigation.replace('AppTab');
+          if (productId) {
+            navigation.navigate('ProductDetails', { id: productId });
+          }
+        }
+      }, 2800);
+    };
+
+    initApp();
+
+    return () => {
+      isMounted = false;
+      if (timer) clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const progressWidth = progressAnim.interpolate({
@@ -251,7 +309,8 @@ const SplashScreen = ({ navigation }) => {
             <Image
               source={require('../../Assets/AppIcon.png')}
               style={styles.appIconImage}
-              resizeMode="contain"
+              resizeMode="cover"
+              fadeDuration={0}
             />
           </Animated.View>
         </View>
@@ -385,14 +444,14 @@ const styles = StyleSheet.create({
     borderRadius: 98,
     borderWidth: 3,
     borderColor: primaryColor,
-    backgroundColor: 'rgba(247, 22, 112, 0.12)',
+    backgroundColor: `${primaryColor}1f`,
   },
   ringOuterLight: {
     position: 'absolute',
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: '#FFD6E8',
+    backgroundColor: `${primaryColor}33`,
     shadowColor: primaryColor,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.35,
@@ -404,7 +463,7 @@ const styles = StyleSheet.create({
     width: 188,
     height: 188,
     borderRadius: 94,
-    backgroundColor: '#FF6EA7',
+    backgroundColor: `${primaryColor}7f`,
   },
   ringInnerDeep: {
     position: 'absolute',
@@ -415,18 +474,23 @@ const styles = StyleSheet.create({
   },
   innerWhiteCircleOverlay: {
     position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: AllColors.white,
+    width: 154,
+    height: 154,
+    borderRadius: 77,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
-    zIndex: 5,
+    zIndex: 99,
+    elevation: 10,
+    overflow: 'hidden',
+    shadowColor: primaryColor,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
   },
   appIconImage: {
-    width: '100%',
-    height: '100%',
+    width: 210,
+    height: 210,
   },
   brandTitleRow: {
     flexDirection: 'row',

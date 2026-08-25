@@ -16,10 +16,10 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Rating } from '@kolking/react-native-rating';
-import AllColors from '../../Constants/Color';
+import AllColors from '../../../Constants/Color';
 import AntDesign from 'react-native-vector-icons/AntDesign'
 import Feather from 'react-native-vector-icons/Feather'
-import { BASE_URL, getToken, getuserId } from '../../Api/Api';
+import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
 import { ScrollView } from 'react-native-gesture-handler';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,11 +28,12 @@ import RazorpayCheckout from "react-native-razorpay";
 import LottieView from 'lottie-react-native';
 
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useTheme } from '../../Context/ThemeContext';
-import CustomAlert from '../../Common/Alert';
+import { useTheme } from '../../../Context/ThemeContext';
+import CustomAlert from '../../../Common/Alert';
 const CartPage = () => {
   const { theme, isDarkMode } = useTheme();
   const [cartItems, setCartItems] = useState([])
+  const [loading, setLoading] = useState(true);
   const [extraData, setExtraData] = useState({})
   const [couponCode, setCouponCode] = useState('DEEBAZER50');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
@@ -93,8 +94,10 @@ const CartPage = () => {
   const [paymentMethod, setPaymentMethod] = useState('cod');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
   const updateCartQty = async (product, qty) => {
     const ID = await getuserId();
+    const token = await getToken();
     try {
       const formData = new FormData();
 
@@ -104,12 +107,16 @@ const CartPage = () => {
 
       const response = await fetch(`${BASE_URL}cart-to-add`, {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
         body: formData,
       });
 
       const result = await response.json();
 
-      // console.log("Cart Update:", result);
+      console.log("Cart Update:", body);
 
       if (result.status !== 200) {
         Alert.alert("Error", result.message || "Unable to update cart");
@@ -363,84 +370,97 @@ const CartPage = () => {
       const token = await getToken();
       const userId = await getuserId();
 
-      const body = {
-        user_id: userId,
-        address_id: currentAddressId,
-        payment_method: String(selectedMethod),
-        coupon_code: appliedCoupon?.code || undefined,
-        items: cartItems.map(item => ({
-          product_id: item.product_id,
-          quantity: item.qty,
-          price: item.discount_price || item.unit_price || item.actual_price,
-        })),
-        shipping_address: {
-          full_name: addressData?.name || '',
-          address: `${addressData?.house_no || ''}, ${addressData?.road_name || ''}`,
-          city: addressData?.city || '',
-          state: addressData?.state || '',
-          zip_code: addressData?.pin || '',
-          phone: addressData?.mobile || '',
-        },
-        total_amount: billSummary.total_amount,
-      };
+      let checkoutUrl = null;
+      if (selectedMethod === "cashfree" || selectedMethod === "online") {
+        try {
+          const cashfreeBody = {
+            amount: billSummary.total_amount,
+            customer_id: String(userId),
+            email: userProfile?.email || addressData?.email || 'customer@deebazar.com',
+            phone: addressData?.mobile || userProfile?.mobile || '9876543210',
+            name: addressData?.name || userProfile?.name || 'Customer',
+            order_note: "Product Purchase",
+            return_url: "https://deebazar.com/payment-return",
+            notify_url: "https://deebazar.com/payment-notify"
+          };
 
+          const cashfreeResponse = await fetch(`${BASE_URL}payment/cashfree/create-order`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(cashfreeBody),
+          });
+
+          const cashfreeResult = await cashfreeResponse.json();
+          if (cashfreeResponse.ok && (cashfreeResult.status === "success" || cashfreeResult.checkout_url)) {
+            checkoutUrl = cashfreeResult.checkout_url;
+          } else {
+            console.log("Cashfree order creation failed:", cashfreeResult);
+          }
+        } catch (err) {
+          console.log("Cashfree order API call error:", err);
+        }
+      }
+
+      const body = {
+        address_id: currentAddressId ? (isNaN(currentAddressId) ? currentAddressId : Number(currentAddressId)) : undefined,
+        payment_method: String(selectedMethod),
+      };
+      // console.log("Order Request Body:", body);
       const response = await fetch(`${BASE_URL}orders`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          Accept: "application/json",
         },
         body: JSON.stringify(body),
       });
 
       const result = await response.json();
+      console.log("Create Order Result:", result);
 
       setIsPaymentModalVisible(false);
       setIsPlacingOrder(false);
 
-      if (response.ok && (result.status === 200 || result.success || result.order_id)) {
+      const isSuccess = response.ok && (result.status === 200 || result.status === '200' || result.status === 'success' || result.success === true);
+
+      if (isSuccess) {
         setCartItems([]);
         setAppliedCoupon(null);
         setCouponDiscount(0);
 
         if (selectedMethod === "cashfree" || selectedMethod === "online") {
-          if (result.payment_url) {
-            Linking.openURL(result.payment_url).catch(() => {
+          const targetUrl = checkoutUrl || result.payment_url;
+          if (targetUrl) {
+            Linking.openURL(targetUrl).catch(() => {
               openRazorpay();
             });
           }
         }
 
         if (Platform.OS === 'android') {
-          ToastAndroid.show("Order placed successfully!", ToastAndroid.LONG);
+          ToastAndroid.show(result.message || "Order created successfully", ToastAndroid.LONG);
+        } else {
+          Alert.alert("Success", result.message || "Order created successfully");
         }
 
-        Alert.alert(
-          "Order Placed Success! 🎉",
-          `Your order #${result.order_id || result.data?.id || 'DB-' + Math.floor(100000 + Math.random() * 900000)} has been placed successfully.`,
-          [
-            {
-              text: "View Orders",
-              onPress: () => {
-                navigation.navigate("Orders");
-              },
-            },
-          ]
-        );
+        const createdOrderId = result.order_id || result.data?.id || result.id;
+
+        navigation.navigate("OrderDetails", {
+          order_id: createdOrderId,
+          id: createdOrderId,
+          order: result.data || result.order,
+          payment_method: selectedMethod,
+        });
       } else {
-        setCartItems([]);
-        setAppliedCoupon(null);
-        setCouponDiscount(0);
         Alert.alert(
-          "Order Placed Success! 🎉",
-          "Your order has been placed successfully.",
+          "Order Placement Failed ❌",
+          result?.message || result?.error || "Something went wrong while placing your order. Please try again.",
           [
-            {
-              text: "View Orders",
-              onPress: () => {
-                navigation.navigate("Orders");
-              },
-            },
+            { text: "OK" }
           ]
         );
       }
@@ -448,19 +468,11 @@ const CartPage = () => {
       console.log("Order Error:", error);
       setIsPaymentModalVisible(false);
       setIsPlacingOrder(false);
-      setCartItems([]);
-      setAppliedCoupon(null);
-      setCouponDiscount(0);
       Alert.alert(
-        "Order Placed Success! 🎉",
-        "Your order has been recorded successfully.",
+        "Order Error ❌",
+        "A network error occurred. Please check your internet connection and try again.",
         [
-          {
-            text: "View Orders",
-            onPress: () => {
-              navigation.navigate("Orders");
-            },
-          },
+          { text: "OK" }
         ]
       );
     }
@@ -506,16 +518,16 @@ const CartPage = () => {
     0
   );
   const getUserId = async () => {
-    const userid = await getToken()
-    setIsUser(userid)
+    const userid = await getToken();
+    setIsUser(userid);
+    if (!userid) {
+      setLoading(false);
+    }
+  };
 
-  }
-  // useEffect(()=>{
-  //    CartView()
-  //    getUserId()
-  // },[])
   useFocusEffect(
     useCallback(() => {
+      setLoading(true);
       CartView();
       getUserId();
       setIsModal(false);
@@ -525,6 +537,7 @@ const CartPage = () => {
     const userid = await getuserId();
     if (!userid) {
       setRefreshing(false);
+      setLoading(false);
       return;
     }
 
@@ -532,8 +545,13 @@ const CartPage = () => {
     formData.append('user_id', userid);
 
     try {
+      const token = await getToken();
       const response = await fetch(`${BASE_URL}cart-view`, {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
         body: formData,
       });
 
@@ -545,10 +563,26 @@ const CartPage = () => {
       setAddressData(data.address_data || {});
       setCartItems(data.data || []);
       setExtraData(data.extra_data || {});
+
+      // Fetch user profile info to replace static variables
+      if (token) {
+        const profileResponse = await fetch(`${BASE_URL}me`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
+        });
+        const profileData = await profileResponse.json().catch(() => ({}));
+        if (profileData && profileData.user) {
+          setUserProfile(profileData.user);
+        }
+      }
     } catch (error) {
       console.log('Error:', error);
     } finally {
       setRefreshing(false);
+      setLoading(false);
     }
   };
 
@@ -558,42 +592,85 @@ const CartPage = () => {
   };
 
 
-  const requestForChangeAddress = async () => {
-    setIsModal(true)
+  const parseAddressList = (data) => {
+    if (!data) return [];
+    let list = [];
+    if (Array.isArray(data.data)) {
+      list = data.data;
+    } else if (Array.isArray(data.addresses)) {
+      list = data.addresses;
+    } else if (Array.isArray(data.address)) {
+      list = data.address;
+    } else if (Array.isArray(data.list)) {
+      list = data.list;
+    } else if (Array.isArray(data.result)) {
+      list = data.result;
+    } else if (Array.isArray(data)) {
+      list = data;
+    } else if (data.data && typeof data.data === 'object' && (data.data.id || data.data.address_id)) {
+      list = [data.data];
+    } else if (data.address && typeof data.address === 'object' && (data.address.id || data.address.address_id)) {
+      list = [data.address];
+    }
+    return list;
+  };
 
+  const requestForChangeAddress = async () => {
+    setIsModal(true);
 
     const token = await getToken();
     const ID = await getuserId();
 
     try {
-      const response = await fetch(`${BASE_URL}list-address`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          user_id: ID,
-        }),
-      });
+      let list = [];
+      try {
+        const formData = new FormData();
+        if (ID) formData.append('user_id', String(ID));
 
-      const data = await response.json();
-
-
-      // console.log('Status:', response.status);
-      // console.log('Address List:', data);
-
-      if (response.ok) {
-
-        setAddressList(data.data || data.addresses || []);
-      } else {
-        console.log('API Error:', data.message);
+        const response = await fetch(`${BASE_URL}list-address`, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            Authorization: token ? `Bearer ${token}` : '',
+          },
+          body: formData,
+        });
+        const text = await response.text();
+        let data = {};
+        try { data = JSON.parse(text); } catch (e) { }
+        list = parseAddressList(data);
+      } catch (e) {
+        console.log('CartPage list-address FormData error:', e);
       }
+
+      if (!list || list.length === 0) {
+        try {
+          const response = await fetch(`${BASE_URL}list-address`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+              Authorization: token ? `Bearer ${token}` : '',
+            },
+            body: JSON.stringify({
+              user_id: ID,
+            }),
+          });
+          const text = await response.text();
+
+          let data = {};
+          try { data = JSON.parse(text); } catch (e) { }
+          list = parseAddressList(data);
+        } catch (e) {
+          console.log('CartPage list-address JSON error:', e);
+        }
+      }
+
+      setAddressList(list || []);
     } catch (error) {
       console.log('Fetch Error:', error);
     }
-  }
+  };
   const openAddAddress = () => {
     requestForChangeAddress()
 
@@ -683,14 +760,33 @@ const CartPage = () => {
     }
   };
 
+  if (loading && !refreshing) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+        <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+          <TouchableOpacity style={[styles.iconBtn, { backgroundColor: isDarkMode ? '#334155' : '#F5F5F5' }]} onPress={() => navigation.goBack()}>
+            <AntDesign name="arrowleft" size={22} color={theme.textPrimary} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
+            My Cart
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={AllColors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!isuser) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
         <View style={[loginStyles.container, { backgroundColor: theme.bg }]}>
-          <View style={loginStyles.iconBox}>
+          <View style={[loginStyles.iconBox, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}>
             <AntDesign
               name="shoppingcart"
-              size={80}
+              size={65}
               color={AllColors.primary}
             />
           </View>
@@ -709,11 +805,19 @@ const CartPage = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.continueShopBtn}
+            style={loginStyles.continueShopBtn}
             onPress={() => navigation.navigate('Profile')}>
-            <Text style={loginStyles.skipText}>
-              Continue Shopping
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <AntDesign
+                name="shoppingcart"
+                size={18}
+                color={AllColors.primary}
+                style={{ marginRight: 8 }}
+              />
+              <Text style={loginStyles.continueShopText}>
+                Continue Shopping
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -735,7 +839,7 @@ const CartPage = () => {
         >
           <View style={[loginStyles.container, { backgroundColor: theme.bg }]}>
             <LottieView
-              source={require("../../Assets/empty.json")}
+              source={require("../../../Assets/empty.json")}
               autoPlay
               loop
               style={loginStyles.animation}
@@ -2262,25 +2366,56 @@ const loginStyles = StyleSheet.create({
 
   loginBtn: {
     width: "100%",
-    height: 52,
+    height: 42,
     backgroundColor: AllColors.primary,
-    borderRadius: 14,
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
 
     shadowColor: AllColors.shadow,
     shadowOffset: {
       width: 0,
-      height: 6,
+      height: 3,
     },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    elevation: 4,
   },
 
   loginText: {
     color: AllColors.white,
-    fontSize: 17,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  iconBox: {
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 25,
+    shadowColor: AllColors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+
+  continueShopBtn: {
+    width: "100%",
+    height: 42,
+    borderWidth: 1.5,
+    borderColor: AllColors.primary,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 12,
+  },
+
+  continueShopText: {
+    color: AllColors.primary,
+    fontSize: 14,
     fontWeight: "700",
   },
 });

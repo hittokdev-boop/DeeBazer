@@ -196,7 +196,8 @@
 //   "zipCode": "560001",
 //   "address": "123 Main Street",
 //   "landmark": "Near Park",
-//   "alternativePhone": "9876543211"
+//   "alternativePhone": "9876543211",
+// "logo":'link'
 // }
 // ```
 
@@ -236,32 +237,99 @@
 
 // ---
 
-// ### Delete Account
-// Permanently delete user account.
+// /. Send Delete Account OTP
+// Method: POST
+// URL:
+// https://deebazar.com/api/send-delete-account-otpHeaders:
+// Content-Type: application/json
+// Accept: application/jsonPostman Body → raw → JSON
 
-// **Endpoint:** `POST /api/destroy-account`
-
-// **Headers:**
-// ```
-// Authorization: Bearer {token}
-// ```
-
-// **Request Body:**
-// ```json
 // {
-//   "email": "john@example.com",
-//   "password": "password123"
-// }
-// ```
+//     "mobile": "9876543210"
+// }Success Response
 
-// **Response (200):**
-// ```json
 // {
-//   "status": 200,
-//   "message": "User account permanently deleted"
+//     "status": 200,
+//     "message": "OTP sent successfully"
+// }User Not Found
+
+// {
+//     "status": 404,
+//     "message": "User not found"
+// }Validation Error
+
+// {
+//     "status": 400,
+//     "errors": {
+//         "mobile": [
+//             "The mobile field is required."
+//         ]
+//     }
+// }SMS Failed
+
+// {
+//     "status": 400,
+//     "message": "Failed to send OTP. Please try again."
 // }
-// ```
-// ## Category APIs
+
+// 2. Permanently Delete Account
+// Method: POST
+// URL:
+// https://deebazar.com/api/delete-accountHeaders:
+// Content-Type: application/json
+// Accept: application/jsonPostman Body → raw → JSON
+
+// {
+//     "mobile": "9876543210",
+//     "otp": "1234",
+//      reasons:'I no longer want to use the app'
+ // }The otp should be the OTP received by the user through SMS.
+// Success Response
+
+// {
+//     "status": 200,
+//     "message": "User account permanently deleted"
+// }OTP Expired / Not Generated
+
+// {
+//     "status": 400,
+//     "message": "OTP not generated or expired"
+// }Invalid OTP
+
+// {
+//     "status": 400,
+//     "message": "Invalid OTP"
+// }User Not Found
+
+// {
+//     "status": 404,
+//     "message": "User not found"
+// }Validation Error
+
+// {
+//     "status": 400,
+//     "errors": {
+//         "mobile": [
+//             "The mobile field is required."
+//         ],
+//         "otp": [
+//             "The otp field is required."
+//         ]
+//     }
+// }Debdas  [12:50 PM]
+// {
+//     "reasons": [
+//         "I no longer want to use the app",
+//         "I am not satisfied with the service",
+//         "I found another app",
+//         "Too many notifications",
+//         "Privacy concerns",
+//         "Technical issues",
+//         "I created this account by mistake",
+//         "Other"
+//     ]
+// }
+// Message all-hittok-conquer
 
 // ### Get All Categories
 // Get list of all active categories.
@@ -1190,9 +1258,9 @@
 // **Request Body:**
 // ```json
 // {
-//   "user_id": 123,
+//   
 //   "address_id": 1,
-//   "payment_method": "cashfree"
+//   "payment_method": "cod"
 // }
 // ```
 
@@ -1519,3 +1587,6 @@
 //   }
 // }
 // ``` 
+// https://deebazar.com/help-and-support.php
+// https://deebazar.com/privacy-policy.php
+// https://deebazar.com/terms-and-conditions.php

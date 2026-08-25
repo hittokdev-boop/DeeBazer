@@ -2,32 +2,33 @@ import react from 'react'
 import Entypo from 'react-native-vector-icons/Entypo';
 import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
-import DashBoard from './Screen/ProductsDashboard/DashBoard';
-import Home from './Screen/ProductsDashboard/Home';
-import Account from './Screen/AuthProfile/Account';
-import CartPage from './Screen/CartCheckout/CartPage';
+import DashBoard from './Screen/app/ProductsDashboard/DashBoard';
+import Home from './Screen/app/ProductsDashboard/Home';
+import Account from './Screen/app/AuthProfile/Account';
+import CartPage from './Screen/app/CartCheckout/CartPage';
 import AllColors from './Constants/Color';
-import VerifyOTP from './Common/VerifyOTP'
+import VerifyOTP from './Screen/auth/VerifyOTP';
 import { useTheme } from './Context/ThemeContext';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
-import CommonLoginModal from './Common/Login';
-import TextView from './Screen/Misc/Text';
-import EditProfileScreen from './Screen/AuthProfile/EditProfile'
-import SaveAddress from './Screen/Address/SaveAddress'
-import ProductDetails from './Screen/ProductsDashboard/ProductDetails'
+import CommonLoginModal from './Screen/auth/Login';
+import TextView from './Screen/app/Misc/Text';
+import EditProfileScreen from './Screen/app/AuthProfile/EditProfile';
+import SaveAddress from './Screen/app/Address/SaveAddress';
+import ProductDetails from './Screen/app/ProductsDashboard/ProductDetails';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import MapScreen from './Screen/Address/MapScreen'
-import AllAddress from './Screen/Address/AllAdress'
-import ViewAllProducts from './Screen/ProductsDashboard/ViewAllProducts'
-import Wishlist from './Screen/Misc/wishlist '
-import RazorpayScreen from './Screen/CartCheckout/RazorpayScreen'
-import Orders from './Screen/Orders/Orders';
-import Coupons from './Screen/CartCheckout/Coupons';
-import HelpCenter from './Screen/Misc/HelpCenter';
-import SplashScreen from './Screen/Misc/SplashScreen';
-import OrderDetails from './Screen/Orders/OrderDetails';
-import Register from './Common/Register';
-import TermsCondition from './Screen/Misc/TermsCondition';
+import MapScreen from './Screen/app/Address/MapScreen';
+import AllAddress from './Screen/app/Address/AllAdress';
+import ViewAllProducts from './Screen/app/ProductsDashboard/ViewAllProducts';
+import Wishlist from './Screen/app/Misc/wishlist ';
+import RazorpayScreen from './Screen/app/CartCheckout/RazorpayScreen';
+import Orders from './Screen/app/Orders/Orders';
+import Coupons from './Screen/app/CartCheckout/Coupons';
+import HelpCenter from './Screen/app/Misc/HelpCenter';
+import SplashScreen from './Screen/auth/SplashScreen';
+import OrderDetails from './Screen/app/Orders/OrderDetails';
+import Register from './Screen/auth/Register';
+import TermsCondition from './Screen/app/Misc/TermsCondition';
+import OrderSuccess from './Screen/app/CartCheckout/OrderSuccess';
 // const Tab = createMaterialTopTabNavigator();
 const Tab = createBottomTabNavigator()
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
@@ -41,9 +42,20 @@ export function navigate(name, params) {
   }
 }
 
+const linking = {
+  prefixes: ['https://deebazar.com', 'http://deebazar.com', 'deebazar://'],
+  config: {
+    screens: {
+      ProductDetails: 'product/:id',
+      CartPage: 'cart',
+      Wishlist: 'wishlist',
+    },
+  },
+};
+
 export default function Navigation() {
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer ref={navigationRef} linking={linking}>
       <AppStack />
     </NavigationContainer>
   )
@@ -82,6 +94,7 @@ const AppStack = () => {
       <Stack.Screen name="Coupons" component={Coupons} />
       <Stack.Screen name="HelpCenter" component={HelpCenter} />
       <Stack.Screen name="OrderDetails" component={OrderDetails} />
+      <Stack.Screen name="OrderSuccess" component={OrderSuccess} />
     </Stack.Navigator>
   )
 }

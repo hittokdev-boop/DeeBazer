@@ -19,15 +19,15 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import Feather from 'react-native-vector-icons/Feather';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import AllColors from '../../Constants/Color';
-import { BASE_URL, getToken, getuserId } from '../../Api/Api';
-import { useTheme } from '../../Context/ThemeContext';
+import AllColors from '../../../Constants/Color';
+import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
+import { useTheme } from '../../../Context/ThemeContext';
 
 const { width } = Dimensions.get('window');
 const slideWidth = width - 32;
 
 export default function ProductDetails({ route }) {
-  const { theme } = useTheme();
+  const { theme, isDarkMode } = useTheme();
   const [product, setProduct] = useState({});
   const [productImage, setProductImage] = useState(null);
   const [isAddedToCart, setIsAddedToCart] = useState(false);
@@ -55,9 +55,15 @@ export default function ProductDetails({ route }) {
 
   const shareProduct = async () => {
     try {
+      const productId = id || product?.id || product?.product_id;
+      const playStoreUrl = `https://play.google.com/store/apps/details?id=com.deebazar.shopping&referrer=product_id%3D${productId}`;
+      const deepLinkUrl = `deebazar://product/${productId}`;
+      
+      const message = `${product?.name || ''}\n\nPrice: ₹${product?.discount_price || ''}\n\nCheck out this product on DeeBazar!\n\nIf the app is installed, open directly:\n${deepLinkUrl}\n\nIf the app is not installed, install it from Play Store:\n${playStoreUrl}`;
+
       await Share.share({
         title: product?.name || 'Product Details',
-        message: `${product?.name || ''}\n\nPrice: ₹${product?.discount_price || ''}\n\n${product?.short_desc || ''}\n\n${productImage || ''}`,
+        message: message,
       });
     } catch (error) {
       console.log('Share error:', error);
@@ -65,10 +71,15 @@ export default function ProductDetails({ route }) {
   };
 
   const getPrductDetails = async () => {
+    const productId = id || route.params?.id;
+    if (!productId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const userId = await getuserId();
     const formData = new FormData();
-    formData.append('product_id', id);
+    formData.append('product_id', productId);
     if (userId) {
       formData.append('user_id', userId);
     }
@@ -98,6 +109,7 @@ export default function ProductDetails({ route }) {
   };
 
   const getCartStatus = async () => {
+    const token = await getToken();
     const userId = await getuserId();
     if (!userId) return;
 
@@ -107,6 +119,10 @@ export default function ProductDetails({ route }) {
 
       const response = await fetch(`${BASE_URL}cart-view`, {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
         body: formData,
       });
 
@@ -199,8 +215,9 @@ export default function ProductDetails({ route }) {
   };
 
   const requestToCart = async () => {
+    const token = await getToken();
     const userId = await getuserId();
-    if (!userId) {
+    if (!token || !userId) {
       navigation.navigate('Login');
       return;
     }
@@ -213,6 +230,10 @@ export default function ProductDetails({ route }) {
     try {
       const response = await fetch(`${BASE_URL}cart-to-add`, {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
         body: formData,
       });
 
@@ -281,46 +302,67 @@ export default function ProductDetails({ route }) {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <StatusBar backgroundColor="#fff" barStyle="dark-content" />
+      <View style={[styles.loadingContainer, { backgroundColor: theme.bg }]}>
+        <StatusBar backgroundColor={isDarkMode ? theme.bg : "#fff"} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <ActivityIndicator size="large" color={AllColors.primary} />
-        <Text style={styles.loadingText}>Loading Product...</Text>
+        <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading Product...</Text>
+      </View>
+    );
+  }
+
+  if (!loading && (!product || (!product.id && !product.name))) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: theme.bg }]}>
+        <StatusBar backgroundColor={isDarkMode ? theme.bg : "#fff"} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+        <Ionicons name="alert-circle-outline" size={60} color={AllColors.primary} />
+        <Text style={[styles.loadingText, { color: theme.textPrimary, marginTop: 12, fontSize: 18, fontWeight: '600' }]}>
+          Product Not Found
+        </Text>
+        <Text style={{ color: theme.textSecondary, marginTop: 6, textAlign: 'center', paddingHorizontal: 30 }}>
+          The product you are looking for is unavailable or link is invalid.
+        </Text>
+        <TouchableOpacity
+          style={{ marginTop: 20, backgroundColor: AllColors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 }}
+          onPress={() => navigation.navigate('AppTab')}
+        >
+          <Text style={{ color: '#fff', fontWeight: '700' }}>Go to Home</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar backgroundColor="#F4F5F9" barStyle="dark-content" />
+      <StatusBar backgroundColor={isDarkMode ? theme.cardBg : "#F4F5F9"} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
       {/* Top Header & Product Image Section */}
-      <View style={styles.imageHeaderCard}>
+      <View style={[styles.imageHeaderCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
         {/* Navigation Bar */}
         <View style={styles.topNav}>
           <TouchableOpacity
-            style={styles.circleBtn}
+            style={[styles.circleBtn, { backgroundColor: isDarkMode ? '#334155' : AllColors.white }]}
             onPress={() => navigation.goBack()}
             activeOpacity={0.8}>
-            <Ionicons name="arrow-back" size={22} color="#1E293B" />
+            <Ionicons name="arrow-back" size={22} color={isDarkMode ? '#F8FAFC' : '#1E293B'} />
           </TouchableOpacity>
 
           <View style={styles.rightNavGroup}>
             <TouchableOpacity
-              style={styles.circleBtn}
+              style={[styles.circleBtn, { backgroundColor: isDarkMode ? '#334155' : AllColors.white }]}
               onPress={toggleWishlist}
               activeOpacity={0.8}>
               <AntDesign
                 name={isWishlisted ? 'heart' : 'hearto'}
                 size={20}
-                color={isWishlisted ? '#EF4444' : '#1E293B'}
+                color={isWishlisted ? '#EF4444' : isDarkMode ? '#F8FAFC' : '#1E293B'}
               />
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.circleBtn}
+              style={[styles.circleBtn, { backgroundColor: isDarkMode ? '#334155' : AllColors.white }]}
               onPress={shareProduct}
               activeOpacity={0.8}>
-              <Ionicons name="share-social-outline" size={20} color="#1E293B" />
+              <Ionicons name="share-social-outline" size={20} color={isDarkMode ? '#F8FAFC' : '#1E293B'} />
             </TouchableOpacity>
           </View>
         </View>
@@ -361,6 +403,7 @@ export default function ProductDetails({ route }) {
                 key={index}
                 style={[
                   styles.paginationDot,
+                  { backgroundColor: isDarkMode ? '#475569' : AllColors.slateBorder },
                   activeImageIndex === index && styles.paginationDotActive,
                 ]}
               />
@@ -372,12 +415,12 @@ export default function ProductDetails({ route }) {
       {/* Product Details Section */}
       <View style={styles.contentSection}>
         {/* Category Badge */}
-        <View style={styles.categoryBadge}>
+        <View style={[styles.categoryBadge, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.2)' : AllColors.lightPink }]}>
           <Text style={styles.categoryBadgeText}>PREMIUM PRODUCT</Text>
         </View>
 
         {/* Title */}
-        <Text style={styles.productTitle} numberOfLines={2}>
+        <Text style={[styles.productTitle, { color: theme.textPrimary }]} numberOfLines={2}>
           {product?.name || 'Product Name'}
         </Text>
 
@@ -385,7 +428,7 @@ export default function ProductDetails({ route }) {
         <View style={styles.priceContainer}>
           <Text style={styles.currentPrice}>₹{product?.discount_price ?? 0}</Text>
           {product?.actual_price ? (
-            <Text style={styles.oldPriceText}>₹{product?.actual_price}</Text>
+            <Text style={[styles.oldPriceText, { color: isDarkMode ? '#94A3B8' : AllColors.slateLight }]}>₹{product?.actual_price}</Text>
           ) : null}
           {discountPercent ? (
             <View style={styles.discountBadge}>
@@ -397,42 +440,42 @@ export default function ProductDetails({ route }) {
 
         {/* Short Description */}
         {product?.short_desc ? (
-          <Text style={styles.shortDescText} numberOfLines={2}>
+          <Text style={[styles.shortDescText, { color: theme.textSecondary }]} numberOfLines={2}>
             {product?.short_desc}
           </Text>
         ) : null}
 
         {/* Description Header & Text */}
         <View style={styles.descSection}>
-          <Text style={styles.descTitle}>Description</Text>
-          <Text style={styles.fullDescText} numberOfLines={5}>
+          <Text style={[styles.descTitle, { color: theme.textPrimary }]}>Description</Text>
+          <Text style={[styles.fullDescText, { color: theme.textSecondary }]} numberOfLines={5}>
             {product?.desc || product?.short_desc || 'No description available for this product.'}
           </Text>
         </View>
 
         {/* Highlight Features Row */}
-        <View style={styles.featuresRow}>
+        <View style={[styles.featuresRow, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
           <View style={styles.featureItem}>
             <Ionicons name="shield-checkmark-outline" size={18} color={AllColors.primary} />
-            <Text style={styles.featureText}>100% Genuine</Text>
+            <Text style={[styles.featureText, { color: theme.textPrimary }]}>100% Genuine</Text>
           </View>
-          <View style={styles.featureDivider} />
+          <View style={[styles.featureDivider, { backgroundColor: theme.divider }]} />
           <View style={styles.featureItem}>
             <Feather name="truck" size={18} color={AllColors.primary} />
-            <Text style={styles.featureText}>Fast Delivery</Text>
+            <Text style={[styles.featureText, { color: theme.textPrimary }]}>Fast Delivery</Text>
           </View>
-          <View style={styles.featureDivider} />
+          <View style={[styles.featureDivider, { backgroundColor: theme.divider }]} />
           <View style={styles.featureItem}>
             <Ionicons name="refresh-outline" size={18} color={AllColors.primary} />
-            <Text style={styles.featureText}>Easy Return</Text>
+            <Text style={[styles.featureText, { color: theme.textPrimary }]}>Easy Return</Text>
           </View>
         </View>
       </View>
 
       {/* Bottom Action Bar */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { backgroundColor: theme.cardBg, borderTopColor: theme.divider }]}>
         <TouchableOpacity
-          style={styles.cartButton}
+          style={[styles.cartButton, { backgroundColor: isDarkMode ? '#334155' : AllColors.white }]}
           onPress={handleCart}
           activeOpacity={0.85}>
           <Ionicons

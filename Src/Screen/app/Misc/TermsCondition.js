@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
-import AllColors from '../../Constants/Color';
+import AllColors from '../../../Constants/Color';
 
 const TermsCondition = () => {
   const navigation = useNavigation();
@@ -20,7 +20,15 @@ const TermsCondition = () => {
         <Text style={styles.paragraph}>
           Welcome to DeeBazer. By using our app, you agree to these Terms and Conditions. Please read them carefully.
         </Text>
-        
+
+        <TouchableOpacity
+          style={styles.onlineLinkBtn}
+          onPress={() => Linking.openURL('https://deebazar.com/terms-and-conditions.php')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.onlineLinkBtnText}>View Official Terms & Conditions Online</Text>
+        </TouchableOpacity>
+
         <Text style={styles.heading}>1. Use of the App</Text>
         <Text style={styles.paragraph}>
           You must be at least 18 years old to use this app. You are responsible for maintaining the confidentiality of your account and password.
@@ -86,7 +94,21 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: AllColors.slateMuted,
     lineHeight: 24,
-  }
+  },
+  onlineLinkBtn: {
+    backgroundColor: AllColors.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 15,
+    marginBottom: 5,
+    alignItems: 'center',
+  },
+  onlineLinkBtnText: {
+    color: AllColors.white,
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });
 
 export default TermsCondition;

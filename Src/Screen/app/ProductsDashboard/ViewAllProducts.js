@@ -13,8 +13,8 @@ import { useRoute, useNavigation } from "@react-navigation/native";
 import AntDesign from "react-native-vector-icons/AntDesign";
 import Ionicons from "react-native-vector-icons/Ionicons";
 
-import AllColors from "../../Constants/Color";
-import { useTheme } from '../../Context/ThemeContext';
+import AllColors from "../../../Constants/Color";
+import { useTheme } from '../../../Context/ThemeContext';
 
 export default function ViewAllProducts() {
   const route = useRoute();

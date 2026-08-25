@@ -13,43 +13,44 @@ import {
   Platform,
   TouchableWithoutFeedback,
   Keyboard,
+  Linking,
 } from 'react-native';
 
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
-
-import AllColors from '../Constants/Color';
-import CustomAlert from './Alert';
-import { BASE_URL, setMobile, setuserId, getDeviceId, setToken, setPassword as saveApiPassword } from '../Api/Api';
+import AllColors from '../../Constants/Color';
+import CustomAlert from '../../Common/Alert';
+import { BASE_URL, setMobile as saveMobile, setuserId, getDeviceId } from '../../Api/Api';
 import LottieView from 'lottie-react-native';
 import { useNavigation } from "@react-navigation/native";
-import { useTheme } from '../Context/ThemeContext';
-const CommonLoginModal = () => {
-  const { theme } = useTheme();
+import { useTheme } from '../../Context/ThemeContext';
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+const CommonLoginModal = () => {
+  const { theme, isDarkMode } = useTheme();
+
+  const [mobile, setMobileState] = useState('');
   const [loading, setLoading] = useState(false);
   const [showAlert, setShowAlert] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
 
-  const Navigation = useNavigation()
+  const Navigation = useNavigation();
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      setAlertMessage("Please enter email and password");
+  const handleSendOtp = async () => {
+    const cleanMobile = mobile.trim();
+    if (!cleanMobile || cleanMobile.length !== 10) {
+      setAlertMessage("Please enter a valid 10-digit mobile number");
       setShowAlert(true);
       return;
     }
     setLoading(true);
 
     try {
+      const deviceId = await getDeviceId();
       const formData = new FormData();
-      formData.append('email', email);
-      formData.append('password', password);
+      formData.append('mobile', cleanMobile);
+      formData.append('device_id', deviceId);
 
-      const response = await fetch(`${BASE_URL}login`, {
+      const response = await fetch(`${BASE_URL}send-otp`, {
         method: 'POST',
         headers: {
           'Accept': 'application/json'
@@ -62,37 +63,32 @@ const CommonLoginModal = () => {
 
       try {
         data = JSON.parse(responseText);
-        // console.log(data)
       } catch (e) {
         console.log("Failed to parse JSON response", responseText);
       }
 
-      if (response.ok && data.token) {
-        // Save user token and ID
-        await setToken(data.token);
-        if (data.user && data.user.id) {
-          await setuserId(data.user.id);
-        }
-        await saveApiPassword(password);
+      if (response.ok) {
+        if (data.user_id) await setuserId(data.user_id);
+        await saveMobile(cleanMobile);
         setLoading(false);
-        // Navigate to AppTab
-        Navigation.reset({
-          index: 0,
-          routes: [{ name: 'AppTab' }],
+        Navigation.navigate('VerifyOTP', {
+          mobile: cleanMobile,
+          device_id: deviceId,
         });
       } else {
-        const errorMsg = data.message || `Login failed. Error Code: ${response.status}`;
+        const errorMsg = data.message || 'Failed to send OTP. Please check your mobile number.';
         setAlertMessage(errorMsg);
         setShowAlert(true);
       }
     } catch (error) {
-      console.log(error, 'Login error');
-      setAlertMessage(`Network Error: ${error.message}`);
+      console.log(error, 'Send OTP error');
+      setAlertMessage('Network Error: Unable to send OTP.');
       setShowAlert(true);
     } finally {
       setLoading(false);
     }
   };
+
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.bg }]}
@@ -100,70 +96,58 @@ const CommonLoginModal = () => {
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.overlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.line} />
+          <View style={[styles.modalContainer, { backgroundColor: theme.cardBg }]}>
+            <View style={[styles.line, { backgroundColor: theme.borderColor }]} />
 
             <LottieView
-              source={require("../Assets/Login.json")}
+              source={require("../../Assets/Login.json")}
               autoPlay
               loop
               style={styles.animation}
             />
 
-            <Text style={styles.title}>Welcome Back!</Text>
+            <Text style={styles.title}>Login / Sign Up</Text>
 
-            <Text style={styles.subtitle}>
-              Login with your email and password to continue your shopping experience.
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              Enter your mobile number to receive a 4-digit OTP code.
             </Text>
 
-            <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color={AllColors.slateSub} style={styles.inputIcon} />
+            <View style={[styles.inputContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.inputBg, borderColor: theme.borderColor }]}>
+              <View style={[styles.countryCode, { backgroundColor: isDarkMode ? '#1E293B' : AllColors.lightGrey, borderRightColor: theme.borderColor }]}>
+                <Text style={[styles.countryText, { color: theme.textPrimary }]}>+91</Text>
+              </View>
+              <Ionicons name="call-outline" size={20} color={theme.textSecondary} style={styles.inputIcon} />
               <TextInput
-                placeholder="Enter Email"
-                placeholderTextColor={AllColors.slateLight}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={email}
-                onChangeText={setEmail}
-                style={styles.input}
+                placeholder="Mobile Number"
+                placeholderTextColor={theme.textSecondary}
+                keyboardType="number-pad"
+                maxLength={10}
+                value={mobile}
+                onChangeText={setMobileState}
+                style={[styles.input, { color: theme.textPrimary }]}
               />
-            </View>
-
-            <View style={[styles.inputContainer, styles.inputContainerMargin]}>
-              <Ionicons name="lock-closed-outline" size={20} color={AllColors.slateSub} style={styles.inputIcon} />
-              <TextInput
-                placeholder="Enter Password"
-                placeholderTextColor={AllColors.slateLight}
-                secureTextEntry={!showPassword}
-                value={password}
-                onChangeText={setPassword}
-                style={styles.input}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color={AllColors.slateSub} />
-              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
               style={styles.loginBtn}
-              onPress={handleLogin}
+              onPress={handleSendOtp}
               disabled={loading}
             >
               {loading ? (
                 <ActivityIndicator color={AllColors.white} />
               ) : (
                 <>
+                  <Text style={styles.loginText}>Get OTP </Text>
                   <Ionicons
-                    name="log-in-outline"
-                    size={20}
+                    name="arrow-forward-circle-outline"
+                    size={22}
                     color={AllColors.white}
                   />
-                  <Text style={styles.loginText}> Login</Text>
                 </>
               )}
             </TouchableOpacity>
 
-            <Text style={styles.footerText}>
+            <Text style={[styles.footerText, { color: theme.textSecondary }]}>
               By continuing, you agree to our{" "}
               <Text
                 onPress={() => Navigation.navigate('TermsCondition')}
@@ -172,13 +156,6 @@ const CommonLoginModal = () => {
                 Terms & Conditions
               </Text>
             </Text>
-
-            <View style={styles.registerRow}>
-              <Text style={styles.registerPromptText}>Don't have an account? </Text>
-              <TouchableOpacity onPress={() => Navigation.navigate('Register')}>
-                <Text style={styles.registerBtnText}>Register</Text>
-              </TouchableOpacity>
-            </View>
           </View>
 
           <CustomAlert
@@ -255,40 +232,14 @@ const styles = StyleSheet.create({
     backgroundColor: AllColors.inputBg,
   },
 
-  inputContainerMargin: {
-    marginTop: 15,
-  },
-
   inputIcon: {
-    marginLeft: 15,
-    marginRight: 5,
-  },
-
-  eyeBtn: {
-    padding: 10,
+    marginLeft: 12,
     marginRight: 5,
   },
 
   linkText: {
     color: AllColors.primary,
     fontWeight: "600",
-  },
-
-  registerRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 15,
-  },
-
-  registerPromptText: {
-    color: AllColors.textSecondary,
-    fontSize: 14,
-  },
-
-  registerBtnText: {
-    color: AllColors.primary,
-    fontSize: 14,
-    fontWeight: '700',
   },
 
   countryCode: {
@@ -309,8 +260,9 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     height: 55,
-    paddingHorizontal: 15,
+    paddingHorizontal: 12,
     fontSize: 16,
+    fontWeight: '600',
     color: AllColors.black,
   },
 

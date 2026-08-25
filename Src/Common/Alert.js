@@ -128,9 +128,10 @@ export default function CustomAlert({
               style={[
                 styles.confirmButton,
                 cancelText ? { flex: 1 } : { width: '100%' },
+                { backgroundColor: theme.iconPrimary || AllColors.primary }
               ]}
               onPress={handleConfirm}
-              activeOpacity={0.85}
+              activeOpacity={0.855}
             >
               <Text style={styles.confirmBtnText}>{confirmText}</Text>
             </TouchableOpacity>

@@ -11,21 +11,105 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  StatusBar,
 } from 'react-native';
 import MapView, { Circle, Marker } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
-import AllColors from '../../Constants/Color';
+import AllColors from '../../../Constants/Color';
 import Entypo from 'react-native-vector-icons/Entypo';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { BASE_URL, getToken, getuserId } from "../../Api/Api";
-import SuccessModal from "../../Common/SuccessScreen";
+import { BASE_URL, getToken, getuserId, getMobile } from "../../../Api/Api";
+import SuccessModal from "../../../Common/SuccessScreen";
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTheme } from '../../../Context/ThemeContext';
+
+const darkMapStyle = [
+  { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#d59563" }],
+  },
+  {
+    featureType: "poi",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#d59563" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#263c3f" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#6b9a76" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry",
+    stylers: [{ color: "#38414e" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#212a37" }],
+  },
+  {
+    featureType: "road",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#9ca5b3" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry",
+    stylers: [{ color: "#746855" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry.stroke",
+    stylers: [{ color: "#1f2835" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#f3d19c" }],
+  },
+  {
+    featureType: "transit",
+    elementType: "geometry",
+    stylers: [{ color: "#2f3948" }],
+  },
+  {
+    featureType: "transit.station",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#d59563" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#17263c" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#515c6d" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#17263c" }],
+  },
+];
 
 export default function MapScreen() {
   const navigation = useNavigation();
+  const { theme, isDarkMode } = useTheme();
 
-  // Coordinates & Permission state - no hardcoded defaults
+  // Coordinates & Permission state
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
   const [hasLocationPermission, setHasLocationPermission] = useState(null);
@@ -44,6 +128,43 @@ export default function MapScreen() {
   const [typeType, setTypeType] = useState('Home');
   const [isSuccess, setIsSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    requestmapPermission();
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const storedMobile = await getMobile();
+      if (storedMobile) {
+        const cleaned = String(storedMobile).replace(/[^0-9]/g, '').slice(0, 10);
+        if (cleaned) setMobile(cleaned);
+      }
+
+      const token = await getToken();
+      if (token) {
+        const response = await fetch(`${BASE_URL}me`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
+        });
+        const data = await response.json().catch(() => ({}));
+        if (data && data.user) {
+          if (data.user.name) setName(data.user.name);
+          const uMobile = data.user.mobile || data.user.phone;
+          if (uMobile) {
+            const cleaned = String(uMobile).replace(/[^0-9]/g, '').slice(0, 10);
+            if (cleaned) setMobile(cleaned);
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Error loading user data in MapScreen:', e);
+    }
+  };
 
   const saveAddress = async () => {
     if (!name.trim() || !mobile.trim() || !houseNo.trim() || !city.trim() || !stateName.trim() || !zipCode.trim()) {
@@ -71,31 +192,41 @@ export default function MapScreen() {
       const token = await getToken();
       const ID = await getuserId();
 
-      const formData = new FormData();
-      formData.append("user_id", String(ID || ''));
-      formData.append("name", name.trim());
-      formData.append("mobile", mobile.trim());
-      formData.append("pin", zipCode.trim());
-      formData.append("state", stateName.trim());
-      formData.append("city", city.trim());
-      formData.append("house_no", houseNo.trim());
-      formData.append("road_name", roadName.trim());
-      formData.append("landmark", landmark.trim());
-      formData.append("address", address.trim());
-      formData.append("type", typeType);
-      formData.append("status", "1");
+      const fullAddress = [houseNo.trim(), roadName.trim(), landmark.trim(), city.trim(), stateName.trim(), zipCode.trim()]
+        .filter(Boolean)
+        .join(', ');
 
       const response = await fetch(`${BASE_URL}save-address`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Authorization": token ? `Bearer ${token}` : '',
         },
-        body: formData,
+        body: JSON.stringify({
+          user_id: ID,
+          name: name.trim(),
+          mobile: mobile.trim(),
+          pin: zipCode.trim(),
+          state: stateName.trim(),
+          city: city.trim(),
+          house_no: houseNo.trim(),
+          road_name: roadName.trim(),
+          landmark: landmark.trim(),
+          address: address.trim() || fullAddress,
+          type: typeType,
+          status: "1"
+        }),
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
 
-      if (response.ok || data.status === 200) {
+      let data = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) { }
+
+      if (response.ok && (data.status === 200 || data.status === '200' || data.status === true || data.success || data.id)) {
         setModalVisible(false);
         setIsSuccess(true);
       } else {
@@ -138,21 +269,22 @@ export default function MapScreen() {
     requestmapPermission();
   }, []);
 
+  const GOOGLE_MAPS_API_KEY = "AIzaSyCJKwxaSS0glDtxXMX37uHX_KHUEleCMk0";
+
   const extractPincode = (data) => {
     if (!data) return '';
     const addr = data.address || {};
 
-    // 1. Try addr.postcode directly
-    if (addr.postcode) {
-      const cleaned = String(addr.postcode).replace(/\D/g, '');
+    const rawPin = addr.postcode || addr.postal_code || addr.zip || addr.zipcode || '';
+    if (rawPin) {
+      const cleaned = String(rawPin).replace(/\D/g, '');
       if (cleaned.length === 6 && /^[1-9]/.test(cleaned)) return cleaned;
     }
 
-    // 2. Search for valid 6-digit Indian PIN code pattern ONLY in display_name (not raw JSON object)
     if (data.display_name) {
-      const match = data.display_name.match(/\b[1-9][0-9]{5}\b/);
-      if (match && match[0]) {
-        return match[0];
+      const matches = data.display_name.match(/\b[1-9][0-9]{5}\b/g);
+      if (matches && matches.length > 0) {
+        return matches[0];
       }
     }
 
@@ -160,8 +292,12 @@ export default function MapScreen() {
   };
 
   const reverseGeocode = async (lat, lng) => {
+    // console.log('📍 [LOCATION DETECTED] Latitude:', lat, 'Longitude:', lng);
     try {
-      // 1. Fetch OpenStreetMap Nominatim data
+      const googlePromise = fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}`
+      ).then(res => res.json()).catch(() => null);
+
       const osmPromise = fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
         {
@@ -172,39 +308,120 @@ export default function MapScreen() {
         }
       ).then(res => res.json()).catch(() => null);
 
-      // 2. Fetch BigDataCloud reverse geocode data (highly accurate for Indian localities & postal codes)
+      const osmAreaPromise = fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'DeeBazer-App',
+            'Accept-Language': 'en',
+          },
+        }
+      ).then(res => res.json()).catch(() => null);
+
       const bdcPromise = fetch(
         `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`
       ).then(res => res.json()).catch(() => null);
 
-      const [osmData, bdcData] = await Promise.all([osmPromise, bdcPromise]);
+      const [googleData, osmData, osmAreaData, bdcData] = await Promise.all([
+        googlePromise,
+        osmPromise,
+        osmAreaPromise,
+        bdcPromise,
+      ]);
 
       let streetOrBuilding = '';
       let localityArea = '';
       let cityName = '';
       let state = '';
       let pin = '';
+      let googleFormattedAddr = '';
+
+      // console.log('Google Geocode status:', googleData?.status, googleData?.error_message || '');
+
+      if (googleData && googleData.status === 'OK' && googleData.results && googleData.results.length > 0) {
+        const topResult = googleData.results[0];
+        googleFormattedAddr = (topResult.formatted_address || '')
+          .replace(/, India$/i, '')
+          .replace(/unnamed road,?/gi, '')
+          .trim();
+
+        let subLoc1 = '';
+        let subLoc2 = '';
+        let routeStr = '';
+        let premiseStr = '';
+
+        topResult.address_components.forEach(comp => {
+          const types = comp.types || [];
+          if (types.includes('postal_code')) {
+            pin = comp.long_name;
+          } else if (types.includes('locality')) {
+            cityName = comp.long_name;
+          } else if (types.includes('administrative_area_level_1')) {
+            state = comp.long_name;
+          } else if (types.includes('sublocality_level_1') || types.includes('sublocality')) {
+            subLoc1 = comp.long_name;
+          } else if (types.includes('sublocality_level_2') || types.includes('neighborhood')) {
+            subLoc2 = comp.long_name;
+          } else if (types.includes('route')) {
+            routeStr = comp.long_name;
+          } else if (types.includes('street_number') || types.includes('premise') || types.includes('subpremise')) {
+            premiseStr = comp.long_name;
+          }
+        });
+
+        streetOrBuilding = [premiseStr, routeStr].filter(Boolean).join(' ') || subLoc2 || '';
+        localityArea = [subLoc2, subLoc1].filter(Boolean).join(', ') || subLoc1 || '';
+      }
 
       if (osmData && osmData.address) {
         const addr = osmData.address;
 
-        const rawRoad = addr.road || addr.pedestrian || addr.street || addr.footway || addr.path || '';
-        if (rawRoad && !rawRoad.toLowerCase().includes('unnamed')) {
-          streetOrBuilding = rawRoad;
+        const rawRoad = addr.road || addr.pedestrian || addr.street || addr.footway || addr.path || addr.cycleway || '';
+        const buildingName = addr.house_number || addr.building || addr.shop || addr.amenity || addr.complex || addr.railway || '';
+
+        if (!streetOrBuilding) {
+          if (rawRoad && buildingName) {
+            streetOrBuilding = `${buildingName}, ${rawRoad}`;
+          } else {
+            streetOrBuilding = rawRoad || buildingName || '';
+          }
         }
 
-        const buildingName = addr.house_number || addr.building || addr.shop || addr.amenity || addr.complex || '';
-        if (buildingName) {
-          streetOrBuilding = streetOrBuilding ? `${buildingName}, ${streetOrBuilding}` : buildingName;
+        const sub = addr.suburb || addr.subdistrict || addr.quarter || '';
+        const neigh = addr.neighbourhood || addr.residential || addr.city_district || '';
+
+        if (!localityArea) {
+          if (sub && neigh && sub !== neigh) {
+            localityArea = `${sub}, ${neigh}`;
+          } else {
+            localityArea = sub || neigh || '';
+          }
         }
 
-        localityArea = addr.suburb || addr.neighbourhood || addr.residential || addr.subdistrict || addr.quarter || addr.city_district || '';
-        cityName = addr.city || addr.town || addr.village || addr.municipality || addr.county || addr.state_district || '';
-        state = addr.state || '';
-        pin = extractPincode(osmData);
+        if (!cityName) {
+          cityName = addr.city || addr.town || addr.village || addr.municipality || addr.county || addr.state_district || '';
+        }
+        if (!state) {
+          state = addr.state || '';
+        }
+        if (!pin) {
+          pin = extractPincode(osmData);
+        }
       }
 
-      // Supplement missing fields from BigDataCloud
+      if (!pin && osmAreaData) {
+        pin = extractPincode(osmAreaData);
+        if (!localityArea && osmAreaData.address) {
+          localityArea = osmAreaData.address.suburb || osmAreaData.address.subdistrict || osmAreaData.address.neighbourhood || '';
+        }
+        if (!cityName && osmAreaData.address) {
+          cityName = osmAreaData.address.city || osmAreaData.address.town || osmAreaData.address.village || osmAreaData.address.county || '';
+        }
+        if (!state && osmAreaData.address) {
+          state = osmAreaData.address.state || '';
+        }
+      }
+
       if (bdcData) {
         if (!localityArea) {
           localityArea = bdcData.locality || bdcData.city || '';
@@ -223,25 +440,51 @@ export default function MapScreen() {
         }
       }
 
-      // Filter and deduplicate parts
-      let parts = [streetOrBuilding, localityArea, cityName, state, pin].filter(Boolean);
+      // Fallback: If Pincode is still empty, search Indian Postal Pincode API by Locality/City
+      if (!pin && (localityArea || cityName)) {
+        try {
+          const searchTarget = localityArea || cityName;
+          const pinRes = await fetch(`https://api.postalpincode.in/postoffice/${encodeURIComponent(searchTarget)}`)
+            .then(res => res.json())
+            .catch(() => null);
+          if (pinRes && pinRes[0] && pinRes[0].Status === 'Success' && pinRes[0].PostOffice && pinRes[0].PostOffice.length > 0) {
+            const foundPin = pinRes[0].PostOffice[0].Pincode;
+            if (foundPin && String(foundPin).length === 6) {
+              pin = String(foundPin);
+            }
+          }
+        } catch (pErr) {
+          console.log('Postal pincode API error:', pErr);
+        }
+      }
 
-      parts = parts.filter((item, index, self) =>
-        item && self.findIndex(t => t.toLowerCase() === item.toLowerCase()) === index
-      );
-
-      let cleanAddress = parts.join(', ');
+      let cleanAddress = googleFormattedAddr;
 
       if (!cleanAddress && osmData && osmData.display_name) {
         cleanAddress = osmData.display_name
           .replace(/unnamed road,?/gi, '')
           .replace(/, India$/i, '')
+          .replace(/, 700\d{3}$/i, '')
           .trim();
+
+        if (pin && !cleanAddress.includes(pin)) {
+          cleanAddress = `${cleanAddress}, ${pin}`;
+        }
+      }
+
+      if (!cleanAddress) {
+        let parts = [streetOrBuilding, localityArea, cityName, state, pin].filter(Boolean);
+        parts = parts.filter((item, index, self) =>
+          item && self.findIndex(t => t.toLowerCase() === item.toLowerCase()) === index
+        );
+        cleanAddress = parts.join(', ');
       }
 
       if (!cleanAddress) {
         cleanAddress = `Location: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
       }
+
+      // console.log('🗺️ [LOCATION REVERSED] Address:', cleanAddress, '| City:', cityName, '| State:', state, '| Pincode:', pin);
 
       setAddress(cleanAddress);
       if (cityName) setCity(cityName);
@@ -257,34 +500,29 @@ export default function MapScreen() {
   const getCurrentLocation = () => {
     setLocationLoading(true);
 
-    // Primary attempt: High Accuracy (GPS) for exact lat/long coordinates
     Geolocation.getCurrentPosition(
       async position => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
-        console.log('📍 LIVE LOCATION (GPS High Accuracy) -> Latitude:', lat, '| Longitude:', lng);
+        // console.log('📡 [GPS LOCATION SUCCESS] Lat:', lat, 'Lng:', lng);
         setLatitude(lat);
         setLongitude(lng);
         setLocationLoading(false);
         await reverseGeocode(lat, lng);
       },
       error => {
-        console.log('High accuracy GPS geolocation failed/timed out, trying coarse fallback:', error);
-        // Secondary attempt: Coarse Network location fallback
         Geolocation.getCurrentPosition(
           async position => {
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
-            console.log('📍 LIVE LOCATION (Network Fallback) -> Latitude:', lat, '| Longitude:', lng);
             setLatitude(lat);
             setLongitude(lng);
             setLocationLoading(false);
             await reverseGeocode(lat, lng);
           },
           err => {
-            console.log('Geolocation Error:', err);
             setLocationLoading(false);
-            Alert.alert("Location Error", "Could not detect your current location. Please check your GPS / location settings or select location manually.");
+            Alert.alert("Location Error", "Could not detect your current location. Please check your GPS settings or select location manually.");
           },
           {
             enableHighAccuracy: false,
@@ -302,30 +540,40 @@ export default function MapScreen() {
   };
 
   const handleSelectLocation = async (lat, lng) => {
-    console.log('📍 SELECTED LOCATION -> Latitude:', lat, '| Longitude:', lng);
     setLatitude(lat);
     setLongitude(lng);
     await reverseGeocode(lat, lng);
   };
 
-  // If location permission is not granted
+  const inputStyle = [
+    styles.input,
+    {
+      backgroundColor: isDarkMode ? '#334155' : AllColors.screenBg,
+      borderColor: isDarkMode ? '#475569' : AllColors.lightGrey,
+      color: theme.textPrimary,
+    },
+  ];
+  const placeholderColor = isDarkMode ? '#94A3B8' : AllColors.slateLight;
+
+  // Permission not granted view
   if (hasLocationPermission === false) {
     return (
-      <SafeAreaView style={styles.mapContainer}>
-        <View style={styles.topHeader}>
+      <SafeAreaView style={[styles.mapContainer, { backgroundColor: theme.bg }]}>
+        <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+        <View style={[styles.topHeader, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
-            <Ionicons name="arrow-back" size={24} color="#0F172A" />
+            <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.topHeaderTitle}>Select Location</Text>
+          <Text style={[styles.topHeaderTitle, { color: theme.textPrimary }]}>Select Location</Text>
           <View style={styles.headerSpacer} />
         </View>
 
-        <View style={styles.permissionContainer}>
-          <View style={styles.permissionIconCircle}>
+        <View style={[styles.permissionContainer, { backgroundColor: theme.bg }]}>
+          <View style={[styles.permissionIconCircle, { backgroundColor: isDarkMode ? '#1E293B' : AllColors.softPinkBg }]}>
             <Ionicons name="location-outline" size={60} color={AllColors.primary} />
           </View>
-          <Text style={styles.permissionTitle}>Location Access Required</Text>
-          <Text style={styles.permissionSub}>
+          <Text style={[styles.permissionTitle, { color: theme.textPrimary }]}>Location Access Required</Text>
+          <Text style={[styles.permissionSub, { color: theme.textSecondary }]}>
             Please enable location permission to view the map and select your delivery address.
           </Text>
           <TouchableOpacity style={styles.permissionBtn} onPress={requestmapPermission} activeOpacity={0.85}>
@@ -336,50 +584,53 @@ export default function MapScreen() {
     );
   }
 
-  // If waiting for coordinates (no default coordinates used)
+  // Loading coordinates view
   if (latitude === null || longitude === null) {
     return (
-      <SafeAreaView style={styles.mapContainer}>
-        <View style={styles.topHeader}>
+      <SafeAreaView style={[styles.mapContainer, { backgroundColor: theme.bg }]}>
+        <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+        <View style={[styles.topHeader, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
-            <Ionicons name="arrow-back" size={24} color="#0F172A" />
+            <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.topHeaderTitle}>Select Location</Text>
+          <Text style={[styles.topHeaderTitle, { color: theme.textPrimary }]}>Select Location</Text>
           <View style={styles.headerSpacer} />
         </View>
 
-        <View style={styles.permissionContainer}>
+        <View style={[styles.permissionContainer, { backgroundColor: theme.bg }]}>
           <ActivityIndicator size="large" color={AllColors.primary} />
-          <Text style={[styles.permissionTitle, styles.mt16]}>Detecting Live Location...</Text>
-          <Text style={styles.permissionSub}>Please wait while we retrieve your current position.</Text>
+          <Text style={[styles.permissionTitle, styles.mt16, { color: theme.textPrimary }]}>Detecting Live Location...</Text>
+          <Text style={[styles.permissionSub, { color: theme.textSecondary }]}>Please wait while we retrieve your current position.</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.mapContainer}>
+    <SafeAreaView style={[styles.mapContainer, { backgroundColor: theme.bg }]}>
+      <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       {/* Header Bar */}
-      <View style={styles.topHeader}>
+      <View style={[styles.topHeader, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
-          <Ionicons name="arrow-back" size={24} color="#0F172A" />
+          <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.topHeaderTitle}>Select Location</Text>
+        <Text style={[styles.topHeaderTitle, { color: theme.textPrimary }]}>Select Location</Text>
         <TouchableOpacity style={styles.refreshLocBtn} onPress={getCurrentLocation} activeOpacity={0.8}>
           <Ionicons name="locate" size={22} color={AllColors.primary} />
         </TouchableOpacity>
       </View>
 
-      {/* Floating Status Chip when fetching location */}
+      {/* Floating Status Chip */}
       {locationLoading && (
-        <View style={styles.locatingChip}>
+        <View style={[styles.locatingChip, { backgroundColor: theme.cardBg }]}>
           <ActivityIndicator size="small" color={AllColors.primary} />
-          <Text style={styles.locatingText}>Locating your position...</Text>
+          <Text style={[styles.locatingText, { color: theme.textPrimary }]}>Locating your position...</Text>
         </View>
       )}
 
       <MapView
         style={styles.map}
+        customMapStyle={isDarkMode ? darkMapStyle : []}
         region={{
           latitude: latitude,
           longitude: longitude,
@@ -408,13 +659,14 @@ export default function MapScreen() {
       </MapView>
 
       {/* Floating Bottom Card */}
-      <View style={styles.bottomCardContainer}>
-        <Text style={styles.addressText}>{address || 'Fetching live address...'}</Text>
+      <View style={[styles.bottomCardContainer, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+        <Text style={[styles.addressText, { color: theme.textPrimary }]}>{address || 'Fetching live address...'}</Text>
         <TouchableOpacity style={styles.AddAddressButton} onPress={() => setModalVisible(true)} activeOpacity={0.85}>
           <Text style={styles.AddAdressText}>Add Address Details</Text>
         </TouchableOpacity>
       </View>
 
+      {/* Save Address Modal */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -422,15 +674,15 @@ export default function MapScreen() {
         transparent={true}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
+          <View style={[styles.modalContainer, { backgroundColor: theme.cardBg }]}>
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <View>
-                <Text style={styles.modalTitle}>Save Address</Text>
-                <Text style={styles.modalSub}>Add your delivery address details</Text>
+                <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Save Address</Text>
+                <Text style={[styles.modalSub, { color: theme.textSecondary }]}>Add your delivery address details</Text>
               </View>
               <TouchableOpacity onPress={() => setModalVisible(false)} activeOpacity={0.7}>
-                <Entypo name="cross" size={28} color={AllColors.slateDark} />
+                <Entypo name="cross" size={28} color={theme.textPrimary} />
               </TouchableOpacity>
             </View>
 
@@ -440,14 +692,14 @@ export default function MapScreen() {
                 value={houseNo}
                 onChangeText={setHouseNo}
                 placeholder="Flat / House / Building Name *"
-                placeholderTextColor={AllColors.slateLight}
-                style={styles.input}
+                placeholderTextColor={placeholderColor}
+                style={inputStyle}
               />
 
               {/* Current Address Card */}
-              <View style={styles.addressCard}>
-                <Text style={styles.addressLabel}>Area / Sector / Locality</Text>
-                <Text style={styles.addressValue}>{address}</Text>
+              <View style={[styles.addressCard, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.divider }]}>
+                <Text style={[styles.addressLabel, { color: theme.textSecondary }]}>Area / Sector / Locality</Text>
+                <Text style={[styles.addressValue, { color: theme.textPrimary }]}>{address}</Text>
               </View>
 
               {/* Name */}
@@ -455,8 +707,8 @@ export default function MapScreen() {
                 value={name}
                 onChangeText={setName}
                 placeholder="Enter Full Name *"
-                placeholderTextColor={AllColors.slateLight}
-                style={styles.input}
+                placeholderTextColor={placeholderColor}
+                style={inputStyle}
               />
 
               {/* Mobile */}
@@ -464,10 +716,12 @@ export default function MapScreen() {
                 value={mobile}
                 onChangeText={(text) => setMobile(text.replace(/[^0-9]/g, '').slice(0, 10))}
                 placeholder="10-digit Mobile Number *"
-                placeholderTextColor={AllColors.slateLight}
+                placeholderTextColor={placeholderColor}
                 keyboardType="phone-pad"
+                textContentType="telephoneNumber"
+                autoComplete="tel"
                 maxLength={10}
-                style={styles.input}
+                style={inputStyle}
               />
 
               {/* Alternate Mobile */}
@@ -475,10 +729,13 @@ export default function MapScreen() {
                 value={altMobile}
                 onChangeText={(text) => setAltMobile(text.replace(/[^0-9]/g, '').slice(0, 10))}
                 placeholder="Alternate Mobile Number (Optional)"
-                placeholderTextColor={AllColors.slateLight}
+                placeholderTextColor={placeholderColor}
                 keyboardType="phone-pad"
+                textContentType="none"
+                autoComplete="off"
+                importantForAutofill="no"
                 maxLength={10}
-                style={styles.input}
+                style={inputStyle}
               />
 
               {/* Landmark */}
@@ -486,8 +743,8 @@ export default function MapScreen() {
                 value={landmark}
                 onChangeText={setLandmark}
                 placeholder="Landmark"
-                placeholderTextColor={AllColors.slateLight}
-                style={styles.input}
+                placeholderTextColor={placeholderColor}
+                style={inputStyle}
               />
 
               {/* Road */}
@@ -495,8 +752,8 @@ export default function MapScreen() {
                 value={roadName}
                 onChangeText={setRoadName}
                 placeholder="Road Name"
-                placeholderTextColor={AllColors.slateLight}
-                style={styles.input}
+                placeholderTextColor={placeholderColor}
+                style={inputStyle}
               />
 
               {/* State */}
@@ -504,8 +761,8 @@ export default function MapScreen() {
                 value={stateName}
                 onChangeText={setStateName}
                 placeholder="State *"
-                placeholderTextColor={AllColors.slateLight}
-                style={styles.input}
+                placeholderTextColor={placeholderColor}
+                style={inputStyle}
               />
 
               {/* City */}
@@ -513,8 +770,8 @@ export default function MapScreen() {
                 value={city}
                 onChangeText={setCity}
                 placeholder="City *"
-                placeholderTextColor={AllColors.slateLight}
-                style={styles.input}
+                placeholderTextColor={placeholderColor}
+                style={inputStyle}
               />
 
               {/* PIN Code */}
@@ -522,42 +779,59 @@ export default function MapScreen() {
                 value={zipCode}
                 onChangeText={setpinCode}
                 placeholder="PIN Code *"
-                placeholderTextColor={AllColors.slateLight}
+                placeholderTextColor={placeholderColor}
                 keyboardType="number-pad"
                 maxLength={6}
-                style={styles.input}
+                style={inputStyle}
               />
 
               {/* Address Type */}
-              <Text style={styles.typeTitle}>Address Type</Text>
+              <Text style={[styles.typeTitle, { color: theme.textPrimary }]}>Address Type</Text>
               <View style={styles.typeContainer}>
                 <TouchableOpacity
-                  style={[styles.typeBtn, typeType === 'Home' && styles.activeTypeBtn]}
+                  style={[
+                    styles.typeBtn,
+                    {
+                      backgroundColor: isDarkMode ? '#334155' : AllColors.screenBg,
+                      borderColor: isDarkMode ? '#475569' : AllColors.lightGrey,
+                    },
+                    typeType === 'Home' && styles.activeTypeBtn,
+                  ]}
                   onPress={() => setTypeType('Home')}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.typeBtnText, typeType === 'Home' && styles.activeTypeBtnText]}>
+                  <Text style={[styles.typeBtnText, { color: theme.textPrimary }, typeType === 'Home' && styles.activeTypeBtnText]}>
                     🏠 Home
                   </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.typeBtn, typeType === 'Office' && styles.activeTypeBtn]}
+                  style={[
+                    styles.typeBtn,
+                    {
+                      backgroundColor: isDarkMode ? '#334155' : AllColors.screenBg,
+                      borderColor: isDarkMode ? '#475569' : AllColors.lightGrey,
+                    },
+                    typeType === 'Office' && styles.activeTypeBtn,
+                  ]}
                   onPress={() => setTypeType('Office')}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.typeBtnText, typeType === 'Office' && styles.activeTypeBtnText]}>
+                  <Text style={[styles.typeBtnText, { color: theme.textPrimary }, typeType === 'Office' && styles.activeTypeBtnText]}>
                     🏢 Office
                   </Text>
                 </TouchableOpacity>
               </View>
 
               {/* Use Live Location */}
-              <TouchableOpacity style={styles.locationBtn} onPress={getCurrentLocation} activeOpacity={0.85}>
-                <Text style={styles.locationText}>Use Live Location</Text>
+              <TouchableOpacity
+                style={[styles.locationBtn, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.divider }]}
+                onPress={getCurrentLocation}
+                activeOpacity={0.85}>
+                <Text style={[styles.locationText, { color: theme.textPrimary }]}>Use Live Location</Text>
               </TouchableOpacity>
 
-              {/* Save */}
+              {/* Save Button */}
               <TouchableOpacity style={[styles.saveBtn, saving && styles.savingBtnDisabled]} onPress={saveAddress} disabled={saving} activeOpacity={0.85}>
                 {saving ? (
                   <ActivityIndicator size="small" color={AllColors.white} />
@@ -601,6 +875,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     zIndex: 10,
+    borderBottomWidth: 1,
   },
   backBtn: {
     padding: 6,
@@ -792,30 +1067,37 @@ const styles = StyleSheet.create({
     marginRight: 10,
     backgroundColor: AllColors.screenBg,
   },
+  typeBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   activeTypeBtn: {
     borderColor: AllColors.primary,
     backgroundColor: AllColors.softPinkBg,
   },
+  activeTypeBtnText: {
+    color: AllColors.primary,
+  },
   locationBtn: {
     backgroundColor: AllColors.divider,
-    height: 46,
+    paddingVertical: 12,
     borderRadius: 12,
-    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
   },
   locationText: {
-    color: AllColors.primary,
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
+    color: AllColors.slateDark,
   },
   saveBtn: {
     backgroundColor: AllColors.primary,
-    height: 50,
-    borderRadius: 14,
-    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 20,
+  },
+  savingBtnDisabled: {
+    opacity: 0.7,
   },
   saveBtnText: {
     color: AllColors.white,
@@ -827,15 +1109,5 @@ const styles = StyleSheet.create({
   },
   mt16: {
     marginTop: 16,
-  },
-  typeBtnText: {
-    color: AllColors.slateText,
-    fontWeight: '600',
-  },
-  activeTypeBtnText: {
-    color: AllColors.primary,
-  },
-  savingBtnDisabled: {
-    opacity: 0.7,
   },
 });

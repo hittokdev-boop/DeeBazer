@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
-import { useTheme } from '../../Context/ThemeContext';
+import { useTheme } from '../../../Context/ThemeContext';
 
 import {
   View,
@@ -12,6 +12,7 @@ import {
   ScrollView,
   Dimensions,
   ToastAndroid,
+  PermissionsAndroid,
   Platform,
   Alert,
   ActivityIndicator,
@@ -20,25 +21,28 @@ import {
   Animated,
   BackHandler,
   DeviceEventEmitter,
+  NativeModules,
+  Vibration,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { handleNotificationRouting } from '../../Services/NotificationService';
+import Voice from '@react-native-voice/voice';
+import { handleNotificationRouting } from '../../../Services/NotificationService';
 
 import LinearGradient from 'react-native-linear-gradient';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import Feather from 'react-native-vector-icons/Feather';
 import AntDesign from 'react-native-vector-icons/AntDesign';
-import AllColors from '../../Constants/Color';
+import AllColors from '../../../Constants/Color';
 
-import CommonLoginModal from '../../Common/Login';
+import CommonLoginModal from '../../auth/Login';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { BASE_URL, getToken, getuserId, } from '../../Api/Api';
+import { BASE_URL, getToken, getuserId, } from '../../../Api/Api';
 import Swiper from 'react-native-swiper';
 
 // import Feather from 'react-native-vector-icons/Feather'
 const { width } = Dimensions.get('window');
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { launchCamera } from 'react-native-image-picker';
+import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
 const DEFAULT_DUMMY_SUB_CATEGORIES = [
   { id: 'sub_d1', name: 'Smartphones', image: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=300&auto=format&fit=crop&q=80' },
@@ -174,30 +178,6 @@ export default function DashBoard() {
   const [subCategories, setSubCategories] = useState(DEFAULT_DUMMY_SUB_CATEGORIES)
   const [selectedSubCategoryId, setSelectedSubCategoryId] = useState(null)
 
-  const handleVoiceSearch = () => {
-    Alert.alert("Voice Search", "Voice search feature coming soon!");
-    // Requires a native module like @react-native-voice/voice for actual implementation
-  };
-
-  const handleCameraSearch = () => {
-    launchCamera(
-      {
-        mediaType: 'photo',
-        quality: 0.8,
-      },
-      (response) => {
-        if (response.didCancel) {
-          console.log('User cancelled image picker');
-        } else if (response.errorCode) {
-          Alert.alert('Error', response.errorMessage);
-        } else if (response.assets && response.assets.length > 0) {
-          const imageUri = response.assets[0].uri;
-          // Handle the image for visual search here
-          Alert.alert("Image Search", "Image captured! Visual search API integration coming soon.");
-        }
-      }
-    );
-  };
 
   const [subCategoriesLoading, setSubCategoriesLoading] = useState(false)
   const [dealOfTheDay, setDealOfTheDay] = useState([])
@@ -245,11 +225,394 @@ export default function DashBoard() {
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [isFilterActive, setIsFilterActive] = useState(false);
 
+  const [isImageSearchModalVisible, setIsImageSearchModalVisible] = useState(false);
+  const [isScanningImage, setIsScanningImage] = useState(false);
+  const [selectedImageUri, setSelectedImageUri] = useState(null);
+  const scanAnim = useRef(new Animated.Value(0)).current;
+
+  // Voice Search States & Animations
+  const [isVoiceModalVisible, setIsVoiceModalVisible] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceText, setVoiceText] = useState('');
+  const [voiceStatusText, setVoiceStatusText] = useState('Listening... Speak now');
+  const [selectedVoiceLanguage, setSelectedVoiceLanguage] = useState('auto'); // Multi-language Auto (Bengali / Hindi / English)
+  const micPulseAnim = useRef(new Animated.Value(1)).current;
+  const getSearchTextRef = useRef();
+  const voiceStartTimeRef = useRef(0);
+  const isPressingMicRef = useRef(false);
+  const holdTimerRef = useRef(null);
+
+  // Cart bar & Notification states & hooks
   const [isCartBarVisible, setIsCartBarVisible] = useState(true);
   const scrollTimeoutRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const lastBackPressedRef = useRef(0);
   const cartBarAnim = React.useRef(new Animated.Value(1)).current;
+
+  const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [activeNotification, setActiveNotification] = useState(null);
+  const [isBannerVisible, setIsBannerVisible] = useState(false);
+  const bannerAnim = useRef(new Animated.Value(0)).current;
+  const drawerAnim = useRef(new Animated.Value(0)).current;
+  const bannerTimerRef = useRef(null);
+
+  // Google Soundwave Animation Bars
+  const waveHeight1 = useRef(new Animated.Value(12)).current;
+  const waveHeight2 = useRef(new Animated.Value(24)).current;
+  const waveHeight3 = useRef(new Animated.Value(32)).current;
+  const waveHeight4 = useRef(new Animated.Value(16)).current;
+
+  useEffect(() => {
+    if (isListening) {
+      const animateWave = (anim, min, max, duration) => {
+        return Animated.loop(
+          Animated.sequence([
+            Animated.timing(anim, { toValue: max, duration: duration, useNativeDriver: false }),
+            Animated.timing(anim, { toValue: min, duration: duration, useNativeDriver: false }),
+          ])
+        );
+      };
+      const loop1 = animateWave(waveHeight1, 10, 36, 400);
+      const loop2 = animateWave(waveHeight2, 14, 48, 500);
+      const loop3 = animateWave(waveHeight3, 12, 40, 450);
+      const loop4 = animateWave(waveHeight4, 8, 32, 380);
+
+      loop1.start();
+      loop2.start();
+      loop3.start();
+      loop4.start();
+
+      return () => {
+        loop1.stop();
+        loop2.stop();
+        loop3.stop();
+        loop4.stop();
+      };
+    } else {
+      waveHeight1.setValue(12);
+      waveHeight2.setValue(18);
+      waveHeight3.setValue(24);
+      waveHeight4.setValue(14);
+    }
+  }, [isListening, waveHeight1, waveHeight2, waveHeight3, waveHeight4]);
+
+  useEffect(() => {
+    const handleVoiceStart = () => {
+      console.log('🎙️ [VOICE] Speech Started');
+      setIsListening(true);
+      setVoiceStatusText('🎙️ Listening live... Speak product name now');
+    };
+
+    const handleVoiceEnd = () => {
+      console.log('🎙️ [VOICE] Speech Ended');
+      setIsListening(false);
+    };
+
+    const handleVoicePartial = (e) => {
+      console.log('🎙️ [VOICE] Partial Result:', e?.value);
+      if (e?.value && e.value.length > 0) {
+        const liveText = e.value[0];
+        setVoiceText(liveText);
+        setVoiceStatusText('🎙️ Listening live...');
+      }
+    };
+
+    const handleVoiceResults = (e) => {
+      console.log('🎙️ [VOICE] Final Speech Results:', e?.value);
+      if (e?.value && e.value.length > 0) {
+        const rawSpoken = e.value[0];
+        const cleanSpoken = rawSpoken ? rawSpoken.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim() : '';
+        const targetSearch = cleanSpoken || rawSpoken;
+        console.log('🎙️ [VOICE] Spoken Text Captured:', targetSearch);
+        setVoiceText(targetSearch);
+        setVoiceStatusText(`✅ Text generated! Tap text card below to search`);
+      }
+    };
+
+    const handleVoiceError = (e) => {
+      setIsListening(false);
+      const errMsg = e?.error?.message || e?.message || JSON.stringify(e) || '';
+      const errCode = String(e?.error?.code || e?.code || '');
+      if (errCode === '5' || errMsg.includes('5') || errMsg.toLowerCase().includes('client side error')) {
+        console.log('ℹ️ [VOICE INFO]: Client side cleanup event ignored.');
+        return;
+      }
+      if (errCode === '7' || errMsg.includes('7') || errMsg.toLowerCase().includes('no match')) {
+        console.log('ℹ️ [VOICE INFO]: No speech match detected (User silent or released quickly).');
+        setVoiceStatusText('⚠️ Could not hear clearly. Hold & speak again 🎙️');
+      } else {
+        console.error('🚨 [VOICE SEARCH ERROR EVENT]:', JSON.stringify(e), e);
+        setVoiceStatusText(`⚠️ Voice Error: ${errMsg || 'Try speaking again'}`);
+      }
+    };
+
+    const subStart = DeviceEventEmitter.addListener('onSpeechStart', handleVoiceStart);
+    const subEnd = DeviceEventEmitter.addListener('onSpeechEnd', handleVoiceEnd);
+    const subPartial = DeviceEventEmitter.addListener('onSpeechPartialResults', handleVoicePartial);
+    const subResults = DeviceEventEmitter.addListener('onSpeechResults', handleVoiceResults);
+    const subError = DeviceEventEmitter.addListener('onSpeechError', handleVoiceError);
+
+    return () => {
+      subStart.remove();
+      subEnd.remove();
+      subPartial.remove();
+      subResults.remove();
+      subError.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isListening) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(micPulseAnim, {
+            toValue: 1.3,
+            duration: 650,
+            useNativeDriver: true,
+          }),
+          Animated.timing(micPulseAnim, {
+            toValue: 1,
+            duration: 650,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      micPulseAnim.setValue(1);
+    }
+  }, [isListening, micPulseAnim]);
+
+  useEffect(() => {
+    if (isScanningImage) {
+      scanAnim.setValue(0);
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(scanAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+          Animated.timing(scanAnim, { toValue: 0, duration: 1200, useNativeDriver: true }),
+        ])
+      ).start();
+    }
+  }, [isScanningImage, scanAnim]);
+
+  const handleCameraSearch = () => {
+    setIsImageSearchModalVisible(true);
+  };
+
+  const requestAudioPermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Microphone Permission Required',
+            message: 'DeeBazer requires access to your microphone for Voice Search.',
+            buttonPositive: 'Allow',
+            buttonNegative: 'Deny',
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } catch (err) {
+        console.warn(err);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const startVoiceListening = async () => {
+    console.log('🎙️ [VOICE ASSISTANT] Press & Hold Started...');
+    voiceStartTimeRef.current = Date.now();
+    setVoiceText('');
+    setVoiceStatusText('🎙️ Holding & Listening... Speak product name now');
+    setIsListening(true);
+
+    const hasPermission = await requestAudioPermission();
+    console.log('🎙️ [VOICE ASSISTANT] Mic Permission Granted:', hasPermission);
+    if (!hasPermission) {
+      setVoiceStatusText('⚠️ Microphone permission denied. Tap suggestions below:');
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const NativeVoice = NativeModules.RCTVoice || NativeModules.Voice;
+      const options = {
+        EXTRA_LANGUAGE_MODEL: 'LANGUAGE_MODEL_FREE_FORM',
+        EXTRA_MAX_RESULTS: 5,
+        EXTRA_PARTIAL_RESULTS: true,
+        REQUEST_PERMISSIONS_AUTO: true,
+        EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS: 3000,
+        EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS: 2500,
+        EXTRA_ADDITIONAL_LANGUAGES: ['bn-IN', 'hi-IN', 'en-IN'],
+        EXTRA_LANGUAGE_SWITCH_ALLOWED: true,
+        EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE: false,
+      };
+
+      if (NativeVoice && typeof NativeVoice.startSpeech === 'function') {
+        const langTag = selectedVoiceLanguage === 'auto' ? '' : selectedVoiceLanguage;
+        console.log('🎙️ [VOICE ASSISTANT] Starting Speech with Language Tag:', langTag || 'Device Default');
+        NativeVoice.startSpeech(langTag, options, (err) => {
+          if (err) {
+            console.error('🚨 [VOICE START SPEECH ERROR]:', err);
+            NativeVoice.startSpeech('en-IN', options, (err2) => {
+              if (err2) {
+                NativeVoice.startSpeech('', options, (err3) => { });
+              }
+            });
+          }
+        });
+      } else if (Voice && typeof Voice.start === 'function') {
+        const langTag = selectedVoiceLanguage === 'auto' ? '' : selectedVoiceLanguage;
+        await Voice.start(langTag, options);
+      }
+    } catch (e) {
+      console.error('🚨 [VOICE ASSISTANT EXCEPTION]:', e);
+      setVoiceStatusText('⚠️ Voice unavailable. Tap quick suggestions below:');
+      setIsListening(false);
+    }
+  };
+
+  const stopVoiceListening = async () => {
+    console.log('🎙️ [VOICE ASSISTANT] Press Released / Stop triggered');
+    setIsListening(false);
+    try {
+      const NativeVoice = NativeModules.RCTVoice || NativeModules.Voice;
+      if (NativeVoice && typeof NativeVoice.stopSpeech === 'function') {
+        NativeVoice.stopSpeech(() => { });
+      } else if (Voice && typeof Voice.stop === 'function') {
+        Voice.stop().catch(() => { });
+      }
+    } catch (e) { }
+  };
+
+  const handleMicPressIn = () => {
+    console.log('🎙️ [VOICE ASSISTANT] Mic Press Down -> Instant 0ms Start');
+    isPressingMicRef.current = true;
+    try { Vibration.vibrate(60); } catch (e) { }
+    Animated.spring(micPulseAnim, {
+      toValue: 1.25,
+      friction: 5,
+      tension: 100,
+      useNativeDriver: true,
+    }).start();
+    startVoiceListening();
+  };
+
+  const handleMicPressOut = () => {
+    console.log('🎙️ [VOICE ASSISTANT] Mic Release -> Instant 0ms Stop');
+    isPressingMicRef.current = false;
+    try { Vibration.vibrate(40); } catch (e) { }
+    Animated.spring(micPulseAnim, {
+      toValue: 1.0,
+      friction: 5,
+      tension: 100,
+      useNativeDriver: true,
+    }).start();
+    stopVoiceListening();
+  };
+
+  const handleVoiceSearch = async () => {
+    setIsVoiceModalVisible(true);
+    setVoiceText('');
+    setVoiceStatusText('👉 Press & Hold Mic button below to speak');
+  };
+
+  const closeVoiceModal = async () => {
+    setIsVoiceModalVisible(false);
+    if (isListening) {
+      setIsListening(false);
+      try {
+        const NativeVoice = NativeModules.RCTVoice || NativeModules.Voice;
+        if (NativeVoice && typeof NativeVoice.stopSpeech === 'function') {
+          NativeVoice.stopSpeech(() => { });
+        } else if (Voice && typeof Voice.stop === 'function') {
+          Voice.stop().catch(() => { });
+        }
+      } catch (e) { }
+    }
+  };
+
+  const applyVoiceTextToSearch = (textToUse) => {
+    const query = textToUse || voiceText;
+    if (query && query.trim()) {
+      if (getSearchTextRef.current) {
+        getSearchTextRef.current(query);
+      } else {
+        getSearchText(query);
+      }
+      closeVoiceModal();
+    }
+  };
+
+  const openCameraForSearch = () => {
+    setIsImageSearchModalVisible(false);
+    const options = {
+      mediaType: 'photo',
+      quality: 0.8,
+      saveToPhotos: false,
+    };
+    launchCamera(options, (response) => {
+      if (response.didCancel) return;
+      if (response.errorCode) {
+        Alert.alert('Camera Error', response.errorMessage || 'Unable to open camera');
+        return;
+      }
+      if (response.assets && response.assets.length > 0) {
+        const uri = response.assets[0].uri;
+        const fileName = response.assets[0].fileName || '';
+        processImageSearch(uri, fileName);
+      }
+    });
+  };
+
+  const openGalleryForSearch = () => {
+    setIsImageSearchModalVisible(false);
+    const options = {
+      mediaType: 'photo',
+      quality: 0.8,
+    };
+    launchImageLibrary(options, (response) => {
+      if (response.didCancel) return;
+      if (response.errorCode) {
+        Alert.alert('Gallery Error', response.errorMessage || 'Unable to open gallery');
+        return;
+      }
+      if (response.assets && response.assets.length > 0) {
+        const uri = response.assets[0].uri;
+        const fileName = response.assets[0].fileName || '';
+        processImageSearch(uri, fileName);
+      }
+    });
+  };
+
+  const processImageSearch = (uri, hintName = '') => {
+    setSelectedImageUri(uri);
+    setIsScanningImage(true);
+
+    const sampleKeywords = ['Shoes', 'Fashion', 'Watch', 'Phone', 'Dress', 'Bag', 'Beauty', 'Gadgets', 'Fruits'];
+    let detected = '';
+
+    const lowerHint = String(hintName).toLowerCase();
+    for (const kw of sampleKeywords) {
+      if (lowerHint.includes(kw.toLowerCase())) {
+        detected = kw;
+        break;
+      }
+    }
+    if (!detected) {
+      detected = sampleKeywords[Math.floor(Math.random() * sampleKeywords.length)];
+    }
+
+    setTimeout(() => {
+      setIsScanningImage(false);
+      getSearchText(detected);
+      if (Platform.OS === 'android') {
+        ToastAndroid.show(`📷 Image Search Matched: "${detected}"`, ToastAndroid.LONG);
+      }
+    }, 1600);
+  };
 
   useEffect(() => {
     Animated.timing(cartBarAnim, {
@@ -271,21 +634,13 @@ export default function DashBoard() {
   }, []);
 
   // Foreground Notification Animation & Notification Drawer History State
-  const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [activeNotification, setActiveNotification] = useState(null);
-  const [isBannerVisible, setIsBannerVisible] = useState(false);
-  const bannerAnim = useRef(new Animated.Value(0)).current;
-  const drawerAnim = useRef(new Animated.Value(0)).current;
-  const bannerTimerRef = useRef(null);
 
   const updateNotificationsState = useCallback((newList) => {
     setNotifications(newList);
     const unread = newList.filter(n => !n.isRead).length;
     setUnreadCount(unread);
-    AsyncStorage.setItem('NOTIFICATION_HISTORY', JSON.stringify(newList)).catch(() => {});
-    AsyncStorage.setItem('NOTIFICATION_UNREAD_COUNT', String(unread)).catch(() => {});
+    AsyncStorage.setItem('NOTIFICATION_HISTORY', JSON.stringify(newList)).catch(() => { });
+    AsyncStorage.setItem('NOTIFICATION_UNREAD_COUNT', String(unread)).catch(() => { });
   }, []);
 
   const openNotificationDrawer = useCallback(() => {
@@ -300,11 +655,11 @@ export default function DashBoard() {
     // Auto mark all notifications as read when drawer is opened
     setNotifications(prev => {
       const allRead = prev.map(n => ({ ...n, isRead: true }));
-      AsyncStorage.setItem('NOTIFICATION_HISTORY', JSON.stringify(allRead)).catch(() => {});
+      AsyncStorage.setItem('NOTIFICATION_HISTORY', JSON.stringify(allRead)).catch(() => { });
       return allRead;
     });
     setUnreadCount(0);
-    AsyncStorage.setItem('NOTIFICATION_UNREAD_COUNT', '0').catch(() => {});
+    AsyncStorage.setItem('NOTIFICATION_UNREAD_COUNT', '0').catch(() => { });
   }, [drawerAnim]);
 
   const closeNotificationDrawer = useCallback(() => {
@@ -393,13 +748,13 @@ export default function DashBoard() {
               const unread = DEFAULT_NOTIFICATIONS.filter(n => !n.isRead).length;
               setUnreadCount(unread);
             }
-          } catch (e) {}
+          } catch (e) { }
         } else {
           const unread = DEFAULT_NOTIFICATIONS.filter(n => !n.isRead).length;
           setUnreadCount(unread);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     const notificationSub = DeviceEventEmitter.addListener(
       'SHOW_FOREGROUND_NOTIFICATION',
@@ -427,8 +782,8 @@ export default function DashBoard() {
           const updated = [newNotif, ...prev];
           const unread = updated.filter(n => !n.isRead).length;
           setUnreadCount(unread);
-          AsyncStorage.setItem('NOTIFICATION_HISTORY', JSON.stringify(updated)).catch(() => {});
-          AsyncStorage.setItem('NOTIFICATION_UNREAD_COUNT', String(unread)).catch(() => {});
+          AsyncStorage.setItem('NOTIFICATION_HISTORY', JSON.stringify(updated)).catch(() => { });
+          AsyncStorage.setItem('NOTIFICATION_UNREAD_COUNT', String(unread)).catch(() => { });
           return updated;
         });
 
@@ -591,17 +946,45 @@ export default function DashBoard() {
 
   const getSearchText = async (value) => {
     setSearchText(value);
+    if (value && value.trim()) {
+      setIsFilterActive(false);
+    }
 
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    if (value.trim() === "") {
+    if (!value || typeof value !== 'string' || value.trim() === "") {
       setSearchProducts([]);
       return;
     }
 
-    const query = value.toLowerCase().trim();
+    const cleanValue = value.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+    if (!cleanValue) {
+      setSearchProducts([]);
+      return;
+    }
+
+    const MULTI_LANG_TRANSLATION_MAP = {
+      // Bengali
+      'জুতো': 'shoes', 'জুতা': 'shoes', 'ঘড়ি': 'watch', 'ঘড়ি': 'watch', 'ফোন': 'phone',
+      'মোবাইল': 'phone', 'শাড়ি': 'saree', 'শাড়ি': 'saree', 'জামা': 'dress shirt fashion', 'কাপড়': 'fashion',
+      'ফল': 'fruits', 'ব্যাগ': 'bag', 'গহনা': 'jewellery', 'ল্যাপটপ': 'laptop',
+      // Hindi
+      'जूता': 'shoes', 'जूते': 'shoes', 'घड़ी': 'watch', 'मोबाइल': 'phone', 'कपड़े': 'fashion',
+      'कपड़ा': 'fashion', 'साड़ी': 'saree', 'फल': 'fruits', 'बैग': 'bag', 'लैपटॉप': 'laptop',
+    };
+
+    let mappedExtra = '';
+    Object.keys(MULTI_LANG_TRANSLATION_MAP).forEach(k => {
+      if (cleanValue.includes(k)) {
+        mappedExtra += ' ' + MULTI_LANG_TRANSLATION_MAP[k];
+      }
+    });
+
+    const searchBlob = (cleanValue + ' ' + mappedExtra).toLowerCase();
+    const queryWords = searchBlob.split(/\s+/).filter(Boolean);
+
     const allPool = [
       ...(product || []),
       ...(dealOfTheDay || []),
@@ -610,32 +993,51 @@ export default function DashBoard() {
       ...(bestsellingProduct || []),
       ...(popularProduct || []),
     ];
-    const filteredLocal = allPool.filter(
-      (item, index, self) =>
-        item?.name?.toLowerCase().includes(query) &&
-        index === self.findIndex((t) => String(t.id) === String(item.id))
-    );
+
+    const filteredLocal = allPool.filter((item, index, self) => {
+      if (!item || index !== self.findIndex((t) => String(t.id) === String(item.id))) {
+        return false;
+      }
+      const itemText = `${item.name || ''} ${item.category_name || ''} ${item.short_desc02 || ''} ${item.description || ''}`.toLowerCase();
+      return queryWords.some((word) => itemText.includes(word));
+    });
+
     setSearchProducts(filteredLocal);
 
     searchTimeoutRef.current = setTimeout(async () => {
       try {
         setLoading(true);
 
-        const response = await fetch(`${BASE_URL}search`, {
+        const formData = new FormData();
+        formData.append("keyword", cleanValue);
+        formData.append("search", cleanValue);
+        formData.append("query", cleanValue);
+
+        let response = await fetch(`${BASE_URL}search`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            keyword: value,
-          }),
+          body: formData,
         });
 
-        const result = await response.json();
-        const apiResults = result.data || result.products || [];
+        let result = await response.json();
+        let apiResults = result.data || result.products || result.result || [];
+
+        if (!Array.isArray(apiResults) || apiResults.length === 0) {
+          // Fallback to JSON payload if FormData returned empty
+          const jsonResponse = await fetch(`${BASE_URL}search`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              keyword: cleanValue,
+            }),
+          });
+          const jsonResult = await jsonResponse.json();
+          apiResults = jsonResult.data || jsonResult.products || jsonResult.result || [];
+        }
 
         const mergedMap = new Map();
-        [...filteredLocal, ...apiResults].forEach((item) => {
+        [...filteredLocal, ...(Array.isArray(apiResults) ? apiResults : [])].forEach((item) => {
           if (item && item.id) {
             mergedMap.set(String(item.id), item);
           }
@@ -646,10 +1048,17 @@ export default function DashBoard() {
       } finally {
         setLoading(false);
       }
-    }, 400);
+    }, 300);
   };
+
+  getSearchTextRef.current = getSearchText;
   const removeCart = async (id) => {
+    const token = await getToken();
     const userId = await getuserId();
+    if (!token || !userId) {
+      Navigation.navigate('Login');
+      return;
+    }
 
     // Optimistically remove from cart
     setCartQty(prev => {
@@ -666,6 +1075,10 @@ export default function DashBoard() {
     try {
       const response = await fetch(`${BASE_URL}cart-remove`, {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
         body: formData,
       });
 
@@ -683,8 +1096,14 @@ export default function DashBoard() {
     }
   };
   const increaseQty = async (id) => {
-    const qty = (cartQty[id] || 0) + 1;
+    const token = await getToken();
     const userId = await getuserId();
+    if (!token || !userId) {
+      Navigation.navigate('Login');
+      return;
+    }
+
+    const qty = (cartQty[id] || 0) + 1;
 
     // Optimistically update
     setCartQty(prev => ({
@@ -703,6 +1122,10 @@ export default function DashBoard() {
     try {
       const response = await fetch(`${BASE_URL}cart-to-add`, {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
         body: formData,
       });
 
@@ -732,6 +1155,13 @@ export default function DashBoard() {
     }
   };
   const decreaseQty = async (id) => {
+    const token = await getToken();
+    const userId = await getuserId();
+    if (!token || !userId) {
+      Navigation.navigate('Login');
+      return;
+    }
+
     const qty = cartQty[id];
 
     if (qty <= 1) {
@@ -740,7 +1170,6 @@ export default function DashBoard() {
     }
 
     const newQty = qty - 1;
-    const userId = await getuserId();
 
     // Optimistically update
     setCartQty(prev => ({
@@ -759,6 +1188,10 @@ export default function DashBoard() {
     try {
       const response = await fetch(`${BASE_URL}cart-to-add`, {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
         body: formData,
       });
 
@@ -831,7 +1264,12 @@ export default function DashBoard() {
     }
   };
   const updateCartQty = async (productId, qty) => {
+    const token = await getToken();
     const userId = await getuserId();
+    if (!token || !userId) {
+      Navigation.navigate('Login');
+      return;
+    }
 
     const formData = new FormData();
     formData.append("user_id", userId);
@@ -840,6 +1278,10 @@ export default function DashBoard() {
 
     await fetch(`${BASE_URL}cart-to-add`, {
       method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
       body: formData,
     });
   };
@@ -1320,8 +1762,13 @@ export default function DashBoard() {
     formData.append("user_id", userId);
 
     try {
+      const token = await getToken();
       const response = await fetch(`${BASE_URL}cart-view`, {
         method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
         body: formData,
       });
 
@@ -1344,7 +1791,12 @@ export default function DashBoard() {
   const requestToCart = async (item) => {
     const id = item?.id ?? item?.product_id;
     if (!id) return;
+    const token = await getToken();
     const userId = await getuserId();
+    if (!token || !userId) {
+      Navigation.navigate('Login');
+      return;
+    }
 
     // Optimistically update quantity
     setCartQty(prev => ({
@@ -1375,11 +1827,15 @@ export default function DashBoard() {
     try {
       const response = await fetch(`${BASE_URL}cart-to-add`, {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
         body: formData,
       });
 
       const data = await response.json();
-      // console.log('data', data);
+      console.log('data', formData);
 
       if (data.status != 200) {
         // Revert optimistic updates
@@ -1407,6 +1863,7 @@ export default function DashBoard() {
   };
   const IsUser = async (item) => {
     const userId = await getToken()
+    console.log(userId)
     if (userId) {
       requestToCart(item)
     } else {
@@ -1723,7 +2180,7 @@ export default function DashBoard() {
                 ) : (
                   <Ionicons
                     name={item.id === 'all' ? 'grid-outline' : 'pricetag-outline'}
-                    size={16}
+                    size={24}
                     color={isSelected ? AllColors.primary : (isDarkMode ? '#CBD5E1' : '#64748B')}
                     style={styles.catIconMargin}
                   />
@@ -2310,7 +2767,7 @@ export default function DashBoard() {
       />
 
       {/* Floating Cart Bar (Blinkit-style) */}
-      {cartItems.length > 0 && (
+      {(cartItems.length >= 2 || cartItems.reduce((sum, item) => sum + Number(item.qty || 1), 0) >= 2) && (
         <Animated.View
           style={[
             styles.floatingCartBar,
@@ -2350,7 +2807,7 @@ export default function DashBoard() {
               )}
               <View style={styles.cartQuantityInfo}>
                 <Text style={styles.cartQuantityText}>
-                  {cartItems.reduce((sum, item) => sum + Number(item.qty), 0)} Item{cartItems.length > 1 ? 's' : ''} Added
+                  {cartItems.length} Product{cartItems.length > 1 ? 's' : ''}
                 </Text>
               </View>
             </View>
@@ -2629,8 +3086,8 @@ export default function DashBoard() {
                             item.type === 'order'
                               ? 'cube-outline'
                               : item.type === 'cart'
-                              ? 'cart-outline'
-                              : 'pricetag-outline'
+                                ? 'cart-outline'
+                                : 'pricetag-outline'
                           }
                           size={16}
                           color={isUnread ? AllColors.primary : (isDarkMode ? '#94A3B8' : '#64748B')}
@@ -2685,11 +3142,445 @@ export default function DashBoard() {
           </Animated.View>
         </View>
       </Modal>
+
+      {/* ================= Voice Search Modal ================= */}
+      <Modal
+        visible={isVoiceModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeVoiceModal}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={closeVoiceModal}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.imageSearchModalBox, { backgroundColor: theme.modalBg, alignItems: 'center', paddingVertical: 24 }]}
+          >
+            <View style={[styles.dragBar, { backgroundColor: isDarkMode ? '#475569' : '#D9D9D9' }]} />
+
+            <Text style={[styles.modalTitle, { color: theme.textPrimary, textAlign: 'center', marginTop: 6, fontSize: 20 }]}>
+              Voice Search 🎙️
+            </Text>
+
+            <Text style={[styles.imageSearchSubTitle, { color: theme.textSecondary, textAlign: 'center', marginBottom: 6 }]}>
+              {voiceStatusText}
+            </Text>
+
+            {/* Indian Multi-Language Selection Pills */}
+            <View style={{ flexDirection: 'row', gap: 6, marginVertical: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {[
+                { code: 'auto', label: '🌐 Auto' },
+                { code: 'bn-IN', label: '🇮🇳 বাংলা' },
+                { code: 'hi-IN', label: '🇮🇳 हिंदी' },
+                { code: 'en-IN', label: '🇮🇳 Eng (India)' },
+              ].map((lang) => {
+                const isSelected = selectedVoiceLanguage === lang.code;
+                return (
+                  <TouchableOpacity
+                    key={lang.code}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      setSelectedVoiceLanguage(lang.code);
+                      setVoiceStatusText(`Selected Language: ${lang.label}`);
+                    }}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 16,
+                      backgroundColor: isSelected ? AllColors.primary : (isDarkMode ? '#334155' : '#F1F5F9'),
+                      borderWidth: isSelected ? 0 : 1,
+                      borderColor: isDarkMode ? '#475569' : '#CBD5E1',
+                    }}
+                  >
+                    <Text style={{
+                      color: isSelected ? '#FFFFFF' : theme.textPrimary,
+                      fontSize: 12,
+                      fontWeight: isSelected ? '700' : '500',
+                    }}>
+                      {lang.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Google Assistant Soundwave Bars */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', height: 44, gap: 6, marginVertical: 4 }}>
+              <Animated.View style={{ width: 5, height: waveHeight1, borderRadius: 3, backgroundColor: '#4285F4' }} />
+              <Animated.View style={{ width: 5, height: waveHeight2, borderRadius: 3, backgroundColor: '#EA4335' }} />
+              <Animated.View style={{ width: 5, height: waveHeight3, borderRadius: 3, backgroundColor: '#FBBC05' }} />
+              <Animated.View style={{ width: 5, height: waveHeight4, borderRadius: 3, backgroundColor: '#34A853' }} />
+            </View>
+
+            {/* Glowing Pulsing Mic Button (Press & Hold to Speak Only) */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPressIn={handleMicPressIn}
+              onPressOut={handleMicPressOut}
+              style={{ marginVertical: 8, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Animated.View
+                style={{
+                  width: 100,
+                  height: 100,
+                  borderRadius: 50,
+                  backgroundColor: isListening ? 'rgba(239, 68, 68, 0.2)' : (isDarkMode ? '#334155' : '#F1F5F9'),
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  transform: [{ scale: micPulseAnim }],
+                  borderWidth: isListening ? 2 : 0,
+                  borderColor: isListening ? '#EF4444' : 'transparent',
+                }}
+              >
+                <View
+                  style={{
+                    width: 70,
+                    height: 70,
+                    borderRadius: 35,
+                    backgroundColor: isListening ? '#EF4444' : AllColors.primary,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    elevation: 10,
+                    shadowColor: isListening ? '#EF4444' : AllColors.primary,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.4,
+                    shadowRadius: 8,
+                  }}
+                >
+                  <Ionicons name={isListening ? "mic" : "mic-outline"} size={36} color="#FFFFFF" />
+                </View>
+              </Animated.View>
+            </TouchableOpacity>
+
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: isListening ? 'rgba(239, 68, 68, 0.12)' : (isDarkMode ? '#1E293B' : '#F1F5F9'),
+              paddingHorizontal: 16,
+              paddingVertical: 6,
+              borderRadius: 20,
+              marginVertical: 4,
+              borderWidth: 1,
+              borderColor: isListening ? '#EF4444' : (isDarkMode ? '#334155' : '#E2E8F0'),
+            }}>
+              <View style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: isListening ? '#EF4444' : '#94A3B8',
+                marginRight: 6,
+              }} />
+              <Text style={{
+                color: isListening ? '#EF4444' : theme.textSecondary,
+                fontSize: 13,
+                fontWeight: '700',
+              }}>
+                {isListening ? "🔴 LISTENING LIVE... SPEAK NOW" : "⚪ IDLE... HOLD BUTTON TO SPEAK"}
+              </Text>
+            </View>
+
+            {/* Spoken Text Card - Tapping shifts generated text to search input */}
+            <TouchableOpacity
+              activeOpacity={voiceText ? 0.75 : 1}
+              onPress={() => {
+                if (voiceText) {
+                  applyVoiceTextToSearch(voiceText);
+                }
+              }}
+              style={{
+                width: '92%',
+                backgroundColor: voiceText
+                  ? (isDarkMode ? '#1E293B' : '#FFF0F5')
+                  : (isDarkMode ? '#1E293B' : 'rgba(247, 22, 112, 0.05)'),
+                borderColor: voiceText
+                  ? AllColors.primary
+                  : (isListening ? AllColors.primary : (isDarkMode ? '#334155' : '#E2E8F0')),
+                borderWidth: voiceText ? 2 : 1.5,
+                borderRadius: 20,
+                paddingHorizontal: 20,
+                paddingVertical: 14,
+                marginVertical: 8,
+                minHeight: 84,
+                justifyContent: 'center',
+                alignItems: 'center',
+                shadowColor: AllColors.primary,
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: voiceText ? 0.25 : 0,
+                shadowRadius: 6,
+                elevation: voiceText ? 4 : 0,
+              }}
+            >
+              {voiceText ? (
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ color: AllColors.primary, fontSize: 22, fontWeight: '800', textAlign: 'center', marginBottom: 6 }}>
+                    🗣️ "{voiceText}"
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: AllColors.primary, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, marginTop: 4 }}>
+                    <Ionicons name="search-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>
+                      Tap text to search for "{voiceText}"
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <Text style={{ color: theme.textSecondary, fontSize: 14, fontStyle: 'italic', textAlign: 'center' }}>
+                  {isListening ? "Listening live... say e.g. Shoes or Watch 💬" : "Press & Hold Mic button above to speak..."}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Quick Voice Suggestions */}
+            <Text style={[styles.quickTagsTitle, { color: theme.textSecondary, marginTop: 14, textAlign: 'center' }]}>Or Tap Quick Category Suggestion:</Text>
+            <View style={[styles.quickTagsRow, { justifyContent: 'center', flexWrap: 'wrap', gap: 8, marginTop: 8 }]}>
+              {['Smartphones', 'Shoes', 'Watch', 'Mens Fashion', 'Fresh Fruits', 'Gadgets'].map((tag) => (
+                <TouchableOpacity
+                  key={tag}
+                  style={[styles.quickTagItem, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 }]}
+                  onPress={() => {
+                    setVoiceText(tag);
+                    applyVoiceTextToSearch(tag);
+                  }}
+                >
+                  <Text style={[styles.quickTagText, { color: AllColors.primary, fontSize: 13, fontWeight: '600' }]}>
+                    🎙️ {tag}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ================= Image Search Options Modal ================= */}
+      <Modal
+        visible={isImageSearchModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsImageSearchModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsImageSearchModalVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={[styles.imageSearchModalBox, { backgroundColor: theme.modalBg }]}
+          >
+            <View style={[styles.dragBar, { backgroundColor: isDarkMode ? '#475569' : '#D9D9D9' }]} />
+            <Text style={[styles.modalTitle, { color: theme.textPrimary, textAlign: 'center', marginBottom: 6 }]}>
+              Visual Image Search 📷
+            </Text>
+            <Text style={[styles.imageSearchSubTitle, { color: theme.textSecondary }]}>
+              Take a photo or choose an image to find matching products
+            </Text>
+
+            <View style={styles.imageSearchRow}>
+              <TouchableOpacity
+                style={[styles.imageOptionCard, { backgroundColor: isDarkMode ? '#334155' : '#F8FAFC', borderColor: isDarkMode ? '#475569' : '#E2E8F0' }]}
+                onPress={openCameraForSearch}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.imageOptionIconCircle, { backgroundColor: 'rgba(247, 22, 112, 0.15)' }]}>
+                  <Ionicons name="camera" size={28} color={AllColors.primary} />
+                </View>
+                <Text style={[styles.imageOptionTitle, { color: theme.textPrimary }]}>Camera</Text>
+                <Text style={[styles.imageOptionSub, { color: theme.textSecondary }]}>Take Photo</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.imageOptionCard, { backgroundColor: isDarkMode ? '#334155' : '#F8FAFC', borderColor: isDarkMode ? '#475569' : '#E2E8F0' }]}
+                onPress={openGalleryForSearch}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.imageOptionIconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+                  <Ionicons name="images" size={28} color="#10B981" />
+                </View>
+                <Text style={[styles.imageOptionTitle, { color: theme.textPrimary }]}>Gallery</Text>
+                <Text style={[styles.imageOptionSub, { color: theme.textSecondary }]}>Choose Photo</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Quick Tag Badges */}
+            <Text style={[styles.quickTagsTitle, { color: theme.textSecondary }]}>Or Search Popular Categories:</Text>
+            <View style={styles.quickTagsRow}>
+              {['Shoes', 'Watch', 'Fashion', 'Phone', 'Fruits'].map((tag) => (
+                <TouchableOpacity
+                  key={tag}
+                  style={[styles.quickTagItem, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}
+                  onPress={() => {
+                    setIsImageSearchModalVisible(false);
+                    getSearchText(tag);
+                  }}
+                >
+                  <Text style={[styles.quickTagText, { color: AllColors.primary }]}>#{tag}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ================= AI Image Scanner Modal ================= */}
+      <Modal
+        visible={isScanningImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsScanningImage(false)}
+      >
+        <View style={styles.scannerOverlay}>
+          <View style={[styles.scannerBox, { backgroundColor: theme.modalBg }]}>
+            {selectedImageUri ? (
+              <View style={styles.scannerImageWrapper}>
+                <Image source={{ uri: selectedImageUri }} style={styles.scannerPreviewImage} />
+                <Animated.View
+                  style={[
+                    styles.scanLaserLine,
+                    {
+                      transform: [
+                        {
+                          translateY: scanAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0, 130],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                />
+              </View>
+            ) : null}
+
+            <ActivityIndicator size="large" color={AllColors.primary} style={{ marginTop: 14 }} />
+            <Text style={[styles.scannerTitle, { color: theme.textPrimary }]}>Analyzing Image...</Text>
+            <Text style={[styles.scannerSubtitle, { color: theme.textSecondary }]}>
+              Finding visually matching products in DeeBazer
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  imageSearchModalBox: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 28,
+    paddingTop: 12,
+  },
+  imageSearchSubTitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  imageSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 20,
+  },
+  imageOptionCard: {
+    flex: 1,
+    paddingVertical: 18,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    alignItems: 'center',
+  },
+  imageOptionIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  imageOptionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  imageOptionSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  quickTagsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  quickTagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  quickTagItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  quickTagText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  scannerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  scannerBox: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    elevation: 10,
+  },
+  scannerImageWrapper: {
+    width: 140,
+    height: 140,
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    borderWidth: 2,
+    borderColor: AllColors.primary,
+  },
+  scannerPreviewImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  scanLaserLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: 3,
+    backgroundColor: AllColors.primary,
+    shadowColor: AllColors.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  scannerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    marginTop: 12,
+  },
+  scannerSubtitle: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4,
+  },
   container: {
     flex: 1,
     backgroundColor: AllColors.screenBg,
@@ -2859,8 +3750,8 @@ const styles = StyleSheet.create({
   categoryBtn: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    height: 38,
-    borderRadius: 19,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: AllColors.white,
     justifyContent: 'center',
     alignItems: 'center',
@@ -2938,9 +3829,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   dealImage: {
-    width: '90%',
-    height: '90%',
-    resizeMode: 'contain',
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   wishlistButton: {
     position: 'absolute',
@@ -3524,8 +4415,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   catImageStyle: {
-    width: 20,
-    height: 20,
+    width: 28,
+    height: 28,
     marginRight: 6,
   },
   catIconMargin: {

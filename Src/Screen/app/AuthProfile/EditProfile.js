@@ -15,12 +15,11 @@ import {
     StatusBar,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import Feather from 'react-native-vector-icons/Feather';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useNavigation } from '@react-navigation/native';
-import { BASE_URL, getToken, getuserId } from '../../Api/Api';
-import AllColors from '../../Constants/Color';
-import { useTheme } from '../../Context/ThemeContext';
+import { BASE_URL, getToken, setMobile, getuserId } from '../../../Api/Api';
+import AllColors from '../../../Constants/Color';
+import { useTheme } from '../../../Context/ThemeContext';
 
 const EditProfileScreen = () => {
     const navigation = useNavigation();
@@ -28,8 +27,9 @@ const EditProfileScreen = () => {
 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
-    const [mobile, setMobile] = useState('');
+    const [mobile, setMobileState] = useState('');
     const [alternativePhone, setAlternativePhone] = useState('');
+
     const [profileImage, setProfileImage] = useState(
         'https://www.vhv.rs/dpng/d/409-4090121_transparent-background-user-icon-hd-png-download.png'
     );
@@ -59,14 +59,14 @@ const EditProfileScreen = () => {
             });
 
             const data = await response.json();
-            if ((data?.status === 200 || data?.success) && data.user) {
+            if ((data?.status === 200 || data?.success || response.ok) && data.user) {
                 const u = data.user;
                 setName(u.name || '');
                 setEmail(u.email || '');
-                setMobile(u.mobile || u.phone || '');
-                setAlternativePhone(u.alternative_phone || u.alt_phone || '');
-                if (u.image || u.profile_photo || u.avatar) {
-                    setProfileImage(u.image || u.profile_photo || u.avatar);
+                setMobileState(u.mobile || u.phone || '');
+                setAlternativePhone(u.alternativePhone || u.alternative_phone || u.alt_phone || '');
+                if (u.logo || u.avatar || u.image || u.profile_photo) {
+                    setProfileImage(u.logo || u.avatar || u.image || u.profile_photo);
                 }
             }
         } catch (error) {
@@ -81,6 +81,7 @@ const EditProfileScreen = () => {
             {
                 mediaType: 'photo',
                 quality: 0.8,
+                includeBase64: true,
             },
             (response) => {
                 if (response.didCancel) {
@@ -88,9 +89,10 @@ const EditProfileScreen = () => {
                 } else if (response.errorCode) {
                     Alert.alert('Image Error', response.errorMessage || 'Unable to pick image');
                 } else if (response.assets && response.assets.length > 0) {
-                    const selectedUri = response.assets[0].uri;
+                    const asset = response.assets[0];
+                    const selectedUri = asset.base64 ? `data:${asset.type || 'image/jpeg'};base64,${asset.base64}` : asset.uri;
                     setImageUri(selectedUri);
-                    setProfileImage(selectedUri);
+                    setProfileImage(asset.uri || selectedUri);
                 }
             }
         );
@@ -105,64 +107,61 @@ const EditProfileScreen = () => {
         setSaving(true);
         try {
             const token = await getToken();
-            const userId = await getuserId();
-
-            const formData = new FormData();
-            formData.append('name', name.trim());
-            formData.append('email', email.trim());
-            formData.append('mobile', mobile.trim());
-            if (alternativePhone.trim()) {
-                formData.append('alternative_phone', alternativePhone.trim());
+            if (!token) {
+                Alert.alert('Error', 'Please log in to update your profile.');
+                setSaving(false);
+                return;
             }
 
-            if (imageUri) {
-                const filename = imageUri.split('/').pop() || 'profile.jpg';
-                const match = /\.(\w+)$/.exec(filename);
-                const type = match ? `image/${match[1]}` : 'image/jpeg';
-                formData.append('image', {
-                    uri: imageUri,
-                    name: filename,
-                    type,
-                });
-            }
+            const payload = {
+                name: name.trim(),
+                email: email.trim(),
+                mobile: mobile.trim(),
+                alternativePhone: alternativePhone.trim(),
+                logo: imageUri || (profileImage && !profileImage.includes('vhv.rs') ? profileImage : ''),
+            };
 
-            const response = await fetch(`${BASE_URL}profile-update`, {
-                method: 'POST',
+            const response = await fetch(`${BASE_URL}user/profile`, {
+                method: 'PUT',
                 headers: {
                     Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
                     Accept: 'application/json',
                 },
-                body: formData,
+                body: JSON.stringify(payload),
             });
 
-            const data = await response.json();
-
-            if (Platform.OS === 'android') {
-                ToastAndroid.show('Profile updated successfully! 🎉', ToastAndroid.SHORT);
+            const responseText = await response.text();
+            let data = {};
+            try {
+                data = JSON.parse(responseText);
+            } catch (e) {
+                console.log('JSON parse error:', responseText);
             }
 
-            Alert.alert(
-                'Success',
-                data?.message || 'Profile updated successfully!',
-                [
-                    {
-                        text: 'OK',
-                        onPress: () => navigation.goBack(),
-                    },
-                ]
-            );
+            if (response.ok || data?.status === 200 || data?.success) {
+                if (data?.user?.mobile || mobile.trim()) {
+                    await setMobile(data?.user?.mobile || mobile.trim());
+                }
+                if (Platform.OS === 'android') {
+                    ToastAndroid.show(data?.message || 'Profile updated successfully! 🎉', ToastAndroid.SHORT);
+                }
+                Alert.alert(
+                    'Success',
+                    data?.message || 'Profile updated successfully!',
+                    [
+                        {
+                            text: 'OK',
+                            onPress: () => navigation.goBack(),
+                        },
+                    ]
+                );
+            } else {
+                Alert.alert('Error', data?.message || 'Failed to update profile.');
+            }
         } catch (error) {
             console.log('Update Profile Error:', error);
-            Alert.alert(
-                'Success',
-                'Profile updated successfully!',
-                [
-                    {
-                        text: 'OK',
-                        onPress: () => navigation.goBack(),
-                    },
-                ]
-            );
+            Alert.alert('Error', 'Network error. Could not update profile.');
         } finally {
             setSaving(false);
         }
@@ -171,6 +170,7 @@ const EditProfileScreen = () => {
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
             <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+
             {/* Header */}
             <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
                 <TouchableOpacity style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
@@ -199,9 +199,10 @@ const EditProfileScreen = () => {
 
                     {/* Form Fields */}
                     <View style={[styles.formCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
+
                         {/* FULL NAME */}
                         <View style={styles.inputBox}>
-                            <Text style={[styles.label, { color: theme.textPrimary }]}>Full Name</Text>
+                            <Text style={[styles.label, { color: theme.textPrimary }]}>Full Name *</Text>
                             <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#334155' : AllColors.screenBg, borderColor: isDarkMode ? '#475569' : AllColors.lightGrey }]}>
                                 <Ionicons name="person-outline" size={18} color={isDarkMode ? '#94A3B8' : AllColors.slateSub} style={styles.inputIcon} />
                                 <TextInput
@@ -231,7 +232,7 @@ const EditProfileScreen = () => {
                             </View>
                         </View>
 
-                        {/* MOBILE */}
+                        {/* PRIMARY MOBILE */}
                         <View style={styles.inputBox}>
                             <Text style={[styles.label, { color: theme.textPrimary }]}>Mobile Number</Text>
                             <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#334155' : AllColors.screenBg, borderColor: isDarkMode ? '#475569' : AllColors.lightGrey }]}>
@@ -240,6 +241,23 @@ const EditProfileScreen = () => {
                                     value={mobile}
                                     onChangeText={(text) => setMobile(text.replace(/[^0-9]/g, '').slice(0, 10))}
                                     placeholder="Enter mobile number"
+                                    placeholderTextColor={isDarkMode ? '#94A3B8' : AllColors.slateLight}
+                                    keyboardType="phone-pad"
+                                    maxLength={10}
+                                    style={[styles.input, { color: theme.textPrimary }]}
+                                />
+                            </View>
+                        </View>
+
+                        {/* ALTERNATIVE PHONE */}
+                        <View style={styles.inputBox}>
+                            <Text style={[styles.label, { color: theme.textPrimary }]}>Alternative Phone Number</Text>
+                            <View style={[styles.inputWrapper, { backgroundColor: isDarkMode ? '#334155' : AllColors.screenBg, borderColor: isDarkMode ? '#475569' : AllColors.lightGrey }]}>
+                                <Ionicons name="phone-portrait-outline" size={18} color={isDarkMode ? '#94A3B8' : AllColors.slateSub} style={styles.inputIcon} />
+                                <TextInput
+                                    value={alternativePhone}
+                                    onChangeText={(text) => setAlternativePhone(text.replace(/[^0-9]/g, '').slice(0, 10))}
+                                    placeholder="Enter alternative mobile number"
                                     placeholderTextColor={isDarkMode ? '#94A3B8' : AllColors.slateLight}
                                     keyboardType="phone-pad"
                                     maxLength={10}
@@ -359,6 +377,9 @@ const styles = StyleSheet.create({
     },
     inputBox: {
         marginBottom: 18,
+    },
+    row: {
+        flexDirection: 'row',
     },
     label: {
         fontSize: 13,

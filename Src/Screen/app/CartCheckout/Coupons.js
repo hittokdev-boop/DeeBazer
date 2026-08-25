@@ -17,8 +17,8 @@ import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
 import Clipboard from '@react-native-clipboard/clipboard';
-import AllColors from '../../Constants/Color';
-import { useTheme } from '../../Context/ThemeContext';
+import AllColors from '../../../Constants/Color';
+import { useTheme } from '../../../Context/ThemeContext';
 
 const COUPONS_DATA = [
   {

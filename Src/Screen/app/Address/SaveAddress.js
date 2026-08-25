@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   StyleSheet,
   TextInput,
@@ -14,10 +14,10 @@ import {
 } from "react-native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from "@react-navigation/native";
-import { BASE_URL, getToken, getuserId } from "../../Api/Api";
-import SuccessModal from "../../Common/SuccessScreen";
-import AllColors from "../../Constants/Color";
-import { useTheme } from '../../Context/ThemeContext';
+import { BASE_URL, getToken, getuserId, getMobile } from "../../../Api/Api";
+import SuccessModal from "../../../Common/SuccessScreen";
+import AllColors from "../../../Constants/Color";
+import { useTheme } from '../../../Context/ThemeContext';
 
 export default function SaveAddress() {
   const navigation = useNavigation();
@@ -36,7 +36,44 @@ export default function SaveAddress() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const storedMobile = await getMobile();
+      if (storedMobile) {
+        const cleaned = String(storedMobile).replace(/[^0-9]/g, '').slice(0, 10);
+        if (cleaned) setMobile(cleaned);
+      }
+
+      const token = await getToken();
+      if (token) {
+        const response = await fetch(`${BASE_URL}me`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
+        });
+        const data = await response.json().catch(() => ({}));
+        if (data && data.user) {
+          if (data.user.name) setName(data.user.name);
+          const uMobile = data.user.mobile || data.user.phone;
+          if (uMobile) {
+            const cleaned = String(uMobile).replace(/[^0-9]/g, '').slice(0, 10);
+            if (cleaned) setMobile(cleaned);
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Error loading user data in SaveAddress:', e);
+    }
+  };
+
   const saveAddress = async () => {
+
     if (!name.trim() || !mobile.trim() || !houseNo.trim() || !city.trim() || !stateName.trim() || !zipCode.trim()) {
       Alert.alert("Validation", "Please fill all required fields.");
       return;
@@ -52,35 +89,42 @@ export default function SaveAddress() {
       const token = await getToken();
       const ID = await getuserId();
 
-      const formData = new FormData();
-      formData.append("user_id", String(ID || ''));
-      formData.append("name", name.trim());
-      formData.append("mobile", mobile.trim());
-      formData.append("pin", zipCode.trim());
-      formData.append("state", stateName.trim());
-      formData.append("city", city.trim());
-      formData.append("house_no", houseNo.trim());
-      formData.append("road_name", roadName.trim());
-      formData.append("landmark", landmark.trim());
-      formData.append("address", address.trim());
-      formData.append("type", typeType);
-      formData.append("status", "1");
+      const fullAddress = [houseNo.trim(), roadName.trim(), landmark.trim(), city.trim(), stateName.trim(), zipCode.trim()]
+        .filter(Boolean)
+        .join(', ');
 
       const response = await fetch(`${BASE_URL}save-address`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Authorization": token ? `Bearer ${token}` : '',
         },
-        body: formData,
+        body: JSON.stringify({
+          user_id: ID,
+          name: name.trim(),
+          mobile: mobile.trim(),
+          pin: zipCode.trim(),
+          state: stateName.trim(),
+          city: city.trim(),
+          house_no: houseNo.trim(),
+          road_name: roadName.trim(),
+          landmark: landmark.trim(),
+          address: address.trim() || fullAddress,
+          type: typeType,
+          status: "1"
+        }),
       });
 
       const text = await response.text();
+      console.log(text, 'jkdj')
+      console.log(token)
       let data = {};
       try {
         data = JSON.parse(text);
-      } catch (e) {}
+      } catch (e) { }
 
-      if (response.ok || response.status === 200 || data.status === 200) {
+      if (response.ok && (data.status === 200 || data.status === '200' || data.status === true || data.success || data.id)) {
         setIsSuccess(true);
       } else {
         Alert.alert("Error", data.message || "Unable to save address.");

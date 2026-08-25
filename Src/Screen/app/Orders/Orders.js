@@ -18,9 +18,9 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { BASE_URL, getToken, getuserId } from '../../Api/Api';
-import AllColors from '../../Constants/Color';
-import { useTheme } from '../../Context/ThemeContext';
+import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
+import AllColors from '../../../Constants/Color';
+import { useTheme } from '../../../Context/ThemeContext';
 
 const TABS = ['All', 'Processing', 'Delivered', 'Cancelled'];
 
@@ -47,18 +47,22 @@ export default function Orders() {
 
       setIsLoggedIn(true);
 
-      const formData = new FormData();
-      formData.append('user_id', userId);
+      const requestBody = {
+        user_id: isNaN(userId) ? userId : Number(userId),
+      };
 
       const response = await fetch(`${BASE_URL}order-list`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
         },
-        body: formData,
+        body: JSON.stringify(requestBody),
       });
 
       const result = await response.json();
+      // console.log("Order list response:", result);
 
       if (result?.status === 200 || result?.success) {
         const orderData = result?.data || result?.orders || [];
@@ -90,23 +94,23 @@ export default function Orders() {
     const s = String(status || '').toLowerCase();
     if (s.includes('delivered') || s.includes('success') || s.includes('completed')) {
       return {
-        bg: isDarkMode ? 'rgba(22, 101, 52, 0.25)' : '#DCFCE7',
-        color: isDarkMode ? '#4ADE80' : '#166534',
-        label: 'Delivered',
+        bg: isDarkMode ? 'rgba(16, 185, 129, 0.18)' : '#DCFCE7',
+        color: isDarkMode ? '#34D399' : '#15803D',
+        label: status || 'Success',
         icon: 'checkmark-circle-outline',
       };
     }
-    if (s.includes('cancel')) {
+    if (s.includes('cancel') || s.includes('fail') || s.includes('reject')) {
       return {
-        bg: isDarkMode ? 'rgba(153, 27, 27, 0.25)' : '#FEE2E2',
-        color: isDarkMode ? '#F87171' : '#991B1B',
-        label: 'Cancelled',
+        bg: isDarkMode ? 'rgba(239, 68, 68, 0.18)' : '#FEE2E2',
+        color: isDarkMode ? '#F87171' : '#B91C1C',
+        label: status || 'Cancelled',
         icon: 'close-circle-outline',
       };
     }
     return {
-      bg: isDarkMode ? 'rgba(7, 89, 133, 0.25)' : '#E0F2FE',
-      color: isDarkMode ? '#38BDF8' : '#075985',
+      bg: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg,
+      color: AllColors.primary,
       label: status || 'Processing',
       icon: 'time-outline',
     };
@@ -249,7 +253,7 @@ export default function Orders() {
             </View>
           }
           renderItem={({ item }) => {
-            const config = getStatusConfig(item.order_status || item.status);
+            const config = getStatusBadgeStyle(item.order_status || item.status);
             const orderId = item.order_id_generate || item.id || item.order_id || 'ORD-000';
             const amount = item.net_amount || item.amount || item.total_amount || item.price || 0;
             const itemsList = item.items || item.products || [];
@@ -258,7 +262,7 @@ export default function Orders() {
             return (
               <TouchableOpacity
                 style={[styles.orderCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
-                onPress={() => navigation.navigate('OrderDetails', { order: item })}
+                onPress={() => navigation.navigate('OrderDetails', { order_id: item.order_id_generate || item.id, id: item.id, order: item })}
                 activeOpacity={0.88}>
                 <View style={styles.cardHeaderRow}>
                   <View style={styles.orderMetaContainer}>
@@ -328,7 +332,7 @@ export default function Orders() {
 
                     <TouchableOpacity
                       style={styles.reorderBtn}
-                      onPress={() => navigation.navigate('OrderDetails', { order: item })}
+                      onPress={() => navigation.navigate('OrderDetails', { order_id: item.order_id_generate || item.id, id: item.id, order: item })}
                       activeOpacity={0.85}>
                       <Feather name="refresh-cw" size={13} color={AllColors.white} style={styles.iconMarginRight} />
                       <Text style={styles.reorderBtnText}>Details</Text>

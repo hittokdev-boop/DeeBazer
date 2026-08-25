@@ -13,16 +13,16 @@ import {
   ScrollView
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import AllColors from '../Constants/Color';
-import CustomAlert from './Alert';
+import AllColors from '../../Constants/Color';
+import CustomAlert from '../../Common/Alert';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { BASE_URL, setToken, getDeviceId, setuserId, setMobile as saveMobile, setPassword as saveApiPassword } from '../Api/Api';
+import { BASE_URL, setToken, getDeviceId, setuserId, setMobile as saveMobile, setPassword as saveApiPassword } from '../../Api/Api';
 import { useNavigation } from "@react-navigation/native";
 import LottieView from 'lottie-react-native';
-import { useTheme } from '../Context/ThemeContext';
+import { useTheme } from '../../Context/ThemeContext';
 
 const Register = () => {
-  const { theme } = useTheme();
+  const { theme, isDarkMode } = useTheme();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [mobile, setMobile] = useState('');
@@ -45,11 +45,14 @@ const Register = () => {
     setLoading(true);
 
     try {
+      const cleanEmail = email.trim().toLowerCase();
+      const cleanPassword = password.trim().toLowerCase();
+
       const formData = new FormData();
       formData.append('name', name);
-      formData.append('email', email);
+      formData.append('email', cleanEmail);
       formData.append('mobile', mobile);
-      formData.append('password', password);
+      formData.append('password', cleanPassword);
       formData.append('role', 'user');
 
       const response = await fetch(`${BASE_URL}register`, {
@@ -71,10 +74,7 @@ const Register = () => {
       }
 
       if (response.ok) {
-        if(data.token) {
-          await setToken(data.token);
-        }
-        await saveApiPassword(password);
+        await saveApiPassword(cleanPassword);
 
         // Send OTP
         try {
@@ -130,7 +130,7 @@ const Register = () => {
 
   return (
     <KeyboardAvoidingView
-      style={styles.keyboardView}
+      style={[styles.keyboardView, { backgroundColor: theme.bg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -139,70 +139,71 @@ const Register = () => {
              style={styles.backBtn}
              onPress={() => navigation.goBack()}
           >
-             <Ionicons name="arrow-back" size={24} color={AllColors.black} />
+             <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
           </TouchableOpacity>
 
           <LottieView
-            source={require("../Assets/register.json")}
+            source={require("../../Assets/register.json")}
             autoPlay
             loop
             style={styles.animation}
           />
 
           <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
             Register to start your shopping experience.
           </Text>
 
-          <View style={styles.inputContainer}>
-            <Ionicons name="person-outline" size={20} color={AllColors.slateSub} style={styles.icon} />
+          <View style={[styles.inputContainer, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+            <Ionicons name="person-outline" size={20} color={theme.textSecondary} style={styles.icon} />
             <TextInput
               placeholder="Full Name *"
-              placeholderTextColor={AllColors.slateLight}
+              placeholderTextColor={theme.textSecondary}
               value={name}
               onChangeText={setName}
-              style={styles.input}
+              style={[styles.input, { color: theme.textPrimary }]}
             />
           </View>
 
-          <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color={AllColors.slateSub} style={styles.icon} />
+          <View style={[styles.inputContainer, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+            <Ionicons name="mail-outline" size={20} color={theme.textSecondary} style={styles.icon} />
             <TextInput
               placeholder="Email *"
-              placeholderTextColor={AllColors.slateLight}
+              placeholderTextColor={theme.textSecondary}
               keyboardType="email-address"
               autoCapitalize="none"
               value={email}
               onChangeText={setEmail}
-              style={styles.input}
+              style={[styles.input, { color: theme.textPrimary }]}
             />
           </View>
 
-          <View style={styles.inputContainer}>
-            <Ionicons name="call-outline" size={20} color={AllColors.slateSub} style={styles.icon} />
+          <View style={[styles.inputContainer, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+            <Ionicons name="call-outline" size={20} color={theme.textSecondary} style={styles.icon} />
             <TextInput
               placeholder="Mobile Number *"
-              placeholderTextColor={AllColors.slateLight}
+              placeholderTextColor={theme.textSecondary}
               keyboardType="number-pad"
               maxLength={10}
               value={mobile}
               onChangeText={setMobile}
-              style={styles.input}
+              style={[styles.input, { color: theme.textPrimary }]}
             />
           </View>
 
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color={AllColors.slateSub} style={styles.icon} />
+          <View style={[styles.inputContainer, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+            <Ionicons name="lock-closed-outline" size={20} color={theme.textSecondary} style={styles.icon} />
             <TextInput
               placeholder="Password *"
-              placeholderTextColor={AllColors.slateLight}
+              placeholderTextColor={theme.textSecondary}
+              autoCapitalize="none"
               secureTextEntry={!showPassword}
               value={password}
               onChangeText={setPassword}
-              style={styles.input}
+              style={[styles.input, { color: theme.textPrimary }]}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-              <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color={AllColors.slateSub} />
+              <Ionicons name={showPassword ? "eye-outline" : "eye-off-outline"} size={20} color={theme.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -219,7 +220,7 @@ const Register = () => {
           </TouchableOpacity>
 
           <View style={styles.loginRow}>
-             <Text style={styles.footerText}>Already have an account? </Text>
+             <Text style={[styles.footerText, { color: theme.textSecondary }]}>Already have an account? </Text>
              <TouchableOpacity onPress={() => navigation.navigate('Login')}>
                  <Text style={styles.loginLink}>Login</Text>
              </TouchableOpacity>
@@ -247,7 +248,7 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     paddingHorizontal: 22,
-    paddingTop: 60,
+    paddingTop: Platform.OS === 'ios' ? 45 : 16,
     paddingBottom: 40,
     backgroundColor: AllColors.white,
   },
@@ -261,7 +262,10 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   backBtn: {
-    marginBottom: 20
+    marginBottom: 10,
+    alignSelf: 'flex-start',
+    paddingVertical: 5,
+    paddingRight: 10,
   },
   title: {
     fontSize: 28,

@@ -18,8 +18,8 @@ import Feather from 'react-native-vector-icons/Feather';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation } from '@react-navigation/native';
-import AllColors from '../../Constants/Color';
-import { useTheme } from '../../Context/ThemeContext';
+import AllColors from '../../../Constants/Color';
+import { useTheme } from '../../../Context/ThemeContext';
 
 const FAQS = [
   {
@@ -75,6 +75,12 @@ export default function HelpCenter() {
   const handleEmailSupport = () => {
     Linking.openURL('mailto:support@deebazer.com').catch(() => {
       Alert.alert('Error', 'Unable to open email client');
+    });
+  };
+
+  const handleWebSupport = () => {
+    Linking.openURL('https://deebazar.com/help-and-support.php').catch(() => {
+      Alert.alert('Error', 'Unable to open support webpage');
     });
   };
 
@@ -141,6 +147,23 @@ export default function HelpCenter() {
             <Text style={[styles.contactSub, { color: theme.textSecondary }]}>Reply in 24h</Text>
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity 
+          style={[styles.webSupportCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]} 
+          onPress={handleWebSupport} 
+          activeOpacity={0.8}
+        >
+          <View style={styles.webSupportLeft}>
+            <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? 'rgba(147, 51, 234, 0.2)' : '#F3E8FF', marginBottom: 0 }]}>
+              <Ionicons name="globe-outline" size={22} color={isDarkMode ? '#C084FC' : '#9333EA'} />
+            </View>
+            <View style={styles.webSupportTexts}>
+              <Text style={[styles.webSupportTitle, { color: theme.textPrimary }]}>Online Help & Support Portal</Text>
+              <Text style={[styles.webSupportSub, { color: theme.textSecondary }]}>Visit deebazar.com/help-and-support.php</Text>
+            </View>
+          </View>
+          <AntDesign name="right" size={16} color={theme.textSecondary} />
+        </TouchableOpacity>
 
         {/* FAQ Section */}
         <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Frequently Asked Questions</Text>
@@ -334,5 +357,36 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 40,
+  },
+  webSupportCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 24,
+    elevation: 2,
+    shadowColor: AllColors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+  },
+  webSupportLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  webSupportTexts: {
+    marginLeft: 14,
+    flex: 1,
+  },
+  webSupportTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  webSupportSub: {
+    fontSize: 12,
+    marginTop: 2,
   },
 });

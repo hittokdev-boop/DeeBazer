@@ -16,11 +16,11 @@ import {
   StatusBar,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { BASE_URL, getToken, getuserId } from '../../Api/Api';
-import AllColors from '../../Constants/Color';
+import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
+import AllColors from '../../../Constants/Color';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LottieView from "lottie-react-native";
-import { useTheme } from '../../Context/ThemeContext';
+import { useTheme } from '../../../Context/ThemeContext';
 
 // import Icon from 'react-native-vector-icons/Icon';
 export default function Wishlist() {
@@ -28,10 +28,13 @@ export default function Wishlist() {
   const { theme, isDarkMode } = useTheme();
   const [wishlistItems, setWishlistItems] = useState([]);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const getWishlistItems = async () => {
+    if (!refreshing) {
+      setLoading(true);
+    }
     const token = await getToken();
     const userId = await getuserId();
 
@@ -70,20 +73,26 @@ export default function Wishlist() {
 
   const onShare = async (item) => {
     try {
+      const playStoreUrl = `https://play.google.com/store/apps/details?id=com.deebazar.shopping&referrer=product_id%3D${item.id}`;
+      const deepLinkUrl = `deebazar://product/${item.id}`;
+      
+      const message = `${item.name}\n\nPrice: ₹${item.discount_price}\n\nCheck out this product on DeeBazar!\n\nIf the app is installed, open directly:\n${deepLinkUrl}\n\nIf the app is not installed, install it from Play Store:\n${playStoreUrl}`;
+
       await Share.share({
         title: item.name,
-        message: `${item.name}
-      
-Price: ₹${item.discount_price}
-
-https://deebazar.com/product/${item.id}`,
+        message: message,
       });
     } catch (error) {
       console.log(error);
     }
   };
   const requestToCart = async (id) => {
+    const token = await getToken();
     const userId = await getuserId();
+    if (!token || !userId) {
+      navigation.navigate('Login');
+      return;
+    }
 
     const formData = new FormData();
     formData.append('user_id', userId);
@@ -93,6 +102,10 @@ https://deebazar.com/product/${item.id}`,
     try {
       const response = await fetch(`${BASE_URL}cart-to-add`, {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
         body: formData,
       });
 
@@ -171,7 +184,7 @@ https://deebazar.com/product/${item.id}`,
         >
           <View style={[styles.emptyContainer, { backgroundColor: theme.bg }]}>
             <LottieView
-              source={require("../../Assets/Wishlist.json")}
+              source={require("../../../Assets/Wishlist.json")}
               autoPlay
               loop
               style={styles.emptyAnimation}
@@ -254,11 +267,7 @@ https://deebazar.com/product/${item.id}`,
 
                   <View style={styles.ratingRow}>
                     <Text style={styles.rating}>
-                      ⭐ {item.rating || 0}
-                    </Text>
-
-                    <Text style={{ color: theme.textSecondary, marginLeft: 8 }}>
-                      {item.reviews || 0} Ratings
+                      ⭐ {item.rating || item.avg_rating || 0}
                     </Text>
                   </View>
                 </View>
@@ -503,7 +512,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   loaderMarginTop: {
-    marginTop: 24,
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollFlexGrow: {
     flexGrow: 1,

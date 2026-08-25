@@ -8,6 +8,8 @@ import {
   Alert as RNAlert,
   Modal,
   Switch,
+  Linking,
+  TextInput,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,12 +18,12 @@ import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import AllColors from '../../Constants/Color';
-import CustomLoader from '../../Common/Loader';
-import { BASE_URL, getToken, removemobile, removeToken, removeuserId, getPassword, removePassword } from '../../Api/Api';
-import CustomAlert from '../../Common/Alert';
-import SuccessModal from '../../Common/SuccessScreen';
-import { useTheme } from '../../Context/ThemeContext';
+import AllColors from '../../../Constants/Color';
+import CustomLoader from '../../../Common/Loader';
+import { BASE_URL, getToken, getMobile, removemobile, removeToken, removeuserId, getPassword, removePassword } from '../../../Api/Api';
+import CustomAlert from '../../../Common/Alert';
+import SuccessModal from '../../../Common/SuccessScreen';
+import { useTheme } from '../../../Context/ThemeContext';
 
 export default function Account() {
   const { isDarkMode, toggleDarkMode, theme } = useTheme();
@@ -29,17 +31,24 @@ export default function Account() {
   const [loading, setLoading] = useState(true);
   const [showAlert, setShowAlert] = useState(false);
   const [errorText, setErrorText] = useState('');
+  const [alertType, setAlertType] = useState('error');
   const [isSuccess, setIsSuccess] = useState(false);
   const [userName, setUserName] = useState('User');
   const [userEmail, setUserEmail] = useState('');
+  const [userMobile, setUserMobile] = useState('');
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [selectedReason, setSelectedReason] = useState(null);
+  const [isOtpModalVisible, setIsOtpModalVisible] = useState(false);
+  const [otp, setOtp] = useState('');
 
   const deleteReasons = [
-    "I don't use this app anymore",
-    "I have another account",
+    "I no longer want to use the app",
+    "I am not satisfied with the service",
+    "I found another app",
+    "Too many notifications",
     "Privacy concerns",
-    "Meri Marzi",
+    "Technical issues",
+    "I created this account by mistake",
     "Other"
   ];
 
@@ -84,6 +93,24 @@ export default function Account() {
   const gotoEditProfile = () => handleNavigate('editProfile');
   const gotoSaveAddress = () => handleNavigate('AllAddress');
 
+  const openHelpSupport = () => {
+    Linking.openURL('https://deebazar.com/help-and-support.php').catch(err => {
+      console.log("Couldn't load page", err);
+    });
+  };
+
+  const openPrivacyPolicy = () => {
+    Linking.openURL('https://deebazar.com/privacy-policy.php').catch(err => {
+      console.log("Couldn't load page", err);
+    });
+  };
+
+  const openTermsConditions = () => {
+    Linking.openURL('https://deebazar.com/terms-and-conditions.php').catch(err => {
+      console.log("Couldn't load page", err);
+    });
+  };
+
   const checkLogin = async () => {
     try {
       const token = await getToken();
@@ -97,12 +124,18 @@ export default function Account() {
         if (data.status === 200 && data.user) {
           setUserName(data.user.name || 'User');
           setUserEmail(data.user.email || '');
+          setUserMobile(data.user.mobile || data.user.phone || '');
+        } else {
+          const mob = await getMobile();
+          if (mob) setUserMobile(mob);
         }
       } else {
         setIsLoggedIn(false);
       }
     } catch (error) {
       setIsLoggedIn(false);
+      const mob = await getMobile();
+      if (mob) setUserMobile(mob);
     } finally {
       setLoading(false);
     }
@@ -139,6 +172,46 @@ export default function Account() {
     }
   };
 
+  const handleReasonSubmit = async () => {
+    setIsDeleteModalVisible(false);
+
+    if (!userMobile) {
+      setErrorText('User mobile number is required to delete the account.');
+      setShowAlert(true);
+      return;
+    }
+
+    const token = await getToken();
+    console.log(token)
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('mobile', userMobile);
+
+      const response = await fetch(`${BASE_URL}send-delete-account-otp`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+        body: formData
+      });
+      const data = await response.json();
+      setLoading(false);
+      if (response.ok || data.status === 200) {
+        setOtp('');
+        setIsOtpModalVisible(true);
+      } else {
+        setErrorText(data.message || 'Failed to send OTP. Please try again.');
+        setShowAlert(true);
+      }
+    } catch (error) {
+      setLoading(false);
+      setErrorText('Something went wrong while sending OTP.');
+      setShowAlert(true);
+    }
+  };
+
   const requestForDeleteAccount = async () => {
     const token = await getToken();
     if (!token || token === null) {
@@ -147,31 +220,34 @@ export default function Account() {
       return;
     }
 
-    const savedPassword = await getPassword();
-
+    setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('email', userEmail);
-      formData.append('password', savedPassword || '');
-
-      const response = await fetch(`${BASE_URL}destroy-account`, {
+      const response = await fetch(`${BASE_URL}delete-account`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json'
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         },
-        body: formData
+        body: JSON.stringify({
+          mobile: userMobile,
+          otp: otp,
+          reason: selectedReason || 'I no longer want to use the app',
+          reasons: selectedReason || 'I no longer want to use the app'
+        })
       });
 
       const data = await response.json();
+      setLoading(false);
 
-      if (response.ok) {
+      if (response.ok || data.status === 200) {
         await removeToken();
         await removemobile();
         await removeuserId();
         await removePassword();
         setIsLoggedIn(false);
 
+        setAlertType('success');
         setErrorText('Account deleted successfully. You have been signed out.');
         setShowAlert(true);
 
@@ -195,6 +271,7 @@ export default function Account() {
         setShowAlert(true);
       }
     } catch (error) {
+      setLoading(false);
       setErrorText('Something went wrong. Please try again.');
       setShowAlert(true);
     }
@@ -389,6 +466,39 @@ export default function Account() {
             </View>
             <AntDesign name="right" size={18} color={theme.modalSubText} />
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.row, { borderBottomColor: theme.divider }]}
+            activeOpacity={0.7}
+            onPress={openHelpSupport}>
+            <View style={styles.rowLeft}>
+              <Feather name="headphones" size={22} color={theme.iconPrimary} />
+              <Text style={[styles.rowText, { color: theme.textSecondary }]}>Help & Support</Text>
+            </View>
+            <AntDesign name="right" size={18} color={theme.modalSubText} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.row, { borderBottomColor: theme.divider }]}
+            activeOpacity={0.7}
+            onPress={openPrivacyPolicy}>
+            <View style={styles.rowLeft}>
+              <MaterialCommunityIcons name="shield-check-outline" size={22} color={theme.iconPrimary} />
+              <Text style={[styles.rowText, { color: theme.textSecondary }]}>Privacy Policy</Text>
+            </View>
+            <AntDesign name="right" size={18} color={theme.modalSubText} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.row, { borderBottomColor: theme.divider }]}
+            activeOpacity={0.7}
+            onPress={openTermsConditions}>
+            <View style={styles.rowLeft}>
+              <MaterialCommunityIcons name="file-document-outline" size={22} color={theme.iconPrimary} />
+              <Text style={[styles.rowText, { color: theme.textSecondary }]}>Terms & Conditions</Text>
+            </View>
+            <AntDesign name="right" size={18} color={theme.modalSubText} />
+          </TouchableOpacity>
         </View>
 
         {/* LOGOUT BUTTON (Only if logged in) */}
@@ -409,7 +519,11 @@ export default function Account() {
       <CustomAlert
         visible={showAlert}
         message={errorText}
-        onClose={() => setShowAlert(false)}
+        type={alertType}
+        onClose={() => {
+          setShowAlert(false);
+          setAlertType('error');
+        }}
       />
       <SuccessModal
         visible={isSuccess}
@@ -449,14 +563,61 @@ export default function Account() {
                 <Text style={[styles.modalCancelText, { color: theme.modalSubText }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalDeleteBtn, !selectedReason && { opacity: 0.5 }]}
+                style={[styles.modalDeleteBtn, { backgroundColor: theme.iconPrimary }, !selectedReason && { opacity: 0.5 }]}
                 disabled={!selectedReason}
+                onPress={handleReasonSubmit}
+              >
+                <Text style={styles.modalDeleteText}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={isOtpModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsOtpModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.modalBg }]}>
+            <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Verify OTP</Text>
+            <Text style={[styles.modalSub, { color: theme.modalSubText }]}>
+              An OTP has been sent to {userMobile}. Please enter the OTP to permanently delete your account:
+            </Text>
+            <TextInput
+              style={[
+                styles.otpInput,
+                {
+                  color: theme.textPrimary,
+                  borderColor: theme.iconPrimary,
+                  backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc',
+                },
+              ]}
+              placeholder="Enter 4-digit OTP"
+              placeholderTextColor={theme.modalSubText}
+              keyboardType="number-pad"
+              maxLength={4}
+              value={otp}
+              onChangeText={setOtp}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setIsOtpModalVisible(false)}
+              >
+                <Text style={[styles.modalCancelText, { color: theme.modalSubText }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalDeleteBtn, { backgroundColor: theme.iconPrimary }, otp.length !== 4 && { opacity: 0.5 }]}
+                disabled={otp.length !== 4}
                 onPress={() => {
-                  setIsDeleteModalVisible(false);
+                  setIsOtpModalVisible(false);
                   requestForDeleteAccount();
                 }}
               >
-                <Text style={styles.modalDeleteText}>Delete</Text>
+                <Text style={styles.modalDeleteText}>Confirm Delete</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -719,5 +880,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  otpInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    letterSpacing: 2,
+    fontWeight: '600',
   },
 });
