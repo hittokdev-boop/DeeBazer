@@ -21,12 +21,27 @@ import AllColors from '../../../Constants/Color';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LottieView from "lottie-react-native";
 import { useTheme } from '../../../Context/ThemeContext';
+import DifferentSellerModal from '../../../Common/DifferentSellerModal';
+import {
+  checkDifferentSeller,
+  saveActiveCartSeller,
+  getActiveCartSeller,
+  clearActiveCartSeller,
+} from '../../../Common/sellerUtils';
 
 // import Icon from 'react-native-vector-icons/Icon';
 export default function Wishlist() {
   const navigation = useNavigation();
   const { theme, isDarkMode } = useTheme();
   const [wishlistItems, setWishlistItems] = useState([]);
+  const [cartItems, setCartItems] = useState([]);
+  const [sellerModalVisible, setSellerModalVisible] = useState(false);
+  const [sellerModalData, setSellerModalData] = useState({
+    cartSellerName: '',
+    targetSellerName: '',
+    targetSellerId: null,
+    targetProduct: null,
+  });
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -66,9 +81,50 @@ export default function Wishlist() {
     }
   };
 
+  const getCartItems = async () => {
+    const token = await getToken();
+    const userId = await getuserId();
+    if (!token || !userId) {
+      setCartItems([]);
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append('user_id', userId);
+      const response = await fetch(`${BASE_URL}cart-view`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+        body: formData,
+      });
+      const data = await response.json();
+      const items = data?.data || data?.cart || [];
+      const validItems = Array.isArray(items) ? items : [];
+      setCartItems(validItems);
+
+      if (validItems.length === 0) {
+        await clearActiveCartSeller();
+      } else {
+        await saveActiveCartSeller(validItems[0]);
+      }
+    } catch (error) {
+      console.log('Cart fetch error in wishlist:', error);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      getWishlistItems();
+      getCartItems();
+    }, [])
+  );
+
   const onRefresh = () => {
     setRefreshing(true);
     getWishlistItems();
+    getCartItems();
   };
 
   const onShare = async (item) => {
@@ -133,6 +189,43 @@ export default function Wishlist() {
       return;
     }
 
+    // Single-seller policy check
+    let currentCart = cartItems;
+    if (!currentCart || currentCart.length === 0) {
+      try {
+        const formData = new FormData();
+        formData.append('user_id', userId);
+        const cartResp = await fetch(`${BASE_URL}cart-view`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
+          body: formData,
+        });
+        const cartJson = await cartResp.json();
+        currentCart = (cartJson?.data && Array.isArray(cartJson.data)) ? cartJson.data : [];
+        setCartItems(currentCart);
+      } catch (e) {
+        console.log('Error refreshing cart in wishlist:', e);
+      }
+    }
+
+    const cachedSeller = await getActiveCartSeller();
+    if (currentCart && currentCart.length > 0) {
+      const sellerCheck = checkDifferentSeller(currentCart, item, cachedSeller);
+      if (sellerCheck.isDifferent) {
+        setSellerModalData({
+          cartSellerName: sellerCheck.cartSellerName,
+          targetSellerName: sellerCheck.targetSellerName,
+          targetSellerId: sellerCheck.targetSellerId,
+          targetProduct: item,
+        });
+        setSellerModalVisible(true);
+        return;
+      }
+    }
+
     const formData = new FormData();
     formData.append('user_id', userId);
     formData.append('product_id', id);
@@ -151,6 +244,8 @@ export default function Wishlist() {
       const data = await response.json();
 
       if (data.status == 200) {
+        await saveActiveCartSeller(item);
+        getCartItems();
         if (Platform.OS === 'android') {
         } else {
           Alert.alert('Success', 'Product added to cart successfully');
@@ -373,6 +468,26 @@ export default function Wishlist() {
           }
         />
       )}
+
+      {/* Different Seller Modal */}
+      <DifferentSellerModal
+        visible={sellerModalVisible}
+        cartSellerName={sellerModalData.cartSellerName}
+        targetSellerName={sellerModalData.targetSellerName}
+        targetSellerId={sellerModalData.targetSellerId}
+        targetProduct={sellerModalData.targetProduct}
+        onClose={() => setSellerModalVisible(false)}
+        onViewSellerProducts={() => {
+          const sId = sellerModalData.targetSellerId;
+          const sName = sellerModalData.targetSellerName;
+          setSellerModalVisible(false);
+          navigation.navigate('ViewAllProducts', {
+            sellerId: sId,
+            sellerName: sName,
+            title: sName ? `${sName}'s Products` : "Seller's Products",
+          });
+        }}
+      />
     </View>
   );
 }

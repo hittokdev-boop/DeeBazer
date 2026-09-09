@@ -23,11 +23,24 @@ export default function OrderSuccess() {
   const { theme, isDarkMode } = useTheme();
   const {
     order_id,
+    order: initialOrder,
     payment_method = 'cod',
   } = route.params || {};
 
-  const [order, setOrder] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const hasInitialData = Boolean(
+    initialOrder &&
+      ((Array.isArray(initialOrder.items) && initialOrder.items.length > 0) ||
+        (Array.isArray(initialOrder.products) && initialOrder.products.length > 0) ||
+        initialOrder.name ||
+        initialOrder.img ||
+        initialOrder.image ||
+        initialOrder.order_number ||
+        initialOrder.order_id_generate ||
+        initialOrder.order_id)
+  );
+
+  const [order, setOrder] = useState(initialOrder || null);
+  const [loading, setLoading] = useState(!hasInitialData && Boolean(order_id));
 
   useEffect(() => {
     if (order_id) {
@@ -39,9 +52,8 @@ export default function OrderSuccess() {
 
   const fetchOrderDetails = async (targetId) => {
     try {
-      setLoading(true);
+      if (!order) setLoading(true);
       const token = await getToken();
-      const userId = await getuserId();
 
       if (!token) {
         setLoading(false);
@@ -68,9 +80,48 @@ export default function OrderSuccess() {
       });
 
       const result = await response.json();
-      // console.log("Order Success Page - Fetch Order Details Result:", result);
-      if (result?.data || result?.order) {
-        setOrder(result.data || result.order);
+      const rawOrderData =
+        result?.data_order ||
+        result?.data?.order ||
+        result?.data ||
+        result?.order ||
+        result?.order_details ||
+        (result?.id || result?.order_id ? result : null);
+
+      if (rawOrderData && typeof rawOrderData === 'object') {
+        const rawUser =
+          result?.data_user ||
+          result?.user ||
+          rawOrderData?.address_user ||
+          rawOrderData?.data_user ||
+          rawOrderData?.shipping_address ||
+          rawOrderData?.delivery_address ||
+          rawOrderData?.user_address ||
+          rawOrderData?.user ||
+          (typeof rawOrderData?.address === 'object' ? rawOrderData.address : null);
+
+        const extractedItems =
+          Array.isArray(rawOrderData.items) && rawOrderData.items.length > 0
+            ? rawOrderData.items
+            : Array.isArray(rawOrderData.order_items) && rawOrderData.order_items.length > 0
+            ? rawOrderData.order_items
+            : Array.isArray(rawOrderData.products) && rawOrderData.products.length > 0
+            ? rawOrderData.products
+            : Array.isArray(rawOrderData.details) && rawOrderData.details.length > 0
+            ? rawOrderData.details
+            : Array.isArray(rawOrderData.order_details) && rawOrderData.order_details.length > 0
+            ? rawOrderData.order_details
+            : Array.isArray(result?.items) && result.items.length > 0
+            ? result.items
+            : [];
+
+        setOrder((prev) => ({
+          ...(prev || {}),
+          ...rawOrderData,
+          items: extractedItems.length > 0 ? extractedItems : prev?.items || rawOrderData.items,
+          address_user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.address_user || null,
+          data_user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.data_user || null,
+        }));
       }
     } catch (error) {
       console.log('Error fetching order details for success page:', error);
@@ -91,7 +142,6 @@ export default function OrderSuccess() {
       index: 0,
       routes: [{ name: 'AppTab' }],
     });
-    // Let navigation trigger screen transit to Orders list
     setTimeout(() => {
       navigation.navigate('Orders');
     }, 200);
@@ -106,24 +156,68 @@ export default function OrderSuccess() {
   }
 
   // Parse order details
-  const displayOrderId = order?.order_id_generate || order?.id || order_id || 'ORD-84920';
-  const paymentText = order?.payment_method || order?.payment_type || (payment_method === 'cod' ? 'Cash on Delivery (COD)' : 'Paid Online (Prepaid)');
-  const amount = order?.net_amount || order?.amount || order?.total_amount || 0;
+  const displayOrderId = order?.order_id_generate || order?.order_number || order?.order_id || order?.id || order_id || '---';
+  const paymentText =
+    order?.payment_method ||
+    order?.payment_type ||
+    order?.payment_mode ||
+    (payment_method === 'cod' ? 'Cash on Delivery (COD)' : 'Paid Online (Prepaid)');
+  const amount = Number(order?.total_amount ?? order?.net_amount ?? order?.amount ?? order?.selling_price ?? 0);
 
-  const itemsList = Array.isArray(order?.items) && order.items.length > 0
-    ? order.items
-    : Array.isArray(order?.products) && order.products.length > 0
-    ? order.products
-    : Array.isArray(order?.details) && order.details.length > 0
-    ? order.details
-    : [];
+  const itemsList =
+    Array.isArray(order?.items) && order.items.length > 0
+      ? order.items
+      : Array.isArray(order?.products) && order.products.length > 0
+      ? order.products
+      : Array.isArray(order?.order_items) && order.order_items.length > 0
+      ? order.order_items
+      : Array.isArray(order?.details) && order.details.length > 0
+      ? order.details
+      : [];
 
-  const addressObj = order?.address || {};
-  const name = order?.name || order?.user_name || order?.shipping_name || addressObj?.name || 'Customer';
-  const addressString = typeof order?.address === 'string'
+  const addressObj =
+    (typeof order?.address_user === 'object' && order.address_user !== null ? order.address_user : null) ||
+    (typeof order?.data_user === 'object' && order.data_user !== null ? order.data_user : null) ||
+    (typeof order?.shipping_address === 'object' && order.shipping_address !== null ? order.shipping_address : null) ||
+    (typeof order?.address === 'object' && order.address !== null ? order.address : null);
+
+  const name =
+    addressObj?.name ||
+    addressObj?.user_name ||
+    order?.name ||
+    order?.user_name ||
+    order?.shipping_name ||
+    'Customer';
+
+  const addressString = addressObj
+    ? (
+        addressObj.address && typeof addressObj.address === 'string' && addressObj.address.trim().length > 0
+          ? addressObj.address
+          : [
+              addressObj.house_no || addressObj.flat_no,
+              addressObj.road_name || addressObj.street || addressObj.area,
+              addressObj.landmark ? `Near ${addressObj.landmark}` : null,
+              addressObj.city,
+              addressObj.state
+                ? `${addressObj.state}${addressObj.pin || addressObj.pincode ? ` - ${addressObj.pin || addressObj.pincode}` : ''}`
+                : addressObj.pin || addressObj.pincode,
+            ]
+              .filter(Boolean)
+              .join(', ')
+      )
+    : typeof order?.address === 'string' && order.address.trim().length > 0
     ? order.address
-    : `${addressObj?.house_no || addressObj?.address || ''}, ${addressObj?.road_name || ''}, ${addressObj?.city || ''}, ${addressObj?.state || ''} - ${addressObj?.pin || addressObj?.zip_code || ''}`;
-  const mobile = order?.mobile || order?.phone || order?.user_phone || addressObj?.mobile || '';
+    : order?.delivery_address ||
+      order?.shipping_address ||
+      'Address not available';
+
+  const mobile =
+    addressObj?.mobile ||
+    addressObj?.phone ||
+    order?.mobile ||
+    order?.phone ||
+    order?.user_phone ||
+    '';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
@@ -163,12 +257,18 @@ export default function OrderSuccess() {
               <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Items Summary</Text>
               <View style={styles.itemsContainer}>
                 {itemsList.map((item, index) => (
-                  <View key={item.id || index} style={styles.itemRow}>
-                    <Image
-                      source={{ uri: item.image || item.product_image || 'https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=300' }}
-                      style={[styles.itemThumb, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}
-                      resizeMode="cover"
-                    />
+                  <View key={`order-item-${item.id || ''}-${index}`} style={styles.itemRow}>
+                    {item.image || item.img || item.product_image || item.thumbnail ? (
+                      <Image
+                        source={{ uri: item.image || item.img || item.product_image || item.thumbnail }}
+                        style={[styles.itemThumb, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={[styles.itemThumb, { backgroundColor: isDarkMode ? '#334155' : AllColors.divider, justifyContent: 'center', alignItems: 'center' }]}>
+                        <Ionicons name="cube-outline" size={20} color={isDarkMode ? '#94A3B8' : AllColors.slateSub} />
+                      </View>
+                    )}
                     <View style={styles.itemInfo}>
                       <Text style={[styles.itemName, { color: theme.textPrimary }]} numberOfLines={1}>
                         {item.name || item.product_name || 'Product'}

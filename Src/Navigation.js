@@ -19,7 +19,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import MapScreen from './Screen/app/Address/MapScreen';
 import AllAddress from './Screen/app/Address/AllAdress';
 import ViewAllProducts from './Screen/app/ProductsDashboard/ViewAllProducts';
-import Wishlist from './Screen/app/Misc/wishlist ';
+import Wishlist from './Screen/app/Misc/Wishlist';
 import RazorpayScreen from './Screen/app/CartCheckout/RazorpayScreen';
 import Orders from './Screen/app/Orders/Orders';
 import Coupons from './Screen/app/CartCheckout/Coupons';

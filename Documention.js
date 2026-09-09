@@ -548,6 +548,13 @@
 // {
 //   "product_id": 1
 // }
+// ```**Endpoint:** `POST /api/product-details`
+
+// **Request Body:**
+// ```json
+// {
+//   "product_id": 1
+// }
 // ```
 
 // **Response (200):**

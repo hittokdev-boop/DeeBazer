@@ -44,18 +44,6 @@ const { width } = Dimensions.get('window');
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
-const DEFAULT_DUMMY_SUB_CATEGORIES = [
-  { id: 'sub_d1', name: 'Smartphones', image: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=300&auto=format&fit=crop&q=80' },
-  { id: 'sub_d2', name: 'Men Fashion', image: 'https://images.unsplash.com/photo-1490578474895-699cd4e2cf59?w=300&auto=format&fit=crop&q=80' },
-  { id: 'sub_d3', name: 'Women Fashion', image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=300&auto=format&fit=crop&q=80' },
-  { id: 'sub_d4', name: 'Fresh Fruits', image: 'https://images.unsplash.com/photo-1610832958506-aa56368176cf?w=300&auto=format&fit=crop&q=80' },
-  { id: 'sub_d5', name: 'Footwear', image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&auto=format&fit=crop&q=80' },
-  { id: 'sub_d6', name: 'Beauty Care', image: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=300&auto=format&fit=crop&q=80' },
-  { id: 'sub_d7', name: 'Home Essentials', image: 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=300&auto=format&fit=crop&q=80' },
-  { id: 'sub_d8', name: 'Gadgets', image: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=300&auto=format&fit=crop&q=80' },
-  { id: 'sub_d9', name: 'Watches', image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=300&auto=format&fit=crop&q=80' },
-  { id: 'sub_d10', name: 'Fitness', image: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=300&auto=format&fit=crop&q=80' },
-];
 const DEFAULT_SUB_CAT_IMAGE = 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300';
 
 const DEFAULT_NOTIFICATIONS = [
@@ -175,7 +163,8 @@ export default function DashBoard() {
   const [slug, setSlug] = useState('')
   const [catagoriesId, setCategoriesId] = useState('all')
   const [product, setProduct] = useState([])
-  const [subCategories, setSubCategories] = useState(DEFAULT_DUMMY_SUB_CATEGORIES)
+  const [productPage, setProductPage] = useState(1)
+  const [subCategories, setSubCategories] = useState([])
   const [selectedSubCategoryId, setSelectedSubCategoryId] = useState(null)
 
 
@@ -1446,9 +1435,10 @@ export default function DashBoard() {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
+      const nextPage = productPage + 1;
       await Promise.all([
         getCatagory(),
-        getAllPrduct(catagoriesId, selectedSubCategoryId),
+        getAllPrduct(catagoriesId, selectedSubCategoryId, nextPage),
         getpopularPoduct(),
         getDealOfTheDay(),
         getlatestProduct(),
@@ -1472,7 +1462,7 @@ export default function DashBoard() {
       try {
         await Promise.all([
           getCatagory(),
-          getAllPrduct('all'),
+          getAllPrduct('all', null, 1),
           getpopularPoduct(),
           getDealOfTheDay(),
           getlatestProduct(),
@@ -1518,7 +1508,7 @@ export default function DashBoard() {
 
   const getSubCategories = async (catId) => {
     if (!catId || catId === 'all') {
-      setSubCategories(DEFAULT_DUMMY_SUB_CATEGORIES);
+      setSubCategories([]);
       setSelectedSubCategoryId(null);
       return;
     }
@@ -1534,59 +1524,33 @@ export default function DashBoard() {
 
       const data = await response.json();
       const list = data?.data || data?.subcategories || data?.sub_categories || (Array.isArray(data) ? data : null);
-      if ((data?.status == 200 || data?.status === 'success') && list && list.length > 0) {
+      if ((data?.status == 200 || data?.status === 'success') && Array.isArray(list) && list.length > 0) {
         setSubCategories(list);
-      } else if (list && list.length > 0) {
+      } else if (Array.isArray(list) && list.length > 0) {
         setSubCategories(list);
       } else {
-        setSubCategories(DEFAULT_DUMMY_SUB_CATEGORIES);
+        setSubCategories([]);
       }
     } catch (error) {
       console.error('Error fetching subcategories:', error);
-      setSubCategories(DEFAULT_DUMMY_SUB_CATEGORIES);
+      setSubCategories([]);
     } finally {
       setSubCategoriesLoading(false);
     }
   };
 
   const handleSubCategoryClick = (subCatId) => {
+    setProductPage(1);
     if (selectedSubCategoryId === subCatId) {
       setSelectedSubCategoryId(null);
       setIsFilterActive(false);
       setFilteredProducts([]);
-      getAllPrduct(catagoriesId, null);
+      getAllPrduct(catagoriesId, null, 1);
     } else {
       setSelectedSubCategoryId(subCatId);
-      if (String(subCatId).startsWith('sub_d')) {
-        const subItem = subCategories.find((s) => String(s.id) === String(subCatId));
-        if (subItem) {
-          const subName = subItem.name.toLowerCase();
-          const allPool = [
-            ...(product || []),
-            ...(dealOfTheDay || []),
-            ...(latestproducts || []),
-            ...(featuredproducts || []),
-            ...(bestsellingProduct || []),
-            ...(popularProduct || []),
-          ];
-          const matches = allPool.filter(
-            (p, index, self) =>
-              (p.name?.toLowerCase().includes(subName) ||
-                p.short_desc02?.toLowerCase().includes(subName) ||
-                p.category_name?.toLowerCase().includes(subName)) &&
-              index === self.findIndex((t) => String(t.id) === String(p.id))
-          );
-          if (matches.length > 0) {
-            setFilteredProducts(matches);
-            setIsFilterActive(true);
-          } else {
-            setIsFilterActive(false);
-            getAllPrduct(catagoriesId, null);
-          }
-        }
-      } else {
-        getAllPrduct(catagoriesId, subCatId);
-      }
+      setIsFilterActive(false);
+      setFilteredProducts([]);
+      getAllPrduct(catagoriesId, subCatId, 1);
     }
   };
 
@@ -1594,13 +1558,14 @@ export default function DashBoard() {
     setCategoriesId(item.id);
     setSelectedSubCategoryId(null);
     setSlug(item.slug || '');
-    getAllPrduct(item.id, null);
+    setProductPage(1);
+    getAllPrduct(item.id, null, 1);
     getSubCategories(item.id);
     setSearchText('');
     setIsFilterActive(false);
   };
 
-  const getAllPrduct = async (catId, subCatId) => {
+  const getAllPrduct = async (catId, subCatId, pageNum = 1) => {
     setProductLoading(true);
     const selectedCategoryId = catId !== undefined ? catId : catagoriesId;
     const selectedSubId = subCatId !== undefined ? subCatId : selectedSubCategoryId;
@@ -1608,12 +1573,14 @@ export default function DashBoard() {
     const formData = new FormData();
     if (selectedCategoryId && selectedCategoryId !== 'all') {
       formData.append('category_id', selectedCategoryId);
+    } else {
+      formData.append('category_id', 'all');
     }
     if (selectedSubId) {
       formData.append('sub_category_id', selectedSubId);
     }
-    formData.append("per_page", 12);
-    formData.append("page", 1);
+    formData.append("per_page", 8);
+    formData.append("page", pageNum);
     try {
       const response = await fetch(`${BASE_URL}product`, {
         method: 'POST',
@@ -1622,8 +1589,32 @@ export default function DashBoard() {
 
       const data = await response.json();
 
-      if (data?.data) {
+      if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
         setProduct(data.data);
+        setProductPage(pageNum);
+      } else if (pageNum > 1) {
+        // If the next page is empty (reached the end), restart from page 1
+        const fallbackFormData = new FormData();
+        if (selectedCategoryId && selectedCategoryId !== 'all') {
+          fallbackFormData.append('category_id', selectedCategoryId);
+        } else {
+          fallbackFormData.append('category_id', 'all');
+        }
+        if (selectedSubId) {
+          fallbackFormData.append('sub_category_id', selectedSubId);
+        }
+        fallbackFormData.append("per_page", 8);
+        fallbackFormData.append("page", 1);
+
+        const fallbackResponse = await fetch(`${BASE_URL}product`, {
+          method: 'POST',
+          body: fallbackFormData,
+        });
+        const fallbackData = await fallbackResponse.json();
+        if (fallbackData?.data && Array.isArray(fallbackData.data)) {
+          setProduct(fallbackData.data);
+        }
+        setProductPage(1);
       }
     } catch (error) {
       console.error('Error:', error);
@@ -2767,7 +2758,7 @@ export default function DashBoard() {
       />
 
       {/* Floating Cart Bar (Blinkit-style) */}
-      {(cartItems.length >= 2 || cartItems.reduce((sum, item) => sum + Number(item.qty || 1), 0) >= 2) && (
+      {cartItems.length > 0 && (
         <Animated.View
           style={[
             styles.floatingCartBar,
@@ -2790,16 +2781,27 @@ export default function DashBoard() {
             onPress={() => Navigation.navigate('CartPage')}
           >
             <View style={styles.cartItemsPreview}>
-              {cartItems.slice(0, 3).map((item, index) => (
-                <Image
-                  key={item.product_id || index}
-                  source={{ uri: item.image }}
-                  style={[
-                    styles.miniCartImage,
-                    { marginLeft: index > 0 ? -12 : 0, zIndex: 10 - index }
-                  ]}
-                />
-              ))}
+              {cartItems.slice(0, 3).map((item, index) => {
+                const imgUri = Array.isArray(item.image) ? item.image[0] : (item.image || item.cat_image || '');
+                return (
+                  <View
+                    key={item.product_id || item.id || index}
+                    style={[
+                      styles.miniCartImageWrapper,
+                      { marginLeft: index > 0 ? -12 : 0, zIndex: 10 - index }
+                    ]}
+                  >
+                    {imgUri ? (
+                      <Image
+                        source={{ uri: imgUri }}
+                        style={styles.miniCartImage}
+                      />
+                    ) : (
+                      <Ionicons name="bag-handle" size={16} color={AllColors.primary} />
+                    )}
+                  </View>
+                );
+              })}
               {cartItems.length > 3 && (
                 <View style={styles.miniCartMoreBadge}>
                   <Text style={styles.miniCartMoreText}>+{cartItems.length - 3}</Text>
@@ -4050,33 +4052,41 @@ const styles = StyleSheet.create({
   },
   floatingCartBar: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 15,
     left: 44,
     right: 44,
     backgroundColor: AllColors.primary,
-    height: 56,
-    borderRadius: 14,
+    height: 54,
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    elevation: 8,
-    shadowColor: AllColors.shadow,
+    zIndex: 9999,
+    elevation: 12,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
     shadowRadius: 6,
   },
   cartItemsPreview: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  miniCartImage: {
+  miniCartImageWrapper: {
     width: 32,
     height: 32,
     borderRadius: 16,
     borderWidth: 2,
     borderColor: AllColors.white,
-    backgroundColor: AllColors.screenBg,
+    backgroundColor: AllColors.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  miniCartImage: {
+    width: '100%',
+    height: '100%',
   },
   miniCartMoreBadge: {
     width: 24,

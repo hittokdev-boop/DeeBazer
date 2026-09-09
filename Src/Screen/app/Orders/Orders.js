@@ -18,7 +18,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
+import { BASE_URL, getToken, getuserId, setuserId } from '../../../Api/Api';
 import AllColors from '../../../Constants/Color';
 import { useTheme } from '../../../Context/ThemeContext';
 
@@ -33,43 +33,129 @@ export default function Orders() {
   const [refreshing, setRefreshing] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(true);
 
+  const extractOrdersArray = (result) => {
+    if (!result) return [];
+    if (Array.isArray(result)) return result;
+    if (Array.isArray(result?.data)) return result.data;
+    if (Array.isArray(result?.data?.data)) return result.data.data;
+    if (Array.isArray(result?.orders)) return result.orders;
+    if (Array.isArray(result?.data?.orders)) return result.data.orders;
+    if (Array.isArray(result?.order_list)) return result.order_list;
+    if (result?.data && typeof result.data === 'object' && !Array.isArray(result.data)) {
+      const values = Object.values(result.data).filter(
+        (item) => item && typeof item === 'object' && (item.id || item.order_id || item.order_id_generate)
+      );
+      if (values.length > 0) return values;
+    }
+    if (result?.orders && typeof result.orders === 'object' && !Array.isArray(result.orders)) {
+      const values = Object.values(result.orders).filter(
+        (item) => item && typeof item === 'object' && (item.id || item.order_id || item.order_id_generate)
+      );
+      if (values.length > 0) return values;
+    }
+    return [];
+  };
+
   const fetchOrders = async () => {
     try {
       const token = await getToken();
-      const userId = await getuserId();
+      let userId = await getuserId();
 
-      if (!token || !userId) {
+      if (!token) {
         setIsLoggedIn(false);
         setOrders([]);
         setLoading(false);
+        setRefreshing(false);
         return;
       }
 
       setIsLoggedIn(true);
 
-      const requestBody = {
-        user_id: isNaN(userId) ? userId : Number(userId),
-      };
-
-      const response = await fetch(`${BASE_URL}order-list`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      const result = await response.json();
-      // console.log("Order list response:", result);
-
-      if (result?.status === 200 || result?.success) {
-        const orderData = result?.data || result?.orders || [];
-        setOrders(Array.isArray(orderData) ? orderData : []);
-      } else {
-        setOrders([]);
+      // If userId is missing from storage, fetch from /me
+      if (!userId) {
+        try {
+          const profileRes = await fetch(`${BASE_URL}me`, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/json',
+            },
+          });
+          const profileData = await profileRes.json();
+          const resolvedId = profileData?.user?.id || profileData?.data?.id || profileData?.id;
+          if (resolvedId) {
+            userId = resolvedId;
+            await setuserId(resolvedId);
+          }
+        } catch (e) {
+          console.log('Error fetching user profile for userId:', e);
+        }
       }
+
+      const parsedUserId = userId && !isNaN(userId) ? Number(userId) : userId;
+      let orderListResult = null;
+
+      // 1. Primary Attempt: JSON POST
+      try {
+        const jsonBody = {};
+        if (parsedUserId) jsonBody.user_id = parsedUserId;
+
+        const response = await fetch(`${BASE_URL}order-list`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
+          body: JSON.stringify(jsonBody),
+        });
+
+        const text = await response.text();
+        try {
+          orderListResult = JSON.parse(text);
+        } catch (e) {
+          console.log('Order list JSON parse error:', text);
+        }
+      } catch (e) {
+        console.log('Order list JSON fetch error:', e);
+      }
+
+      let parsedOrders = extractOrdersArray(orderListResult);
+
+      // 2. Fallback Attempt: FormData POST if no orders found or status not successful
+      if (
+        (!parsedOrders || parsedOrders.length === 0) &&
+        (!orderListResult || (orderListResult.status !== 200 && orderListResult.status !== '200' && !orderListResult.success))
+      ) {
+        try {
+          const formData = new FormData();
+          if (parsedUserId) formData.append('user_id', String(parsedUserId));
+
+          const response = await fetch(`${BASE_URL}order-list`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/json',
+            },
+            body: formData,
+          });
+
+          const text = await response.text();
+          try {
+            const formDataResult = JSON.parse(text);
+            const extracted = extractOrdersArray(formDataResult);
+            if (extracted.length > 0) {
+              parsedOrders = extracted;
+            }
+          } catch (e) {
+            console.log('Order list FormData parse error:', text);
+          }
+        } catch (e) {
+          console.log('Order list FormData fetch error:', e);
+        }
+      }
+
+      setOrders(Array.isArray(parsedOrders) ? parsedOrders : []);
     } catch (error) {
       console.log('Fetch Orders Error:', error);
       setOrders([]);
@@ -92,20 +178,38 @@ export default function Orders() {
 
   const getStatusBadgeStyle = (status) => {
     const s = String(status || '').toLowerCase();
-    if (s.includes('delivered') || s.includes('success') || s.includes('completed')) {
+    if (
+      s.includes('delivered') ||
+      s.includes('success') ||
+      s.includes('completed') ||
+      s.includes('done')
+    ) {
       return {
         bg: isDarkMode ? 'rgba(16, 185, 129, 0.18)' : '#DCFCE7',
         color: isDarkMode ? '#34D399' : '#15803D',
-        label: status || 'Success',
+        label: status || 'Delivered',
         icon: 'checkmark-circle-outline',
       };
     }
-    if (s.includes('cancel') || s.includes('fail') || s.includes('reject')) {
+    if (
+      s.includes('cancel') ||
+      s.includes('fail') ||
+      s.includes('reject') ||
+      s.includes('return')
+    ) {
       return {
         bg: isDarkMode ? 'rgba(239, 68, 68, 0.18)' : '#FEE2E2',
         color: isDarkMode ? '#F87171' : '#B91C1C',
         label: status || 'Cancelled',
         icon: 'close-circle-outline',
+      };
+    }
+    if (s.includes('ship') || s.includes('transit') || s.includes('out')) {
+      return {
+        bg: isDarkMode ? 'rgba(59, 130, 246, 0.18)' : '#DBEAFE',
+        color: isDarkMode ? '#60A5FA' : '#1D4ED8',
+        label: status || 'Shipped',
+        icon: 'car-outline',
       };
     }
     return {
@@ -133,10 +237,16 @@ export default function Orders() {
 
   const filteredOrders = orders.filter((ord) => {
     if (activeTab === 'All') return true;
-    const st = String(ord.order_status || ord.status || '').toLowerCase();
-    if (activeTab === 'Processing') return !st.includes('delivered') && !st.includes('cancel');
-    if (activeTab === 'Delivered') return st.includes('delivered') || st.includes('success') || st.includes('completed');
-    if (activeTab === 'Cancelled') return st.includes('cancel');
+    const st = String(ord.order_status || ord.status || ord.delivery_status || '').toLowerCase();
+    if (activeTab === 'Processing') {
+      return !st.includes('delivered') && !st.includes('cancel') && !st.includes('fail') && !st.includes('reject');
+    }
+    if (activeTab === 'Delivered') {
+      return st.includes('delivered') || st.includes('success') || st.includes('completed') || st.includes('done');
+    }
+    if (activeTab === 'Cancelled') {
+      return st.includes('cancel') || st.includes('fail') || st.includes('reject') || st.includes('return');
+    }
     return true;
   });
 
@@ -145,7 +255,15 @@ export default function Orders() {
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
         <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
-          <TouchableOpacity style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]} onPress={() => navigation.goBack()}>
+          <TouchableOpacity
+            style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]}
+            onPress={() => {
+              if (navigation?.canGoBack && navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('AppTab');
+              }
+            }}>
             <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>My Orders</Text>
@@ -176,7 +294,13 @@ export default function Orders() {
       <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
         <TouchableOpacity
           style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]}
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            if (navigation?.canGoBack && navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('AppTab');
+            }
+          }}
           activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
         </TouchableOpacity>
@@ -253,16 +377,30 @@ export default function Orders() {
             </View>
           }
           renderItem={({ item }) => {
-            const config = getStatusBadgeStyle(item.order_status || item.status);
-            const orderId = item.order_id_generate || item.id || item.order_id || 'ORD-000';
-            const amount = item.net_amount || item.amount || item.total_amount || item.price || 0;
-            const itemsList = item.items || item.products || [];
-            const dateText = formatDate(item.created_at || item.date);
+            const statusVal = item.order_status || item.status || item.delivery_status || item.orderStatus;
+            const config = getStatusBadgeStyle(statusVal);
+            const orderId = item.order_number || item.order_id_generate || item.order_id || item.id || 'ORD-000';
+            const amount = item.selling_price ?? item.net_amount ?? item.total_amount ?? item.amount ?? item.grand_total ?? item.total ?? item.price ?? 0;
+            const rawItemsList = item.items || item.products || item.order_items || item.order_details || [];
+            const itemsList =
+              rawItemsList.length > 0
+                ? rawItemsList
+                : item.name || item.img || item.product_name
+                ? [item]
+                : [];
+            const dateText = formatDate(item.created_at || item.created_date || item.order_date || item.date || item.createdAt);
 
             return (
               <TouchableOpacity
                 style={[styles.orderCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
-                onPress={() => navigation.navigate('OrderDetails', { order_id: item.order_id_generate || item.id, id: item.id, order: item })}
+                onPress={() =>
+                  navigation.navigate('OrderDetails', {
+                    order_id: item.id || item.order_id || item.order_number || item.order_id_generate,
+                    id: item.id,
+                    order_number: item.order_number,
+                    order: item,
+                  })
+                }
                 activeOpacity={0.88}>
                 <View style={styles.cardHeaderRow}>
                   <View style={styles.orderMetaContainer}>
@@ -286,18 +424,18 @@ export default function Orders() {
 
                 {itemsList.length > 0 ? (
                   itemsList.map((prod, idx) => (
-                    <View key={prod.id || idx} style={styles.productRow}>
+                    <View key={prod.id || prod.product_id || idx} style={styles.productRow}>
                       <Image
-                        source={{ uri: prod.image || prod.product_image || 'https://via.placeholder.com/100' }}
+                        source={{ uri: prod.img || prod.image || prod.product_image || prod.thumbnail || 'https://via.placeholder.com/100' }}
                         style={[styles.productThumb, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}
                         resizeMode="cover"
                       />
                       <View style={styles.productDetailsContainer}>
-                        <Text style={[styles.productTitleText, { color: theme.textPrimary }]} numberOfLines={1}>
-                          {prod.name || prod.product_name || 'Item'}
+                        <Text style={[styles.productTitleText, { color: theme.textPrimary }]} numberOfLines={2}>
+                          {prod.name || prod.product_name || prod.title || 'Item'}
                         </Text>
                         <Text style={[styles.productQtyText, { color: theme.textSecondary }]}>Qty: {prod.qty || prod.quantity || 1}</Text>
-                        <Text style={styles.productPriceText}>₹{prod.selling_price || prod.price || prod.total_amount || 0}</Text>
+                        <Text style={styles.productPriceText}>₹{prod.selling_price || prod.price || prod.total_amount || prod.net_amount || 0}</Text>
                       </View>
                     </View>
                   ))
@@ -332,7 +470,14 @@ export default function Orders() {
 
                     <TouchableOpacity
                       style={styles.reorderBtn}
-                      onPress={() => navigation.navigate('OrderDetails', { order_id: item.order_id_generate || item.id, id: item.id, order: item })}
+                      onPress={() =>
+                        navigation.navigate('OrderDetails', {
+                          order_id: item.id || item.order_id || item.order_number || item.order_id_generate,
+                          id: item.id,
+                          order_number: item.order_number,
+                          order: item,
+                        })
+                      }
                       activeOpacity={0.85}>
                       <Feather name="refresh-cw" size={13} color={AllColors.white} style={styles.iconMarginRight} />
                       <Text style={styles.reorderBtnText}>Details</Text>

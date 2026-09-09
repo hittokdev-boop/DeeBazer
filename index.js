@@ -16,6 +16,7 @@ try {
     console.log('================================================\n');
   });
 } catch (e) {
+  0
   try {
     const firebaseMessagingModule = require('@react-native-firebase/messaging');
     const messaging = firebaseMessagingModule.default || firebaseMessagingModule;

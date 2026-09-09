@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,7 +6,9 @@ import {
   Image,
   TouchableOpacity,
   StyleSheet,
-  StatusBar
+  StatusBar,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 
 import { useRoute, useNavigation } from "@react-navigation/native";
@@ -15,14 +17,29 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 
 import AllColors from "../../../Constants/Color";
 import { useTheme } from '../../../Context/ThemeContext';
+import { BASE_URL } from "../../../Api/Api";
 
 export default function ViewAllProducts() {
   const route = useRoute();
   const navigation = useNavigation();
   const { theme, isDarkMode } = useTheme();
 
-  const { title, products = [] } = route.params || {};
+  const {
+    title,
+    products: initialProducts = [],
+    categoryId,
+    subCategoryId,
+    childCategoryId,
+    sellerId,
+    sellerName,
+  } = route.params || {};
 
+  const [productList, setProductList] = useState(initialProducts);
+  const [page, setPage] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(1);
 
   const viewabilityConfig = {
@@ -34,6 +51,139 @@ export default function ViewAllProducts() {
       setCurrentIndex(viewableItems[0].index + 1);
     }
   }).current;
+
+  const fetchProducts = async (pageNum = 1, isLoadMore = false) => {
+    if ((!categoryId || categoryId === 'all') && initialProducts.length > 0 && !isLoadMore && !sellerId && !sellerName) {
+      setProductList(initialProducts);
+      setRefreshing(false);
+      return;
+    }
+
+    if (isLoadMore) {
+      if (loadingMore || !hasMore) return;
+      setLoadingMore(true);
+    } else {
+      if (productList.length === 0) setLoading(true);
+    }
+
+    try {
+      const formData = new FormData();
+      if (categoryId && categoryId !== 'all') {
+        formData.append('category_id', categoryId);
+      } else {
+        formData.append('category_id', 'all');
+      }
+      if (subCategoryId && subCategoryId !== 'all' && subCategoryId !== 'null') {
+        formData.append('sub_category_id', subCategoryId);
+      }
+      if (childCategoryId && childCategoryId !== 'all' && childCategoryId !== 'null') {
+        formData.append('child_category_id', childCategoryId);
+      }
+      formData.append('per_page', (sellerId || sellerName) ? 50 : 12);
+      formData.append('page', pageNum);
+
+      const response = await fetch(`${BASE_URL}product`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (data?.data && Array.isArray(data.data)) {
+        let fetchedItems = data.data;
+
+        // Filter by seller if sellerId or sellerName is provided
+        if (sellerId || sellerName) {
+          fetchedItems = fetchedItems.filter((p) => {
+            const sId = p.seller_id ?? p.seller?.id ?? p.user_id ?? p.vendor_id;
+            const sName = p.seller_name ?? p.seller?.name ?? p.seller?.store_name ?? p.seller?.shop_name;
+            if (sellerId && sId !== undefined && sId !== null && String(sId) === String(sellerId)) return true;
+            if (sellerName && sName && String(sName).toLowerCase() === String(sellerName).toLowerCase()) return true;
+            return false;
+          });
+        }
+
+        const finalItems = fetchedItems.length > 0 ? fetchedItems : (initialProducts.length > 0 ? initialProducts : data.data);
+
+        if (isLoadMore) {
+          setProductList((prev) => {
+            const existingIds = new Set(prev.map((p) => String(p.id)));
+            const newItems = finalItems.filter((p) => !existingIds.has(String(p.id)));
+            return [...prev, ...newItems];
+          });
+          setPage(pageNum);
+        } else {
+          setProductList(finalItems);
+          setPage(1);
+        }
+
+        if (data.data.length < 12) {
+          setHasMore(false);
+        } else {
+          setHasMore(true);
+        }
+      } else {
+        if (!isLoadMore) {
+          if (initialProducts.length > 0) {
+            setProductList(initialProducts);
+          } else {
+            setProductList([]);
+          }
+        }
+        setHasMore(false);
+      }
+    } catch (error) {
+      console.error('Error fetching view all products:', error);
+      if (!isLoadMore && initialProducts.length > 0) {
+        setProductList(initialProducts);
+      }
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchProducts(1, false);
+  };
+
+  const handleLoadMore = () => {
+    if (!loading && !loadingMore && hasMore && (categoryId || productList.length >= 12)) {
+      fetchProducts(page + 1, true);
+    }
+  };
+
+  const isOutOfStock = (item) => {
+    if (!item) return false;
+    if (item.in_stock === false || item.in_stock === 0 || item.in_stock === '0' || item.in_stock === 'false' || item.in_stock === 'no' || item.in_stock === 'out_of_stock') return true;
+    if (item.out_of_stock === true || item.out_of_stock === 1 || item.out_of_stock === '1' || item.out_of_stock === 'true' || item.out_of_stock === 'yes') return true;
+    if (item.is_out_of_stock === true || item.is_out_of_stock === 1 || item.is_out_of_stock === '1' || item.is_out_of_stock === 'true' || item.is_out_of_stock === 'yes') return true;
+    if (item.is_stock === false || item.is_stock === 0 || item.is_stock === '0' || item.is_stock === 'false' || item.is_stock === 'no') return true;
+    if (item.stock !== undefined && item.stock !== null && (item.stock === false || item.stock === 'false' || item.stock === 0 || item.stock === '0' || item.stock === 'no' || Number(item.stock) <= 0)) return true;
+    if (item.stock_quantity !== undefined && item.stock_quantity !== null && (item.stock_quantity === '' || Number(item.stock_quantity) <= 0)) return true;
+    if (item.quantity !== undefined && item.quantity !== null && (item.quantity === '' || Number(item.quantity) <= 0)) return true;
+    if (item.available_quantity !== undefined && item.available_quantity !== null && Number(item.available_quantity) <= 0) return true;
+    if (item.available_stock !== undefined && item.available_stock !== null && Number(item.available_stock) <= 0) return true;
+    if (item.total_stock !== undefined && item.total_stock !== null && Number(item.total_stock) <= 0) return true;
+    if (item.current_stock !== undefined && item.current_stock !== null && Number(item.current_stock) <= 0) return true;
+    if (item.inventory !== undefined && item.inventory !== null && Number(item.inventory) <= 0) return true;
+    if (item.stock_status && (
+      item.stock_status === 'out_of_stock' || 
+      item.stock_status === 'outofstock' || 
+      item.stock_status === '0' || 
+      item.stock_status === 0 || 
+      item.stock_status === false || 
+      String(item.stock_status).toLowerCase().includes('out')
+    )) return true;
+    if (item.status && (
+      item.status === 'out_of_stock' || 
+      item.status === 'outofstock' || 
+      String(item.status).toLowerCase().includes('out')
+    )) return true;
+    return false;
+  };
 
   const gotoDetails = (item) => {
     navigation.navigate("ProductDetails", {
@@ -47,65 +197,141 @@ export default function ViewAllProducts() {
 
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
-        <TouchableOpacity style={[styles.backButton, { backgroundColor: isDarkMode ? '#334155' : AllColors.divider }]} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={[styles.backButton, { backgroundColor: isDarkMode ? '#334155' : AllColors.divider }]}
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('AppTab');
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <Text style={[styles.headerTitle, { color: theme.textPrimary }]} numberOfLines={1}>{title || 'Products'}</Text>
-          <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>{products ? `${products.length} Items Available` : 'Showing all'}</Text>
+          <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>{productList ? `${productList.length} Items Available` : 'Showing all'}</Text>
         </View>
       </View>
 
-      {/* Product Grid */}
-      <FlatList
-        data={products}
-        numColumns={2}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        keyExtractor={(item) => item.id ? item.id.toString() : Math.random().toString()}
-        contentContainerStyle={styles.listContent}
-        columnWrapperStyle={styles.columnWrapper}
-        showsVerticalScrollIndicator={false}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
-            activeOpacity={0.8}
-            onPress={() => gotoDetails(item)}
-          >
-            {/* Image Container */}
-            <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
-              <Image source={{ uri: item.image }} style={styles.image} />
-            </View>
-
-            {/* Product Details */}
-            <View style={styles.cardContent}>
-              <Text numberOfLines={2} style={[styles.name, { color: theme.textPrimary }]}>
-                {item.name}
-              </Text>
-
-              <View style={styles.priceRow}>
-                <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.price}</Text>
-                {item.originalPrice ? (
-                  <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.originalPrice}</Text>
-                ) : null}
+      {loading ? (
+        <View style={styles.centerLoader}>
+          <ActivityIndicator size="large" color={AllColors.primary} />
+        </View>
+      ) : (
+        /* Product Grid */
+        <FlatList
+          data={productList}
+          numColumns={2}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+          keyExtractor={(item, index) => item.id ? item.id.toString() : String(index)}
+          contentContainerStyle={styles.listContent}
+          columnWrapperStyle={styles.columnWrapper}
+          showsVerticalScrollIndicator={false}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.4}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[AllColors.primary]}
+              tintColor={AllColors.primary}
+            />
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.loadingMoreContainer}>
+                <ActivityIndicator size="small" color={AllColors.primary} />
+                <Text style={[styles.loadingMoreText, { color: theme.textSecondary }]}>Loading more products...</Text>
               </View>
-
-              {item.discount ? (
-                <View style={styles.discountBadge}>
-                  <Text style={styles.discountText}>{item.discount}% OFF</Text>
+            ) : null
+          }
+          renderItem={({ item }) => {
+            const outOfStock = isOutOfStock(item);
+            return (
+              <TouchableOpacity
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: theme.cardBg,
+                    borderColor: theme.borderColor,
+                    position: 'relative',
+                    overflow: 'hidden',
+                  },
+                ]}
+                activeOpacity={0.8}
+                onPress={() => gotoDetails(item)}
+              >
+                {/* Image Container */}
+                <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg, position: 'relative', overflow: 'hidden' }]}>
+                  <Image source={{ uri: item.image }} style={styles.image} />
+                  {outOfStock && (
+                    <View
+                      style={[
+                        styles.meeshoImageOverlay,
+                        { backgroundColor: isDarkMode ? 'rgba(15, 23, 42, 0.65)' : 'rgba(255, 255, 255, 0.65)' },
+                      ]}
+                      pointerEvents="none"
+                    >
+                      <View
+                        style={[
+                          styles.meeshoOutOfStockBadge,
+                          {
+                            backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
+                            borderColor: isDarkMode ? '#475569' : '#CBD5E1',
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.meeshoOutOfStockText,
+                            { color: isDarkMode ? '#F8FAFC' : '#1E293B' },
+                          ]}
+                        >
+                          OUT OF STOCK
+                        </Text>
+                      </View>
+                    </View>
+                  )}
                 </View>
-              ) : null}
-            </View>
-          </TouchableOpacity>
-        )}
-      />
+
+                {/* Product Details */}
+                <View style={styles.cardContent}>
+                  <Text numberOfLines={2} style={[styles.name, { color: theme.textPrimary }]}>
+                    {item.name}
+                  </Text>
+
+                  <View style={styles.priceRow}>
+                    <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.price ?? item.discount_price}</Text>
+                    {item.originalPrice || item.actual_price ? (
+                      <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.originalPrice ?? item.actual_price}</Text>
+                    ) : null}
+                  </View>
+
+                  {item.discount ? (
+                    <View style={styles.cardFooterRow}>
+                      <View style={styles.discountBadge}>
+                        <Text style={styles.discountText}>{item.discount}% OFF</Text>
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
 
       {/* Floating Counter */}
-      <View style={styles.counterContainer}>
-        <Text style={styles.counterText}>
-          {currentIndex}/{products.length}
-        </Text>
-      </View>
+      {productList.length > 0 && (
+        <View style={styles.counterContainer}>
+          <Text style={styles.counterText}>
+            {currentIndex}/{productList.length}
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -114,6 +340,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: AllColors.screenBg,
+  },
+  centerLoader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   header: {
     flexDirection: "row",
@@ -224,12 +455,67 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    marginTop: 6,
   },
   discountText: {
     color: AllColors.greenLight,
     fontWeight: '700',
     fontSize: 10,
+  },
+  cardFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  outOfStockBadge: {
+    backgroundColor: AllColors.redSoftBg,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-end',
+  },
+  outOfStockText: {
+    color: AllColors.redLight,
+    fontWeight: '700',
+    fontSize: 10,
+  },
+  inStockBadge: {
+    backgroundColor: AllColors.greenSoftBg,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-end',
+  },
+  inStockText: {
+    color: AllColors.greenLight,
+    fontWeight: '700',
+    fontSize: 10,
+  },
+  meeshoImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  meeshoOutOfStockBadge: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+  },
+  meeshoOutOfStockText: {
+    color: '#1E293B',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   counterContainer: {
     position: "absolute",
@@ -251,5 +537,17 @@ const styles = StyleSheet.create({
     color: AllColors.white,
     fontSize: 14,
     fontWeight: "700",
+  },
+  loadingMoreContainer: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  loadingMoreText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#94A3B8',
   },
 });

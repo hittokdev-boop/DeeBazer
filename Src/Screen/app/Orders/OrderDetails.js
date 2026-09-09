@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   Image,
@@ -15,6 +14,7 @@ import {
   ToastAndroid,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -22,7 +22,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
 import { useTheme } from '../../../Context/ThemeContext';
-import { BASE_URL, getToken } from '../../../Api/Api';
+import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
 
 export default function OrderDetails() {
   const navigation = useNavigation();
@@ -30,41 +30,80 @@ export default function OrderDetails() {
   const { theme, isDarkMode } = useTheme();
   const params = route.params || {};
 
+  const handleBack = () => {
+    if (navigation?.canGoBack && navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Orders');
+    }
+  };
+
   const initialOrder =
     params.order ||
     params.item ||
     (params.id && typeof params.id === 'object' ? params.id : null);
 
+  const hasInitialData = Boolean(
+    initialOrder &&
+      ((Array.isArray(initialOrder.items) && initialOrder.items.length > 0) ||
+        (Array.isArray(initialOrder.products) && initialOrder.products.length > 0) ||
+        (Array.isArray(initialOrder.order_items) && initialOrder.order_items.length > 0) ||
+        initialOrder.name ||
+        initialOrder.img ||
+        initialOrder.image ||
+        initialOrder.order_number ||
+        initialOrder.order_id_generate ||
+        initialOrder.order_id)
+  );
+
   const [order, setOrder] = useState(initialOrder);
-  const [loading, setLoading] = useState(!initialOrder?.items);
+  const [loading, setLoading] = useState(!hasInitialData);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
   const targetOrderId =
     params.order_id ||
     params.id ||
-    initialOrder?.order_id_generate ||
+    params.order_number ||
+    params.order_id_generate ||
+    initialOrder?.order_id ||
     initialOrder?.id ||
+    initialOrder?.order_number ||
+    initialOrder?.order_id_generate;
+
+  const targetId =
+    params.id ||
+    initialOrder?.id ||
+    params.order_id ||
     initialOrder?.order_id;
+
+  const targetOrderNumber =
+    params.order_number ||
+    params.order_id_generate ||
+    initialOrder?.order_number ||
+    initialOrder?.order_id_generate;
 
   const fetchOrderDetails = useCallback(
     async (isPullToRefresh = false) => {
-      if (!isPullToRefresh && (!order || !order.items)) {
+      if (!isPullToRefresh && !order) {
         setLoading(true);
       }
       setError(null);
 
       try {
         const token = await getToken();
+        const userId = await getuserId();
 
         if (!token) {
           setLoading(false);
           setRefreshing(false);
-          setError('Authentication required to view order details.');
+          if (!order) {
+            setError('Authentication required to view order details.');
+          }
           return;
         }
 
-        if (!targetOrderId) {
+        if (!targetOrderId && !targetId && !targetOrderNumber) {
           setLoading(false);
           setRefreshing(false);
           if (!order) {
@@ -74,49 +113,137 @@ export default function OrderDetails() {
         }
 
         const parsedOrderId =
-          !isNaN(targetOrderId) && String(targetOrderId).trim() !== ''
+          targetOrderId && !isNaN(targetOrderId) && String(targetOrderId).trim() !== ''
             ? Number(targetOrderId)
             : targetOrderId;
 
-        const requestBody = {
-          order_id: parsedOrderId,
-        };
+        const parsedId =
+          targetId && !isNaN(targetId) && String(targetId).trim() !== ''
+            ? Number(targetId)
+            : targetId;
 
-        const response = await fetch(`${BASE_URL}order-details`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-        });
+        let result = null;
 
-        const result = await response.json();
+        // 1. Primary Attempt: JSON POST
+        try {
+          const jsonBody = {
+            order_id: parsedOrderId || parsedId,
+          };
+          if (parsedId && parsedId !== parsedOrderId) jsonBody.id = parsedId;
+          if (targetOrderNumber) jsonBody.order_number = targetOrderNumber;
+          if (userId) jsonBody.user_id = isNaN(userId) ? userId : Number(userId);
 
-        if (
-          response.ok &&
-          (result?.status === 200 ||
-            result?.status === '200' ||
-            result?.status === 'success' ||
-            result?.success)
-        ) {
-          const orderData =
-            result?.data ||
-            result?.order ||
-            result?.order_details ||
-            (result?.id ? result : null);
-          if (orderData) {
-            setOrder(orderData);
+          const response = await fetch(`${BASE_URL}order-details`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/json',
+            },
+            body: JSON.stringify(jsonBody),
+          });
+
+          const text = await response.text();
+          try {
+            result = JSON.parse(text);
+          } catch (e) {
+            console.log('Order details JSON parse error:', text);
           }
+        } catch (e) {
+          console.log('Order details JSON fetch error:', e);
+        }
+
+        let rawOrderData =
+          result?.data_order ||
+          result?.data?.order ||
+          result?.data ||
+          result?.order ||
+          result?.order_details ||
+          (result?.id || result?.order_id || result?.order_number ? result : null);
+
+        // 2. Fallback Attempt: FormData POST if JSON failed
+        if (!rawOrderData || typeof rawOrderData !== 'object') {
+          try {
+            const formData = new FormData();
+            if (parsedOrderId) formData.append('order_id', String(parsedOrderId));
+            if (parsedId) formData.append('id', String(parsedId));
+            if (targetOrderNumber) formData.append('order_number', String(targetOrderNumber));
+            if (userId) formData.append('user_id', String(userId));
+
+            const response = await fetch(`${BASE_URL}order-details`, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: 'application/json',
+              },
+              body: formData,
+            });
+
+            const text = await response.text();
+            try {
+              const formResult = JSON.parse(text);
+              rawOrderData =
+                formResult?.data_order ||
+                formResult?.data?.order ||
+                formResult?.data ||
+                formResult?.order ||
+                formResult?.order_details ||
+                (formResult?.id || formResult?.order_id ? formResult : null);
+
+              if (formResult?.message && !rawOrderData) {
+                result = formResult;
+              }
+            } catch (e) {
+              console.log('Order details FormData parse error:', text);
+            }
+          } catch (e) {
+            console.log('Order details FormData fetch error:', e);
+          }
+        }
+
+        if (rawOrderData && typeof rawOrderData === 'object') {
+          const rawUser =
+            result?.data_user ||
+            result?.user ||
+            rawOrderData?.address_user ||
+            rawOrderData?.data_user ||
+            rawOrderData?.shipping_address ||
+            rawOrderData?.delivery_address ||
+            rawOrderData?.user_address ||
+            rawOrderData?.user ||
+            (typeof rawOrderData?.address === 'object' ? rawOrderData.address : null);
+
+          const extractedItems =
+            Array.isArray(rawOrderData.items) && rawOrderData.items.length > 0
+              ? rawOrderData.items
+              : Array.isArray(rawOrderData.order_items) && rawOrderData.order_items.length > 0
+              ? rawOrderData.order_items
+              : Array.isArray(rawOrderData.products) && rawOrderData.products.length > 0
+              ? rawOrderData.products
+              : Array.isArray(rawOrderData.details) && rawOrderData.details.length > 0
+              ? rawOrderData.details
+              : Array.isArray(rawOrderData.order_details) && rawOrderData.order_details.length > 0
+              ? rawOrderData.order_details
+              : Array.isArray(result?.items) && result.items.length > 0
+              ? result.items
+              : [];
+
+          setOrder((prev) => ({
+            ...(prev || {}),
+            ...rawOrderData,
+            items: extractedItems.length > 0 ? extractedItems : prev?.items || rawOrderData.items,
+            address_user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.address_user || null,
+            data_user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.data_user || null,
+            user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.user || null,
+          }));
         } else {
-          if (!order || !order.items) {
+          if (!order) {
             setError(result?.message || 'Failed to retrieve order details.');
           }
         }
       } catch (err) {
         console.log('OrderDetails fetch error:', err);
-        if (!order || !order.items) {
+        if (!order) {
           setError('Network error. Please check your internet connection.');
         }
       } finally {
@@ -124,7 +251,7 @@ export default function OrderDetails() {
         setRefreshing(false);
       }
     },
-    [targetOrderId]
+    [targetOrderId, targetId, targetOrderNumber, order]
   );
 
   useEffect(() => {
@@ -147,23 +274,23 @@ export default function OrderDetails() {
   };
 
   const getStatusConfig = (status) => {
-    const s = String(status || '').toLowerCase();
+    const s = String(status || '').toLowerCase().trim();
     if (
       s.includes('delivered') ||
-      s.includes('success') ||
-      s.includes('completed')
+      s.includes('completed') ||
+      s.includes('done')
     ) {
       return {
         bg: isDarkMode ? 'rgba(16, 185, 129, 0.18)' : '#DCFCE7',
         color: isDarkMode ? '#34D399' : '#15803D',
         borderColor: isDarkMode ? 'rgba(52, 211, 153, 0.3)' : '#BBF7D0',
-        label: status || 'Success',
+        label: status || 'Delivered',
         icon: 'checkmark-circle',
-        subtitle: 'Your order has been completed successfully.',
+        subtitle: 'Your order has been delivered successfully.',
         stepIndex: 3,
       };
     }
-    if (s.includes('cancel') || s.includes('fail') || s.includes('reject')) {
+    if (s.includes('cancel') || s.includes('fail') || s.includes('reject') || s.includes('return')) {
       return {
         bg: isDarkMode ? 'rgba(239, 68, 68, 0.18)' : '#FEE2E2',
         color: isDarkMode ? '#F87171' : '#B91C1C',
@@ -174,7 +301,7 @@ export default function OrderDetails() {
         stepIndex: -1,
       };
     }
-    if (s.includes('ship') || s.includes('transit') || s.includes('out')) {
+    if (s.includes('ship') || s.includes('transit') || s.includes('out') || s.includes('dispatch')) {
       return {
         bg: isDarkMode ? 'rgba(59, 130, 246, 0.18)' : '#DBEAFE',
         color: isDarkMode ? '#60A5FA' : '#1D4ED8',
@@ -189,7 +316,7 @@ export default function OrderDetails() {
       bg: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg,
       color: AllColors.primary,
       borderColor: isDarkMode ? 'rgba(247, 22, 112, 0.3)' : '#FCE7F3',
-      label: status || 'Processing',
+      label: status === 'Success' || status === 'success' ? 'Order Placed' : (status || 'Processing'),
       icon: 'time',
       subtitle: 'Your order is placed and is currently being processed.',
       stepIndex: 1,
@@ -247,7 +374,7 @@ export default function OrderDetails() {
               styles.backBtn,
               { backgroundColor: isDarkMode ? '#334155' : AllColors.divider },
             ]}
-            onPress={() => navigation.goBack()}
+            onPress={handleBack}
             activeOpacity={0.7}
           >
             <Ionicons name="arrow-back" size={20} color={theme.textPrimary} />
@@ -290,7 +417,7 @@ export default function OrderDetails() {
               styles.backBtn,
               { backgroundColor: isDarkMode ? '#334155' : AllColors.divider },
             ]}
-            onPress={() => navigation.goBack()}
+            onPress={handleBack}
             activeOpacity={0.7}
           >
             <Ionicons name="arrow-back" size={20} color={theme.textPrimary} />
@@ -478,7 +605,7 @@ export default function OrderDetails() {
                     borderColor: theme.borderColor,
                   },
                 ]}
-                onPress={() => navigation.goBack()}
+                onPress={handleBack}
                 activeOpacity={0.8}
               >
                 <Ionicons
@@ -532,7 +659,9 @@ export default function OrderDetails() {
 
   const currentOrder = order || {};
   const displayOrderId =
+    currentOrder.order_number ||
     currentOrder.order_id_generate ||
+    currentOrder.order_id ||
     currentOrder.id ||
     targetOrderId ||
     '---';
@@ -540,77 +669,107 @@ export default function OrderDetails() {
   const orderStatus =
     currentOrder.order_status ||
     currentOrder.status ||
+    currentOrder.delivery_status ||
     currentOrder.type ||
     'Pending';
 
   const statusConfig = getStatusConfig(orderStatus);
   const dateText = formatDate(
-    currentOrder.created_at || currentOrder.order_date || currentOrder.date
+    currentOrder.order_date ||
+      currentOrder.created_at ||
+      currentOrder.created_date ||
+      currentOrder.date
   );
 
+  const discountAmount = Number(
+    currentOrder.extra_discount ??
+      currentOrder.discount ??
+      currentOrder.coupon_discount ??
+      currentOrder.discount_amount ??
+      0
+  );
+  const deliveryCharge = Number(
+    currentOrder.shipping_fee ??
+      currentOrder.shipping_charge ??
+      currentOrder.delivery_charge ??
+      currentOrder.shipping_cost ??
+      0
+  );
   const subTotal = Number(
-    currentOrder.amount ??
+    currentOrder.selling_price ??
+      currentOrder.amount ??
       currentOrder.total_amount ??
       currentOrder.subtotal ??
+      currentOrder.sub_total ??
       0
   );
   const netTotal = Number(
-    currentOrder.net_amount ??
+    currentOrder.total_amount ??
+      currentOrder.net_amount ??
+      currentOrder.grand_total ??
+      currentOrder.selling_price ??
       currentOrder.amount ??
-      currentOrder.total_amount ??
       0
-  );
-  const discountAmount = Number(
-    currentOrder.discount ?? currentOrder.coupon_discount ?? 0
-  );
-  const deliveryCharge = Number(
-    currentOrder.shipping_charge ?? currentOrder.delivery_charge ?? 0
   );
 
   // Address parsing
   const addressObj =
-    typeof currentOrder.address === 'object' && currentOrder.address !== null
-      ? currentOrder.address
-      : null;
+    (typeof currentOrder.address_user === 'object' && currentOrder.address_user !== null ? currentOrder.address_user : null) ||
+    (typeof currentOrder.data_user === 'object' && currentOrder.data_user !== null ? currentOrder.data_user : null) ||
+    (typeof currentOrder.shipping_address === 'object' && currentOrder.shipping_address !== null ? currentOrder.shipping_address : null) ||
+    (typeof currentOrder.delivery_address === 'object' && currentOrder.delivery_address !== null ? currentOrder.delivery_address : null) ||
+    (typeof currentOrder.user_address === 'object' && currentOrder.user_address !== null ? currentOrder.user_address : null) ||
+    (typeof currentOrder.user === 'object' && currentOrder.user !== null ? currentOrder.user : null) ||
+    (typeof currentOrder.address === 'object' && currentOrder.address !== null ? currentOrder.address : null);
 
   const customerName =
+    addressObj?.name ||
+    addressObj?.user_name ||
     currentOrder.name ||
     currentOrder.user_name ||
     currentOrder.shipping_name ||
     currentOrder.customer_name ||
-    addressObj?.name ||
     'Customer';
 
   const mobileNumber =
+    addressObj?.mobile ||
+    addressObj?.phone ||
+    addressObj?.mobile_no ||
+    addressObj?.phone_number ||
     currentOrder.mobile ||
     currentOrder.phone ||
     currentOrder.user_phone ||
     currentOrder.contact ||
-    addressObj?.mobile ||
-    addressObj?.phone ||
     '';
 
-  const addressString =
-    typeof currentOrder.address === 'string' &&
-    currentOrder.address.trim().length > 0
-      ? currentOrder.address
-      : addressObj
-      ? [
-          addressObj.house_no,
-          addressObj.address,
-          addressObj.road_name,
-          addressObj.city,
-          addressObj.state,
-          addressObj.pin || addressObj.zip_code,
-        ]
-          .filter(Boolean)
-          .join(', ')
-      : currentOrder.delivery_address ||
-        currentOrder.shipping_address ||
-        'Address not available';
+  const addressString = addressObj
+    ? (
+        addressObj.address && typeof addressObj.address === 'string' && addressObj.address.trim().length > 0
+          ? addressObj.address
+          : [
+              addressObj.house_no || addressObj.flat_no || addressObj.building,
+              addressObj.road_name || addressObj.street || addressObj.area || addressObj.address_line_1,
+              addressObj.landmark ? `Near ${addressObj.landmark}` : null,
+              addressObj.city,
+              addressObj.state
+                ? `${addressObj.state}${addressObj.pin || addressObj.pincode || addressObj.zip_code ? ` - ${addressObj.pin || addressObj.pincode || addressObj.zip_code}` : ''}`
+                : addressObj.pin || addressObj.pincode || addressObj.zip_code,
+            ]
+              .filter(Boolean)
+              .join(', ')
+      )
+    : typeof currentOrder.address === 'string' &&
+      currentOrder.address.trim().length > 0
+    ? currentOrder.address
+    : currentOrder.delivery_address ||
+      currentOrder.shipping_address ||
+      'Address not available';
+
+  const addressType =
+    addressObj?.address_type || currentOrder.address_type || '';
 
   // Items parsing
-  const itemsList =
+  const rawItems =
     Array.isArray(currentOrder.items) && currentOrder.items.length > 0
       ? currentOrder.items
       : Array.isArray(currentOrder.order_items) &&
@@ -627,11 +786,18 @@ export default function OrderDetails() {
       ? currentOrder.order_details
       : [];
 
+  const itemsList =
+    rawItems.length > 0
+      ? rawItems
+      : currentOrder.name || currentOrder.img || currentOrder.image || currentOrder.product_name
+      ? [currentOrder]
+      : [];
+
   const paymentMethodText =
     currentOrder.payment_method ||
     currentOrder.payment_type ||
     currentOrder.payment_mode ||
-    'Online / Prepaid';
+    (params.payment_method === 'cod' ? 'Cash on Delivery (COD)' : 'Online / Prepaid');
 
   const steps = [
     { title: 'Order Placed', icon: 'bag-check-outline' },
@@ -662,7 +828,7 @@ export default function OrderDetails() {
             styles.backBtn,
             { backgroundColor: isDarkMode ? '#334155' : AllColors.divider },
           ]}
-          onPress={() => navigation.goBack()}
+          onPress={handleBack}
           activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={20} color={theme.textPrimary} />
@@ -912,20 +1078,43 @@ export default function OrderDetails() {
             },
           ]}
         >
-          <View style={styles.cardTitleWithIcon}>
-            <MaterialCommunityIcons
-              name="map-marker-radius-outline"
-              size={20}
-              color={AllColors.primary}
-            />
-            <Text
-              style={[
-                styles.sectionTitle,
-                { color: theme.textPrimary, marginLeft: 8 },
-              ]}
-            >
-              Delivery Address
-            </Text>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardTitleWithIcon}>
+              <MaterialCommunityIcons
+                name="map-marker-radius-outline"
+                size={20}
+                color={AllColors.primary}
+              />
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: theme.textPrimary, marginLeft: 8 },
+                ]}
+              >
+                Delivery Address
+              </Text>
+            </View>
+            {addressType ? (
+              <View
+                style={[
+                  styles.miniStatusBadge,
+                  {
+                    backgroundColor: isDarkMode
+                      ? 'rgba(247, 22, 112, 0.15)'
+                      : AllColors.softPinkBg,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.miniStatusText,
+                    { color: AllColors.primary },
+                  ]}
+                >
+                  {addressType}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           <View
@@ -980,41 +1169,59 @@ export default function OrderDetails() {
                 prod.selling_price ||
                   prod.price ||
                   prod.unit_price ||
+                  prod.product_price ||
                   prod.product?.selling_price ||
                   prod.product?.price ||
+                  prod.product?.unit_price ||
                   0
+              );
+              const calculatedQty = Number(
+                prod.qty ||
+                  prod.quantity ||
+                  prod.count ||
+                  prod.product_qty ||
+                  (itemPrice > 0 && prod.total_amount ? Math.round(Number(prod.total_amount) / itemPrice) : 1)
               );
               const itemTotal = Number(
                 prod.total_amount ||
                   prod.total ||
                   prod.subtotal ||
                   prod.amount ||
+                  (itemPrice * (calculatedQty || 1)) ||
                   0
               );
-              const calculatedQty =
-                prod.qty ||
-                prod.quantity ||
-                prod.count ||
-                (itemPrice > 0 && itemTotal > 0
-                  ? Math.round(itemTotal / itemPrice)
-                  : 1);
               const displayPrice =
-                itemPrice > 0 ? itemPrice : itemTotal > 0 ? itemTotal : 0;
+                itemPrice > 0
+                  ? itemPrice
+                  : itemTotal > 0 && calculatedQty > 0
+                  ? Math.round(itemTotal / calculatedQty)
+                  : itemTotal > 0
+                  ? itemTotal
+                  : 0;
 
               const itemImage =
+                prod.img ||
                 prod.image ||
                 prod.product_image ||
                 prod.thumbnail ||
                 prod.photo ||
+                prod.image_url ||
+                prod.img_url ||
+                prod.product?.img ||
                 prod.product?.image ||
+                prod.product?.product_image ||
                 prod.product?.thumbnail ||
+                prod.product?.image_url ||
                 null;
 
               const itemName =
                 prod.name ||
                 prod.product_name ||
                 prod.title ||
+                prod.product_title ||
                 prod.product?.name ||
+                prod.product?.product_name ||
+                prod.product?.title ||
                 'Product Item';
 
               return (
