@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE_URL } from '../Api/Api';
 
 const ACTIVE_CART_SELLER_KEY = 'ACTIVE_CART_SELLER';
 
@@ -15,6 +16,7 @@ export const extractSellerInfo = (item) => {
     item.sellerId ??
     item.seller?.id ??
     item.vendor_id ??
+    item.user_id ??
     item.product?.seller_id ??
     item.product?.seller?.id ??
     null;
@@ -40,6 +42,45 @@ export const extractSellerInfo = (item) => {
 };
 
 /**
+ * Fetches product details if seller info is missing from an item.
+ */
+export const resolveSellerInfo = async (itemOrId) => {
+  if (!itemOrId) return { sellerId: null, sellerName: '' };
+
+  // If already an object with seller info:
+  if (typeof itemOrId === 'object') {
+    const existing = extractSellerInfo(itemOrId);
+    if (existing.sellerId || existing.sellerName) {
+      return existing;
+    }
+  }
+
+  const productId =
+    typeof itemOrId === 'object'
+      ? (itemOrId.product_id ?? itemOrId.id ?? itemOrId.product?.id)
+      : itemOrId;
+
+  if (!productId) return { sellerId: null, sellerName: '' };
+
+  try {
+    const formData = new FormData();
+    formData.append('product_id', productId);
+    const res = await fetch(`${BASE_URL}product-details`, {
+      method: 'POST',
+      body: formData,
+    });
+    const json = await res.json();
+    if (json?.data) {
+      return extractSellerInfo(json.data);
+    }
+  } catch (e) {
+    console.log('resolveSellerInfo error:', e);
+  }
+
+  return { sellerId: null, sellerName: '' };
+};
+
+/**
  * Saves the active cart's seller info in AsyncStorage.
  */
 export const saveActiveCartSeller = async (itemOrSeller) => {
@@ -52,7 +93,7 @@ export const saveActiveCartSeller = async (itemOrSeller) => {
         sellerName: String(itemOrSeller.sellerName || '').trim(),
       };
     } else {
-      sellerInfo = extractSellerInfo(itemOrSeller);
+      sellerInfo = await resolveSellerInfo(itemOrSeller);
     }
 
     if (sellerInfo.sellerId || sellerInfo.sellerName) {
@@ -90,10 +131,16 @@ export const clearActiveCartSeller = async () => {
 /**
  * Checks if targetProduct is from a different seller compared to the current cart.
  */
-export const checkDifferentSeller = (cartItems = [], targetProduct = null, cachedSeller = null) => {
-  const targetSeller = extractSellerInfo(targetProduct);
-
-  if (!targetSeller.sellerId && !targetSeller.sellerName) {
+export const checkDifferentSeller = async (cartItems = [], targetProduct = null, cachedSeller = null) => {
+  // Temporarily disable different seller check as requested
+  return {
+    isDifferent: false,
+    cartSellerName: '',
+    targetSellerName: '',
+    targetSellerId: null,
+  };
+/*
+  if (!Array.isArray(cartItems) || cartItems.length === 0) {
     return {
       isDifferent: false,
       cartSellerName: '',
@@ -102,30 +149,52 @@ export const checkDifferentSeller = (cartItems = [], targetProduct = null, cache
     };
   }
 
+
+  let targetSeller = extractSellerInfo(targetProduct);
+  if (!targetSeller.sellerId && !targetSeller.sellerName && targetProduct) {
+    targetSeller = await resolveSellerInfo(targetProduct);
+  }
+
   let cartSeller = null;
-  if (Array.isArray(cartItems) && cartItems.length > 0) {
-    for (const item of cartItems) {
-      const info = extractSellerInfo(item);
-      if (info.sellerId || info.sellerName) {
-        cartSeller = info;
-        break;
-      }
+  for (const item of cartItems) {
+    const info = extractSellerInfo(item);
+    if (info.sellerId || info.sellerName) {
+      cartSeller = info;
+      break;
     }
   }
 
-  if (!cartSeller && cachedSeller && Array.isArray(cartItems) && cartItems.length > 0) {
+  if (!cartSeller && cachedSeller) {
     cartSeller = {
       sellerId: cachedSeller.sellerId !== null && cachedSeller.sellerId !== undefined ? String(cachedSeller.sellerId) : null,
       sellerName: String(cachedSeller.sellerName || '').trim(),
     };
   }
 
+  // If still missing seller info for cart items, fetch details of first cart item
+  if ((!cartSeller || (!cartSeller.sellerId && !cartSeller.sellerName)) && cartItems.length > 0) {
+    const resolved = await resolveSellerInfo(cartItems[0]);
+    if (resolved.sellerId || resolved.sellerName) {
+      cartSeller = resolved;
+      await saveActiveCartSeller(cartSeller);
+    }
+  }
+
   if (!cartSeller || (!cartSeller.sellerId && !cartSeller.sellerName)) {
     return {
       isDifferent: false,
       cartSellerName: '',
-      targetSellerName: targetSeller.sellerName,
-      targetSellerId: targetSeller.sellerId,
+      targetSellerName: targetSeller.sellerName || '',
+      targetSellerId: targetSeller.sellerId || null,
+    };
+  }
+
+  if (!targetSeller || (!targetSeller.sellerId && !targetSeller.sellerName)) {
+    return {
+      isDifferent: false,
+      cartSellerName: cartSeller.sellerName || '',
+      targetSellerName: '',
+      targetSellerId: null,
     };
   }
 
@@ -133,8 +202,9 @@ export const checkDifferentSeller = (cartItems = [], targetProduct = null, cache
     const isDifferent = String(cartSeller.sellerId) !== String(targetSeller.sellerId);
     return {
       isDifferent,
-      cartSellerName: cartSeller.sellerName,
-      targetSellerName: targetSeller.sellerName,
+      cartSellerName: cartSeller.sellerName || `Seller #${cartSeller.sellerId}`,
+      cartSellerId: cartSeller.sellerId || null,
+      targetSellerName: targetSeller.sellerName || `Seller #${targetSeller.sellerId}`,
       targetSellerId: targetSeller.sellerId,
     };
   }
@@ -144,6 +214,7 @@ export const checkDifferentSeller = (cartItems = [], targetProduct = null, cache
     return {
       isDifferent,
       cartSellerName: cartSeller.sellerName,
+      cartSellerId: cartSeller.sellerId || null,
       targetSellerName: targetSeller.sellerName,
       targetSellerId: targetSeller.sellerId,
     };
@@ -152,13 +223,16 @@ export const checkDifferentSeller = (cartItems = [], targetProduct = null, cache
   return {
     isDifferent: false,
     cartSellerName: cartSeller.sellerName || '',
+    cartSellerId: cartSeller.sellerId || null,
     targetSellerName: targetSeller.sellerName || '',
     targetSellerId: targetSeller.sellerId,
   };
+*/
 };
 
 export default {
   extractSellerInfo,
+  resolveSellerInfo,
   saveActiveCartSeller,
   getActiveCartSeller,
   clearActiveCartSeller,

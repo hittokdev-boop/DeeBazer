@@ -16,6 +16,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
 import { useTheme } from '../../../Context/ThemeContext';
 import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
+import { clearActiveCartSeller } from '../../../Common/sellerUtils';
 
 export default function OrderSuccess() {
   const navigation = useNavigation();
@@ -43,6 +44,7 @@ export default function OrderSuccess() {
   const [loading, setLoading] = useState(!hasInitialData && Boolean(order_id));
 
   useEffect(() => {
+    clearActiveCartSeller();
     if (order_id) {
       fetchOrderDetails(order_id);
     } else {

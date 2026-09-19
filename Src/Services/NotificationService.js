@@ -1,4 +1,4 @@
-import { PermissionsAndroid, Platform, Alert, DeviceEventEmitter } from 'react-native';
+import { PermissionsAndroid, Platform, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import messaging, {
   getMessaging,
@@ -10,6 +10,7 @@ import messaging, {
   onTokenRefresh,
 } from '@react-native-firebase/messaging';
 import { navigate } from '../Navigation';
+import { markNotificationAsRead, fetchUnreadNotificationCount } from './NotificationApiService';
 
 export const FCM_TOKEN_KEY = 'FCM_TOKEN';
 
@@ -75,9 +76,10 @@ export const requestUserPermission = async () => {
 export const getFcmToken = async () => {
   try {
     console.log('🔄 Attempting to fetch FCM Token...');
-    const msg = getMessagingInstance();
     let fcmToken = null;
+    const msg = getMessagingInstance();
 
+    // 1. Try modular API
     if (msg) {
       try {
         if (typeof getToken === 'function') {
@@ -85,27 +87,40 @@ export const getFcmToken = async () => {
         } else if (typeof msg.getToken === 'function') {
           fcmToken = await msg.getToken();
         }
-
-        if (fcmToken) {
-          await AsyncStorage.setItem(FCM_TOKEN_KEY, fcmToken);
-        }
       } catch (fcmErr) {
-        console.log('⚠️ Could not fetch FCM token directly from Firebase:', fcmErr?.message || fcmErr);
+        console.log('⚠️ Primary getToken attempt:', fcmErr?.message || fcmErr);
       }
     }
 
-    // Fallback to AsyncStorage if Firebase fails or app is offline
+    // 2. Try default export API fallback
+    if (!fcmToken) {
+      try {
+        const firebaseMessagingModule = require('@react-native-firebase/messaging');
+        const defaultMessaging = firebaseMessagingModule.default || firebaseMessagingModule;
+        if (typeof defaultMessaging === 'function') {
+          fcmToken = await defaultMessaging().getToken();
+        } else if (defaultMessaging && typeof defaultMessaging.getToken === 'function') {
+          fcmToken = await defaultMessaging.getToken();
+        }
+      } catch (fallbackErr) {
+        console.log('⚠️ Secondary getToken attempt:', fallbackErr?.message || fallbackErr);
+      }
+    }
+
+    // 3. Fallback to AsyncStorage if currently offline or failed
     if (!fcmToken) {
       fcmToken = await AsyncStorage.getItem(FCM_TOKEN_KEY);
     }
 
     if (fcmToken) {
-      console.log('\n================================================');
-      console.log('🔥 YOUR FCM DEVICE TOKEN:');
+      await AsyncStorage.setItem(FCM_TOKEN_KEY, fcmToken);
+      console.log('\n╔════════════════════════════════════════════════════════════════╗');
+      console.log('║                   🔥 FCM DEVICE TOKEN 🔥                      ║');
+      console.log('╠════════════════════════════════════════════════════════════════╣');
       console.log(fcmToken);
-      console.log('================================================\n');
+      console.log('╚════════════════════════════════════════════════════════════════╝\n');
     } else {
-      console.log('⚠️ Could not fetch FCM token (returned empty).');
+      console.log('⚠️ Could not fetch FCM token (returned empty). Please check internet and Google Play Services.');
     }
     return fcmToken;
   } catch (error) {
@@ -122,12 +137,31 @@ export const handleNotificationRouting = (remoteMessage) => {
 
   console.log('📲 Routing notification data:', remoteMessage.data);
   const data = remoteMessage?.data || {};
+  const notificationId = data.id || data.notification_id || remoteMessage?.id;
+
+  // Auto-mark notification as read on the server when clicked
+  if (notificationId) {
+    markNotificationAsRead(notificationId).catch(err =>
+      console.log('Error auto-marking notification as read:', err)
+    );
+  }
 
   try {
-    if (data.screen) {
+    const eventType = data.event_type || data.type;
+    const rawMessage = remoteMessage?.notification?.body || data.message || '';
+    const extractedOrderMatch = rawMessage.match(/#(\d+)/);
+    const orderId = data.order_id || (extractedOrderMatch ? extractedOrderMatch[1] : null);
+
+    if (eventType === 'seller_new_order' || eventType === 'new_order') {
+      if (orderId) {
+        navigate('OrderDetails', { order_id: orderId });
+      } else {
+        navigate('Orders');
+      }
+    } else if (data.screen) {
       navigate(data.screen, data.params ? JSON.parse(data.params) : data);
-    } else if (data.order_id) {
-      navigate('OrderDetails', { order_id: data.order_id });
+    } else if (orderId) {
+      navigate('OrderDetails', { order_id: orderId });
     } else if (data.product_id) {
       navigate('ProductDetails', { item: { id: data.product_id } });
     } else if (data.type === 'order') {
@@ -136,7 +170,13 @@ export const handleNotificationRouting = (remoteMessage) => {
       navigate('CartPage');
     } else {
       console.log('🔔 Opened general notification:', remoteMessage.notification?.title);
+      // Navigate to main tab and signal opening notification drawer
+      navigate('Profile');
+      DeviceEventEmitter.emit('OPEN_NOTIFICATION_DRAWER', remoteMessage);
     }
+
+    // Refresh notifications list in UI
+    DeviceEventEmitter.emit('REFRESH_NOTIFICATIONS', remoteMessage);
   } catch (e) {
     console.log('Error routing notification:', e);
   }
@@ -204,8 +244,13 @@ export const notificationListener = (customOnOpened) => {
       console.log('📌 Payload Data:', JSON.stringify(remoteMessage?.data || {}));
       console.log('================================================\n');
 
-      // Emit event for in-app banner animation & unread badge count
+      // Refresh unread count from API in background
+      fetchUnreadNotificationCount().catch(() => { });
+
+      // Emit event for in-app banner animation
       DeviceEventEmitter.emit('SHOW_FOREGROUND_NOTIFICATION', remoteMessage);
+      // Emit event to refresh active screens / drawer
+      DeviceEventEmitter.emit('REFRESH_NOTIFICATIONS', remoteMessage);
     };
 
     if (msg && typeof onMessage === 'function') {

@@ -24,6 +24,13 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
 import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
 import { useTheme } from '../../../Context/ThemeContext';
+import DifferentSellerModal from '../../../Common/DifferentSellerModal';
+import {
+  checkDifferentSeller,
+  saveActiveCartSeller,
+  getActiveCartSeller,
+  clearActiveCartSeller,
+} from '../../../Common/sellerUtils';
 
 const { width } = Dimensions.get('window');
 const slideWidth = width - 32;
@@ -36,6 +43,15 @@ export default function ProductDetails({ route }) {
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [cartList, setCartList] = useState([]);
+  const [sellerModalVisible, setSellerModalVisible] = useState(false);
+  const [sellerModalData, setSellerModalData] = useState({
+    cartSellerName: '',
+    cartSellerId: null,
+    targetSellerName: '',
+    targetSellerId: null,
+    targetProduct: null,
+  });
 
   const { id } = route.params || {};
   const navigation = useNavigation();
@@ -103,6 +119,7 @@ export default function ProductDetails({ route }) {
   };
 
   const getPrductDetails = async () => {
+    console.log('knfckldmncvkl')
     const productId = id || route.params?.id;
     if (!productId) {
       setLoading(false);
@@ -123,6 +140,7 @@ export default function ProductDetails({ route }) {
       });
 
       const data = await response.json();
+      // console.log('knfckldmncvkl', data)
       if (data?.data) {
         setProduct(data.data);
         if (data.data.image) {
@@ -164,7 +182,16 @@ export default function ProductDetails({ route }) {
 
       const result = await response.json();
       const items = result?.data || result?.cart || [];
-      const inCart = items.some(
+      const validItems = Array.isArray(items) ? items : [];
+      setCartList(validItems);
+
+      if (validItems.length === 0) {
+        await clearActiveCartSeller();
+      } else {
+        await saveActiveCartSeller(validItems[0]);
+      }
+
+      const inCart = validItems.some(
         (item) => String(item?.product_id ?? item?.id ?? item?.product?.id) === String(id)
       );
       if (inCart) {
@@ -255,6 +282,44 @@ export default function ProductDetails({ route }) {
       return false;
     }
 
+    // Single-seller policy check
+    let currentCart = cartList;
+    if (!currentCart || currentCart.length === 0) {
+      try {
+        const formData = new FormData();
+        formData.append('user_id', userId);
+        const cRes = await fetch(`${BASE_URL}cart-view`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
+          body: formData,
+        });
+        const cData = await cRes.json();
+        currentCart = (cData?.data && Array.isArray(cData.data)) ? cData.data : (cData?.cart || []);
+        setCartList(currentCart);
+      } catch (e) {
+        console.log('Error refreshing cart in details:', e);
+      }
+    }
+
+    const cachedSeller = await getActiveCartSeller();
+    if (currentCart && currentCart.length > 0) {
+      const sellerCheck = await checkDifferentSeller(currentCart, product, cachedSeller);
+      if (sellerCheck.isDifferent) {
+        setSellerModalData({
+          cartSellerName: sellerCheck.cartSellerName,
+          cartSellerId: sellerCheck.cartSellerId,
+          targetSellerName: sellerCheck.targetSellerName,
+          targetSellerId: sellerCheck.targetSellerId,
+          targetProduct: product,
+        });
+        setSellerModalVisible(true);
+        return false;
+      }
+    }
+
     const formData = new FormData();
     formData.append('user_id', userId);
     formData.append('product_id', id);
@@ -273,7 +338,9 @@ export default function ProductDetails({ route }) {
       const data = await response.json();
 
       if (data?.status == 200 || data?.success) {
+        await saveActiveCartSeller(product);
         setIsAddedToCart(true);
+        getCartStatus();
         if (Platform.OS !== 'android') {
           Alert.alert('Success', 'Product added to cart successfully');
         }
@@ -885,6 +952,27 @@ export default function ProductDetails({ route }) {
           </>
         )}
       </View>
+
+      {/* Different Seller Modal */}
+      <DifferentSellerModal
+        visible={sellerModalVisible}
+        cartSellerName={sellerModalData.cartSellerName}
+        cartSellerId={sellerModalData.cartSellerId}
+        targetSellerName={sellerModalData.targetSellerName}
+        targetSellerId={sellerModalData.targetSellerId}
+        targetProduct={sellerModalData.targetProduct}
+        onClose={() => setSellerModalVisible(false)}
+        onViewSellerProducts={() => {
+          const sId = sellerModalData.cartSellerId;
+          const sName = sellerModalData.cartSellerName;
+          setSellerModalVisible(false);
+          navigation.navigate('ViewAllProducts', {
+            sellerId: sId,
+            sellerName: sName,
+            title: sName ? `${sName}'s Products` : "Seller's Products",
+          });
+        }}
+      />
     </View>
   );
 }

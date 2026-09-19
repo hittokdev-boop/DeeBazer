@@ -17,6 +17,7 @@ import AllColors from '../../Constants/Color';
 import CustomAlert from '../../Common/Alert';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { BASE_URL, setToken, getDeviceId, setuserId, setMobile as saveMobile, setPassword as saveApiPassword } from '../../Api/Api';
+import { getFcmToken } from '../../Services/NotificationService';
 import { useNavigation } from "@react-navigation/native";
 import LottieView from 'lottie-react-native';
 import { useTheme } from '../../Context/ThemeContext';
@@ -79,9 +80,15 @@ const Register = () => {
         // Send OTP
         try {
           const deviceId = await getDeviceId();
+          const fcmToken = await getFcmToken();
+
           const otpFormData = new FormData();
           otpFormData.append('mobile', mobile);
           otpFormData.append('device_id', deviceId);
+          if (fcmToken) {
+            otpFormData.append('fcm_token', fcmToken);
+          }
+          otpFormData.append('device_type', Platform.OS);
 
           const otpResponse = await fetch(`${BASE_URL}send-otp`, {
             method: 'POST',

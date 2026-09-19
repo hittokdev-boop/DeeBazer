@@ -122,7 +122,7 @@ const EditProfileScreen = () => {
             };
 
             const response = await fetch(`${BASE_URL}user/profile`, {
-                method: 'PUT',
+                method: 'POST',
                 headers: {
                     Authorization: `Bearer ${token}`,
                     'Content-Type': 'application/json',

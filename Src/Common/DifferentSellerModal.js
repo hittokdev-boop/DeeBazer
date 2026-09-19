@@ -17,6 +17,7 @@ const { width } = Dimensions.get('window');
 export default function DifferentSellerModal({
   visible = false,
   cartSellerName = '',
+  cartSellerId = null,
   targetSellerName = '',
   targetSellerId = null,
   targetProduct = null,
@@ -93,7 +94,7 @@ export default function DifferentSellerModal({
             <View style={styles.sellerRow}>
               <View style={[styles.sellerDot, { backgroundColor: '#3B82F6' }]} />
               <Text style={[styles.sellerLabel, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>Cart Items From:</Text>
-              <Text style={[styles.sellerValue, { color: isDarkMode ? '#F8FAFC' : '#0F172A' }]} numberOfLines={1}>
+              <Text style={[styles.sellerValue, { color: '#3B82F6', fontWeight: '700' }]} numberOfLines={1}>
                 {displayCartSeller}
               </Text>
             </View>
@@ -111,13 +112,13 @@ export default function DifferentSellerModal({
 
           {/* Message Text */}
           <Text style={[styles.message, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>
-            You can only order items from one seller at a time. Clear your cart or order existing items first, or explore all products from{' '}
-            <Text style={{ fontWeight: '700', color: isDarkMode ? '#F8FAFC' : '#0F172A' }}>{displayTargetSeller}</Text>.
+            You can only order items from one seller at a time. Clear your cart to order from {displayTargetSeller}, or explore more products from{' '}
+            <Text style={{ fontWeight: '700', color: isDarkMode ? '#F8FAFC' : '#0F172A' }}>{displayCartSeller}</Text>.
           </Text>
 
           {/* Buttons Stack */}
           <View style={styles.buttonStack}>
-            {/* View Seller Products Button */}
+            {/* View Current/Old Seller Products Button */}
             <TouchableOpacity
               style={[styles.primaryButton, { backgroundColor: AllColors.primary || '#EA580C' }]}
               activeOpacity={0.85}
@@ -127,7 +128,7 @@ export default function DifferentSellerModal({
             >
               <MaterialCommunityIcons name="store-search-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
               <Text style={styles.primaryButtonText} numberOfLines={1}>
-                View {displayTargetSeller}'s Products
+                View {displayCartSeller}'s Products
               </Text>
             </TouchableOpacity>
 

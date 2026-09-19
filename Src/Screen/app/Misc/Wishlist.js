@@ -38,6 +38,7 @@ export default function Wishlist() {
   const [sellerModalVisible, setSellerModalVisible] = useState(false);
   const [sellerModalData, setSellerModalData] = useState({
     cartSellerName: '',
+    cartSellerId: null,
     targetSellerName: '',
     targetSellerId: null,
     targetProduct: null,
@@ -213,10 +214,11 @@ export default function Wishlist() {
 
     const cachedSeller = await getActiveCartSeller();
     if (currentCart && currentCart.length > 0) {
-      const sellerCheck = checkDifferentSeller(currentCart, item, cachedSeller);
+      const sellerCheck = await checkDifferentSeller(currentCart, item, cachedSeller);
       if (sellerCheck.isDifferent) {
         setSellerModalData({
           cartSellerName: sellerCheck.cartSellerName,
+          cartSellerId: sellerCheck.cartSellerId,
           targetSellerName: sellerCheck.targetSellerName,
           targetSellerId: sellerCheck.targetSellerId,
           targetProduct: item,
@@ -473,13 +475,14 @@ export default function Wishlist() {
       <DifferentSellerModal
         visible={sellerModalVisible}
         cartSellerName={sellerModalData.cartSellerName}
+        cartSellerId={sellerModalData.cartSellerId}
         targetSellerName={sellerModalData.targetSellerName}
         targetSellerId={sellerModalData.targetSellerId}
         targetProduct={sellerModalData.targetProduct}
         onClose={() => setSellerModalVisible(false)}
         onViewSellerProducts={() => {
-          const sId = sellerModalData.targetSellerId;
-          const sName = sellerModalData.targetSellerName;
+          const sId = sellerModalData.cartSellerId;
+          const sName = sellerModalData.cartSellerName;
           setSellerModalVisible(false);
           navigation.navigate('ViewAllProducts', {
             sellerId: sId,

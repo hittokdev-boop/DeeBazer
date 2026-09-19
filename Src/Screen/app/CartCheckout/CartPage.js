@@ -30,6 +30,10 @@ import LottieView from 'lottie-react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../../../Context/ThemeContext';
 import CustomAlert from '../../../Common/Alert';
+import {
+  saveActiveCartSeller,
+  clearActiveCartSeller,
+} from '../../../Common/sellerUtils';
 const CartPage = () => {
   const { theme, isDarkMode } = useTheme();
   const [cartItems, setCartItems] = useState([])
@@ -216,9 +220,13 @@ const CartPage = () => {
       // console.log("Remove Cart Response:", result);
 
       if (response.ok && result.status === 200) {
-        setCartItems((prev) =>
-          prev.filter((item) => item.product_id !== productId)
-        );
+        setCartItems((prev) => {
+          const updated = prev.filter((item) => item.product_id !== productId);
+          if (updated.length === 0) {
+            clearActiveCartSeller();
+          }
+          return updated;
+        });
       } else {
         Alert.alert("Error", result.message || "Failed to remove item");
       }
@@ -447,12 +455,14 @@ const CartPage = () => {
           Alert.alert("Success", result.message || "Order created successfully");
         }
 
-        const createdOrderId = result.order_id || result.data?.id || result.id;
+        const createdOrderId = result.order_id || result.data?.id || result.id || result.order?.id || result.order?.order_id || result.data?.order_id;
+        const orderNumber = result.order_number || result.order?.order_number || result.data?.order_number;
 
         navigation.navigate("OrderDetails", {
           order_id: createdOrderId,
           id: createdOrderId,
-          order: result.data || result.order,
+          order_number: orderNumber,
+          order: result.data || result.order || result,
           payment_method: selectedMethod,
         });
       } else {
@@ -561,8 +571,15 @@ const CartPage = () => {
       }
 
       setAddressData(data.address_data || {});
-      setCartItems(data.data || []);
+      const fetchedItems = (data?.data && Array.isArray(data.data)) ? data.data : [];
+      setCartItems(fetchedItems);
       setExtraData(data.extra_data || {});
+
+      if (fetchedItems.length === 0) {
+        await clearActiveCartSeller();
+      } else {
+        await saveActiveCartSeller(fetchedItems[0]);
+      }
 
       // Fetch user profile info to replace static variables
       if (token) {
@@ -1271,37 +1288,7 @@ const CartPage = () => {
                 />
               </TouchableOpacity>
 
-              {/* Online Payment Option */}
-              <TouchableOpacity
-                style={[
-                  styles.paymentOptionCard,
-                  {
-                    backgroundColor: isDarkMode ? '#334155' : '#F8FAFC',
-                    borderColor: isDarkMode ? '#475569' : '#E2E8F0',
-                  },
-                  paymentMethod === 'cashfree' && {
-                    borderColor: AllColors.primary,
-                    backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : '#FFF1F7',
-                  },
-                ]}
-                onPress={() => setPaymentMethod('cashfree')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.paymentOptionLeft}>
-                  <View style={[styles.paymentIconBox, { backgroundColor: isDarkMode ? 'rgba(7, 89, 133, 0.25)' : '#E0F2FE' }]}>
-                    <MaterialCommunityIcons name="credit-card-outline" size={24} color={isDarkMode ? '#38BDF8' : '#075985'} />
-                  </View>
-                  <View style={styles.paymentTextWrapper}>
-                    <Text style={[styles.paymentOptionTitle, { color: theme.textPrimary }]}>Online Payment (Cashfree / UPI)</Text>
-                    <Text style={[styles.paymentOptionSub, { color: theme.textSecondary }]}>Pay securely via UPI, Card or Net Banking</Text>
-                  </View>
-                </View>
-                <Ionicons
-                  name={paymentMethod === 'cashfree' ? 'radio-button-on' : 'radio-button-off'}
-                  size={22}
-                  color={paymentMethod === 'cashfree' ? AllColors.primary : (isDarkMode ? '#64748B' : '#94A3B8')}
-                />
-              </TouchableOpacity>
+
             </View>
 
             {/* Total Summary */}

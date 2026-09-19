@@ -1,16 +1,25 @@
 import React, { useEffect } from "react";
-import { Text, View } from "react-native";
 import Navigation from "./Src/Navigation";
 import { ThemeProvider } from "./Src/Context/ThemeContext";
+import GlobalNotificationBanner from "./Src/Common/GlobalNotificationBanner";
 import {
   requestUserPermission,
+  getFcmToken,
   notificationListener,
 } from "./Src/Services/NotificationService";
 
 export default function App() {
   useEffect(() => {
-    // Request permission & setup FCM listeners
-    requestUserPermission();
+    // Request permission, fetch FCM token & setup FCM listeners
+    const setupNotifications = async () => {
+      await requestUserPermission();
+      const token = await getFcmToken();
+      if (token) {
+        console.log('📌 [App.js] Initial FCM Token ready:', token);
+      }
+    };
+    setupNotifications();
+
     const unsubscribe = notificationListener(remoteMessage => {
       console.log("App received notification click:", remoteMessage);
     });
@@ -23,6 +32,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <Navigation />
+      <GlobalNotificationBanner />
     </ThemeProvider>
   );
 }

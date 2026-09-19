@@ -26,9 +26,9 @@ import {
   getMobile,
   setToken,
   setuserId,
-  setMobile,
   getDeviceId,
 } from '../../Api/Api';
+import { getFcmToken } from '../../Services/NotificationService';
 
 export default function VerifyOTP() {
   const navigation = useNavigation();
@@ -169,11 +169,16 @@ export default function VerifyOTP() {
       if (!deviceIdRef.current) {
         deviceIdRef.current = await getDeviceId();
       }
+      const fcmToken = await getFcmToken();
 
       const formData = new FormData();
       formData.append('mobile', mobileRef.current);
       formData.append('otp', code);
       formData.append('device_id', deviceIdRef.current);
+      if (fcmToken) {
+        formData.append('fcm_token', fcmToken);
+      }
+      formData.append('device_type', Platform.OS);
 
       const response = await fetch(`${BASE_URL}verify-otp`, {
         method: 'POST',
@@ -247,8 +252,16 @@ export default function VerifyOTP() {
     try {
       setLoading(true);
 
+      const deviceId = deviceIdRef.current || (await getDeviceId());
+      const fcmToken = await getFcmToken();
+
       const formData = new FormData();
       formData.append('mobile', mobile);
+      formData.append('device_id', deviceId);
+      if (fcmToken) {
+        formData.append('fcm_token', fcmToken);
+      }
+      formData.append('device_type', Platform.OS);
 
       const response = await fetch(`${BASE_URL}send-otp`, {
         method: 'POST',

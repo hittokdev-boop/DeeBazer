@@ -18,6 +18,7 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import AllColors from "../../../Constants/Color";
 import { useTheme } from '../../../Context/ThemeContext';
 import { BASE_URL } from "../../../Api/Api";
+import { extractSellerInfo } from '../../../Common/sellerUtils';
 
 export default function ViewAllProducts() {
   const route = useRoute();
@@ -79,7 +80,7 @@ export default function ViewAllProducts() {
       if (childCategoryId && childCategoryId !== 'all' && childCategoryId !== 'null') {
         formData.append('child_category_id', childCategoryId);
       }
-      formData.append('per_page', (sellerId || sellerName) ? 50 : 12);
+      formData.append('per_page', 24);
       formData.append('page', pageNum);
 
       const response = await fetch(`${BASE_URL}product`, {
@@ -88,49 +89,65 @@ export default function ViewAllProducts() {
       });
 
       const data = await response.json();
+      const allItems = (data?.data && Array.isArray(data.data)) ? data.data : [];
 
-      if (data?.data && Array.isArray(data.data)) {
-        let fetchedItems = data.data;
+      let finalItems = allItems;
+      if (sellerId || sellerName) {
+        const targetSellerId = sellerId !== null && sellerId !== undefined ? String(sellerId) : null;
+        const targetSellerName = sellerName ? String(sellerName).trim().toLowerCase() : '';
 
-        // Filter by seller if sellerId or sellerName is provided
-        if (sellerId || sellerName) {
-          fetchedItems = fetchedItems.filter((p) => {
-            const sId = p.seller_id ?? p.seller?.id ?? p.user_id ?? p.vendor_id;
-            const sName = p.seller_name ?? p.seller?.name ?? p.seller?.store_name ?? p.seller?.shop_name;
-            if (sellerId && sId !== undefined && sId !== null && String(sId) === String(sellerId)) return true;
-            if (sellerName && sName && String(sName).toLowerCase() === String(sellerName).toLowerCase()) return true;
+        const isDefaultOrAdminTarget =
+          targetSellerName.includes('deebazar') ||
+          targetSellerName.includes('current') ||
+          targetSellerName.includes('this') ||
+          targetSellerId === '1' ||
+          targetSellerId === '0';
+
+        finalItems = allItems.filter((p) => {
+          const pInfo = extractSellerInfo(p);
+          const pSellerId = pInfo.sellerId;
+          const pSellerName = pInfo.sellerName ? pInfo.sellerName.toLowerCase() : '';
+
+          // If target is a third-party seller (e.g. ananya, id != 1):
+          if (!isDefaultOrAdminTarget) {
+            if (targetSellerId && pSellerId && String(pSellerId) === targetSellerId) {
+              return true;
+            }
+            if (targetSellerName && pSellerName && (pSellerName.includes(targetSellerName) || targetSellerName.includes(pSellerName))) {
+              return true;
+            }
             return false;
-          });
-        }
-
-        const finalItems = fetchedItems.length > 0 ? fetchedItems : (initialProducts.length > 0 ? initialProducts : data.data);
-
-        if (isLoadMore) {
-          setProductList((prev) => {
-            const existingIds = new Set(prev.map((p) => String(p.id)));
-            const newItems = finalItems.filter((p) => !existingIds.has(String(p.id)));
-            return [...prev, ...newItems];
-          });
-          setPage(pageNum);
-        } else {
-          setProductList(finalItems);
-          setPage(1);
-        }
-
-        if (data.data.length < 12) {
-          setHasMore(false);
-        } else {
-          setHasMore(true);
-        }
-      } else {
-        if (!isLoadMore) {
-          if (initialProducts.length > 0) {
-            setProductList(initialProducts);
-          } else {
-            setProductList([]);
           }
-        }
+
+          // If target is Deebazar Store (admin/main store):
+          // Exclude any product that belongs to another third-party seller (e.g. ananya, id > 1)
+          if (pSellerName && (pSellerName.includes('ananya') || (pSellerId && pSellerId !== '1' && pSellerId !== '0'))) {
+            return false;
+          }
+          if (pSellerId && pSellerId !== '1' && pSellerId !== '0') {
+            return false;
+          }
+          // Include products that have no other vendor or are from Deebazar store
+          return true;
+        });
+      }
+
+      if (isLoadMore) {
+        setProductList((prev) => {
+          const existingIds = new Set(prev.map((p) => String(p.id)));
+          const newItems = finalItems.filter((p) => !existingIds.has(String(p.id)));
+          return [...prev, ...newItems];
+        });
+        setPage(pageNum);
+      } else {
+        setProductList(finalItems.length > 0 ? finalItems : (initialProducts.length > 0 ? initialProducts : []));
+        setPage(1);
+      }
+
+      if (allItems.length < 12) {
         setHasMore(false);
+      } else {
+        setHasMore(true);
       }
     } catch (error) {
       console.error('Error fetching view all products:', error);
@@ -143,6 +160,10 @@ export default function ViewAllProducts() {
       setRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    fetchProducts(1, false);
+  }, [categoryId, subCategoryId, childCategoryId, sellerId, sellerName]);
 
   const onRefresh = () => {
     setRefreshing(true);

@@ -208,7 +208,7 @@ export default function Orders() {
       return {
         bg: isDarkMode ? 'rgba(59, 130, 246, 0.18)' : '#DBEAFE',
         color: isDarkMode ? '#60A5FA' : '#1D4ED8',
-        label: status || 'Shipped',
+        label: status || 'Out for Delivery',
         icon: 'car-outline',
       };
     }

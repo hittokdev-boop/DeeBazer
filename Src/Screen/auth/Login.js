@@ -21,6 +21,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import AllColors from '../../Constants/Color';
 import CustomAlert from '../../Common/Alert';
 import { BASE_URL, setMobile as saveMobile, setuserId, getDeviceId } from '../../Api/Api';
+import { getFcmToken } from '../../Services/NotificationService';
 import LottieView from 'lottie-react-native';
 import { useNavigation } from "@react-navigation/native";
 import { useTheme } from '../../Context/ThemeContext';
@@ -46,9 +47,23 @@ const CommonLoginModal = () => {
 
     try {
       const deviceId = await getDeviceId();
+      const fcmToken = await getFcmToken();
+      const deviceType = Platform.OS;
+
+      console.log('📲 [Login] Sending OTP with payload:', {
+        mobile: cleanMobile,
+        device_id: deviceId,
+        fcm_token: fcmToken,
+        device_type: deviceType,
+      });
+
       const formData = new FormData();
       formData.append('mobile', cleanMobile);
       formData.append('device_id', deviceId);
+      if (fcmToken) {
+        formData.append('fcm_token', fcmToken);
+      }
+      formData.append('device_type', deviceType);
 
       const response = await fetch(`${BASE_URL}send-otp`, {
         method: 'POST',

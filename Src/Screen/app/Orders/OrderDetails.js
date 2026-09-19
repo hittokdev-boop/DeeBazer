@@ -306,7 +306,7 @@ export default function OrderDetails() {
         bg: isDarkMode ? 'rgba(59, 130, 246, 0.18)' : '#DBEAFE',
         color: isDarkMode ? '#60A5FA' : '#1D4ED8',
         borderColor: isDarkMode ? 'rgba(96, 165, 250, 0.3)' : '#BFDBFE',
-        label: status || 'Shipped',
+        label: status || 'Out for Delivery',
         icon: 'car-outline',
         subtitle: 'Your package is on its way to you.',
         stepIndex: 2,
@@ -802,7 +802,7 @@ export default function OrderDetails() {
   const steps = [
     { title: 'Order Placed', icon: 'bag-check-outline' },
     { title: 'Processing', icon: 'sync-outline' },
-    { title: 'Shipped', icon: 'car-outline' },
+    { title: 'Out for Delivery', icon: 'car-outline' },
     { title: 'Delivered', icon: 'checkmark-done-outline' },
   ];
 

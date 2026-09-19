@@ -8,22 +8,26 @@
 // **Request Body:**
 // ```json
 // {
-//   "mobile": "9876543210"
+//   "mobile": "9876543210",
+//   "fcm_token": "fXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+//   "device_type": "android"
 // }
 // ```
 
 // **Response (200):**
 // ```json
 // {
-//   "status": 200,
-//   "message": "OTP sent successfully",
-//   "user_id": "123",
-//   "debug_otp": "1234"
+//   "status": 200,
+//   "message": "OTP sent successfully",
+//   "user_id": "123",
+//   "debug_otp": "1234"
 // }
 // ```
 
 // **Validation:**
 // - `mobile` (required, string, 10 digits)
+// - `fcm_token` (optional/recommended, string, FCM device push token)
+// - `device_type` (optional/recommended, string: 'android' | 'ios')
 
 // ---
 
@@ -1594,6 +1598,167 @@
 //   }
 // }
 // ``` 
+
+// ---
+
+// ## Seller Notification APIs
+
+// ### Get Notifications List
+// Retrieve paginated list of notifications for the authenticated seller.
+//
+// **Endpoint:** `GET /api/notifications`
+//
+// **Headers:**
+// - `Authorization: Bearer {token}`
+//
+// **Response (200):**
+// ```json
+// {
+//   "status": 200,
+//   "data": {
+//     "current_page": 1,
+//     "data": [
+//       {
+//         "id": 17,
+//         "user_id": 76,
+//         "from_user_id": 82,
+//         "title": "New Order Received",
+//         "message": "You have received a new order #225965.",
+//         "type": "info",
+//         "event_type": "seller_new_order",
+//         "target_audience": "all",
+//         "with_email": false,
+//         "email_subject": null,
+//         "email_content": null,
+//         "image": null,
+//         "scheduled_at": null,
+//         "sent_at": "2026-09-16T13:30:55.000000Z",
+//         "status": "sent",
+//         "is_read": false,
+//         "read_at": null,
+//         "views": 0,
+//         "email_opens": 0,
+//         "created_at": "2026-09-16T13:30:55.000000Z",
+//         "updated_at": "2026-09-16T13:30:55.000000Z",
+//         "deleted_at": null
+//       },
+//       {
+//         "id": 15,
+//         "user_id": 76,
+//         "from_user_id": null,
+//         "title": "Test Notification",
+//         "message": "This is a test message to verify the notification system.",
+//         "type": "info",
+//         "event_type": "order_placed",
+//         "target_audience": "all",
+//         "with_email": false,
+//         "email_subject": null,
+//         "email_content": null,
+//         "image": null,
+//         "scheduled_at": null,
+//         "sent_at": "2026-09-16T12:15:54.000000Z",
+//         "status": "sent",
+//         "is_read": false,
+//         "read_at": null,
+//         "views": 0,
+//         "email_opens": 0,
+//         "created_at": "2026-09-16T12:15:54.000000Z",
+//         "updated_at": "2026-09-16T12:15:54.000000Z",
+//         "deleted_at": null
+//       }
+//     ],
+//     "first_page_url": "https://deebazar.com/admin/api/notifications?page=1",
+//     "from": 1,
+//     "last_page": 1,
+//     "last_page_url": "https://deebazar.com/admin/api/notifications?page=1",
+//     "links": [
+//       {
+//         "url": null,
+//         "label": "&laquo; Previous",
+//         "active": false
+//       },
+//       {
+//         "url": "https://deebazar.com/admin/api/notifications?page=1",
+//         "label": "1",
+//         "active": true
+//       },
+//       {
+//         "url": null,
+//         "label": "Next &raquo;",
+//         "active": false
+//       }
+//     ],
+//     "next_page_url": null,
+//     "path": "https://deebazar.com/admin/api/notifications",
+//     "per_page": 20,
+//     "prev_page_url": null,
+//     "to": 2,
+//     "total": 2
+//   }
+// }
+// ```
+//
+// ---
+//
+// ### Get Unread Notifications Count
+// Get total count of unread notifications for authenticated seller.
+//
+// **Endpoint:** `GET /api/notifications/unread-count`
+//
+// **Headers:**
+// - `Authorization: Bearer {token}`
+//
+// **Response (200):**
+// ```json
+// {
+//   "status": 200,
+//   "unread_count": 2
+// }
+// ```
+//
+// ---
+//
+// ### Mark Notification As Read
+// Mark a specific notification as read.
+//
+// **Endpoint:** `POST /api/notifications/read`
+//
+// **Headers:**
+// - `Authorization: Bearer {token}`
+//
+// **Request Body:**
+// ```json
+// {
+//   "id": 15
+// }
+// ```
+//
+// **Response (200):**
+// ```json
+// {
+//   "status": 200,
+//   "message": "Notification marked as read."
+// }
+// ```
+//
+// ---
+//
+// ### Mark All Notifications As Read
+// Mark all unread notifications for authenticated seller as read.
+//
+// **Endpoint:** `POST /api/notifications/read-all`
+//
+// **Headers:**
+// - `Authorization: Bearer {token}`
+//
+// **Response (200):**
+// ```json
+// {
+//   "status": 200,
+//   "message": "All notifications marked as read."
+// }
+// ```
+
 // https://deebazar.com/help-and-support.php
 // https://deebazar.com/privacy-policy.php
 // https://deebazar.com/terms-and-conditions.php

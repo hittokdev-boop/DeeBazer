@@ -27,6 +27,12 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Voice from '@react-native-voice/voice';
 import { handleNotificationRouting } from '../../../Services/NotificationService';
+import {
+  fetchSellerNotifications,
+  fetchUnreadNotificationCount,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+} from '../../../Services/NotificationApiService';
 
 import LinearGradient from 'react-native-linear-gradient';
 import FontAwesome from 'react-native-vector-icons/FontAwesome';
@@ -38,6 +44,13 @@ import CommonLoginModal from '../../auth/Login';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { BASE_URL, getToken, getuserId, } from '../../../Api/Api';
 import Swiper from 'react-native-swiper';
+import DifferentSellerModal from '../../../Common/DifferentSellerModal';
+import {
+  checkDifferentSeller,
+  saveActiveCartSeller,
+  getActiveCartSeller,
+  clearActiveCartSeller,
+} from '../../../Common/sellerUtils';
 
 // import Feather from 'react-native-vector-icons/Feather'
 const { width } = Dimensions.get('window');
@@ -45,36 +58,6 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
 const DEFAULT_SUB_CAT_IMAGE = 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300';
-
-const DEFAULT_NOTIFICATIONS = [
-  {
-    id: 'notif_1',
-    title: 'Special Offer! 🎉',
-    body: 'Get 20% off on your next purchase at DeeBazer! Use code DEE20.',
-    time: '5m ago',
-    isRead: false,
-    type: 'promo',
-    data: { screen: 'ProductsDashboard' },
-  },
-  {
-    id: 'notif_2',
-    title: 'Order Shipped 🚚',
-    body: 'Your order #DB-84920 has been shipped and is on its way.',
-    time: '2h ago',
-    isRead: false,
-    type: 'order',
-    data: { order_id: '84920' },
-  },
-  {
-    id: 'notif_3',
-    title: 'Items in Cart 🛒',
-    body: 'You have items saved in your cart. Complete purchase now!',
-    time: '1d ago',
-    isRead: true,
-    type: 'cart',
-    data: { type: 'cart' },
-  },
-];
 
 const formatSubCategoryImageUri = (item) => {
   if (!item) return DEFAULT_SUB_CAT_IMAGE;
@@ -181,6 +164,14 @@ export default function DashBoard() {
   const [wishlistIds, setWishlistIds] = useState([]);
   const [cartQty, setCartQty] = useState({});
   const [cartItems, setCartItems] = useState([]);
+  const [sellerModalVisible, setSellerModalVisible] = useState(false);
+  const [sellerModalData, setSellerModalData] = useState({
+    cartSellerName: '',
+    cartSellerId: null,
+    targetSellerName: '',
+    targetSellerId: null,
+    targetProduct: null,
+  });
   const [banners, setBanners] = useState([]);
   const [bannersLoading, setBannersLoading] = useState(false);
   const [userName, setUserName] = useState('User');
@@ -238,9 +229,11 @@ export default function DashBoard() {
   const lastBackPressedRef = useRef(0);
   const cartBarAnim = React.useRef(new Animated.Value(1)).current;
 
-  const [notifications, setNotifications] = useState(DEFAULT_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const isDrawerOpenRef = useRef(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isNotificationsLoading, setIsNotificationsLoading] = useState(false);
   const [activeNotification, setActiveNotification] = useState(null);
   const [isBannerVisible, setIsBannerVisible] = useState(false);
   const bannerAnim = useRef(new Animated.Value(0)).current;
@@ -622,17 +615,70 @@ export default function DashBoard() {
     };
   }, []);
 
-  // Foreground Notification Animation & Notification Drawer History State
+  // Foreground Notification Animation & Notification Drawer State
 
-  const updateNotificationsState = useCallback((newList) => {
-    setNotifications(newList);
-    const unread = newList.filter(n => !n.isRead).length;
-    setUnreadCount(unread);
-    AsyncStorage.setItem('NOTIFICATION_HISTORY', JSON.stringify(newList)).catch(() => { });
-    AsyncStorage.setItem('NOTIFICATION_UNREAD_COUNT', String(unread)).catch(() => { });
+  // Notification Date/Time Formatter
+  const formatNotificationTime = (dateStr) => {
+    if (!dateStr) return 'Recently';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return String(dateStr);
+      const now = new Date();
+      const diffSec = Math.floor((now - d) / 1000);
+      if (diffSec < 60) return 'Just now';
+      if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+      if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+      if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
+      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    } catch (e) {
+      return String(dateStr);
+    }
+  };
+
+  // Fetch Seller Unread Count from Server
+  const loadUnreadCount = useCallback(async () => {
+    try {
+      if (isDrawerOpenRef.current) {
+        setUnreadCount(0);
+        return;
+      }
+      const count = await fetchUnreadNotificationCount();
+      if (!isDrawerOpenRef.current) {
+        setUnreadCount(count);
+      }
+    } catch (e) {
+      console.log('Error fetching unread notification count:', e);
+    }
+  }, []);
+
+  // Fetch Seller Notifications List from Server
+  const loadNotifications = useCallback(async (isRefresh = false, markAsRead = false) => {
+    try {
+      setIsNotificationsLoading(true);
+      const res = await fetchSellerNotifications(1);
+      if (res.success && Array.isArray(res.data)) {
+        let filtered = res.data;
+
+        const shouldMarkRead = markAsRead || isDrawerOpenRef.current;
+        if (shouldMarkRead) {
+          filtered = filtered.map(n => ({ ...n, is_read: true, isRead: true }));
+          setNotifications(filtered);
+          setUnreadCount(0);
+        } else {
+          setNotifications(filtered);
+          const unread = filtered.filter(n => !n.is_read && !n.isRead).length;
+          setUnreadCount(unread);
+        }
+      }
+    } catch (e) {
+      console.log('Error loading seller notifications:', e);
+    } finally {
+      setIsNotificationsLoading(false);
+    }
   }, []);
 
   const openNotificationDrawer = useCallback(() => {
+    isDrawerOpenRef.current = true;
     setIsDrawerOpen(true);
     drawerAnim.setValue(0);
     Animated.timing(drawerAnim, {
@@ -641,17 +687,21 @@ export default function DashBoard() {
       useNativeDriver: true,
     }).start();
 
-    // Auto mark all notifications as read when drawer is opened
-    setNotifications(prev => {
-      const allRead = prev.map(n => ({ ...n, isRead: true }));
-      AsyncStorage.setItem('NOTIFICATION_HISTORY', JSON.stringify(allRead)).catch(() => { });
-      return allRead;
-    });
+    // 1. Instantly mark as read locally and clear badge
     setUnreadCount(0);
-    AsyncStorage.setItem('NOTIFICATION_UNREAD_COUNT', '0').catch(() => { });
-  }, [drawerAnim]);
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true, isRead: true })));
+
+    // 2. Call backend API to mark all notifications as read
+    markAllNotificationsAsRead().catch(err => {
+      console.log('Error auto-marking all notifications as read on enter:', err);
+    });
+
+    // 3. Fetch fresh notifications from server with markAsRead = true
+    loadNotifications(true, true);
+  }, [drawerAnim, loadNotifications]);
 
   const closeNotificationDrawer = useCallback(() => {
+    isDrawerOpenRef.current = false;
     Animated.timing(drawerAnim, {
       toValue: 0,
       duration: 250,
@@ -660,6 +710,20 @@ export default function DashBoard() {
       setIsDrawerOpen(false);
     });
   }, [drawerAnim]);
+
+  const dismissNotificationBanner = useCallback(() => {
+    if (bannerTimerRef.current) {
+      clearTimeout(bannerTimerRef.current);
+    }
+    Animated.timing(bannerAnim, {
+      toValue: 0,
+      duration: 350,
+      useNativeDriver: true,
+    }).start(() => {
+      setIsBannerVisible(false);
+      setActiveNotification(null);
+    });
+  }, [bannerAnim]);
 
   const triggerNotificationBanner = useCallback((title, body, data = {}) => {
     setActiveNotification({ title, body, data });
@@ -680,111 +744,133 @@ export default function DashBoard() {
     bannerTimerRef.current = setTimeout(() => {
       dismissNotificationBanner();
     }, 4500);
-  }, [bannerAnim]);
-
-  const dismissNotificationBanner = useCallback(() => {
-    if (bannerTimerRef.current) {
-      clearTimeout(bannerTimerRef.current);
-    }
-    Animated.timing(bannerAnim, {
-      toValue: 0,
-      duration: 350,
-      useNativeDriver: true,
-    }).start(() => {
-      setIsBannerVisible(false);
-      setActiveNotification(null);
-    });
-  }, [bannerAnim]);
+  }, [bannerAnim, dismissNotificationBanner]);
 
   const handleBellPress = () => {
     openNotificationDrawer();
   };
 
-  const handleMarkAllRead = () => {
-    const updated = notifications.map(n => ({ ...n, isRead: true }));
-    updateNotificationsState(updated);
-  };
-
-  const handleClearAll = () => {
-    updateNotificationsState([]);
-  };
-
-  const handleDeleteNotification = (id) => {
-    const updated = notifications.filter(n => n.id !== id);
-    updateNotificationsState(updated);
-  };
-
-  const handleNotificationClick = (item) => {
-    const updated = notifications.map(n => n.id === item.id ? { ...n, isRead: true } : n);
-    updateNotificationsState(updated);
-    closeNotificationDrawer();
-    if (item.data) {
-      handleNotificationRouting(item);
+  const handleMarkAllRead = async () => {
+    // Optimistic UI update
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true, isRead: true })));
+    setUnreadCount(0);
+    try {
+      await markAllNotificationsAsRead();
+    } catch (e) {
+      console.log('Error in handleMarkAllRead:', e);
     }
   };
 
-  useEffect(() => {
-    AsyncStorage.getItem('NOTIFICATION_HISTORY')
-      .then(val => {
-        if (val) {
-          try {
-            const parsed = JSON.parse(val);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setNotifications(parsed);
-              const unread = parsed.filter(n => !n.isRead).length;
-              setUnreadCount(unread);
-            } else {
-              const unread = DEFAULT_NOTIFICATIONS.filter(n => !n.isRead).length;
-              setUnreadCount(unread);
-            }
-          } catch (e) { }
-        } else {
-          const unread = DEFAULT_NOTIFICATIONS.filter(n => !n.isRead).length;
-          setUnreadCount(unread);
-        }
-      })
-      .catch(() => { });
 
+  const handleNotificationClick = async (item) => {
+    // Optimistically mark as read
+    setNotifications(prev =>
+      prev.map(n => (n.id === item.id ? { ...n, is_read: true, isRead: true } : n))
+    );
+    setUnreadCount(prev => Math.max(0, prev - 1));
+    closeNotificationDrawer();
+
+    // Call API in background
+    if (item.id) {
+      markNotificationAsRead(item.id).catch(() => {});
+    }
+
+    // Build raw routing message
+    const rawMessage = {
+      notification: {
+        title: item.title,
+        body: item.message || item.body,
+      },
+      data: {
+        id: item.id,
+        event_type: item.event_type || item.type,
+        type: item.type,
+        order_id: item.data?.order_id || (item.message?.match(/#(\d+)/)?.[1]),
+        ...item.data,
+      },
+    };
+    handleNotificationRouting(rawMessage);
+  };
+
+  useEffect(() => {
+    // Purge any old mock/default notification history
+    AsyncStorage.removeItem('NOTIFICATION_HISTORY').catch(() => {});
+    AsyncStorage.removeItem('DELETED_NOTIFICATION_IDS').catch(() => {});
+
+    // Load live unread count and real seller notifications on mount
+    loadUnreadCount();
+    loadNotifications();
+
+    // Listen for FCM foreground notifications
     const notificationSub = DeviceEventEmitter.addListener(
       'SHOW_FOREGROUND_NOTIFICATION',
       remoteMessage => {
         const title =
           remoteMessage?.notification?.title ||
           remoteMessage?.title ||
+          remoteMessage?.data?.title ||
           'New Notification';
         const body =
           remoteMessage?.notification?.body ||
           remoteMessage?.body ||
+          remoteMessage?.data?.message ||
           'You have a new notification!';
 
         const newNotif = {
-          id: 'notif_' + Date.now(),
+          id: remoteMessage?.data?.id || 'notif_' + Date.now(),
           title,
+          message: body,
           body,
+          sent_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
           time: 'Just now',
+          is_read: false,
           isRead: false,
-          type: remoteMessage?.data?.type || 'promo',
+          type: remoteMessage?.data?.type || 'info',
+          event_type: remoteMessage?.data?.event_type || 'seller_new_order',
           data: remoteMessage?.data || {},
         };
 
-        setNotifications(prev => {
-          const updated = [newNotif, ...prev];
-          const unread = updated.filter(n => !n.isRead).length;
-          setUnreadCount(unread);
-          AsyncStorage.setItem('NOTIFICATION_HISTORY', JSON.stringify(updated)).catch(() => { });
-          AsyncStorage.setItem('NOTIFICATION_UNREAD_COUNT', String(unread)).catch(() => { });
-          return updated;
-        });
+        setNotifications(prev => [newNotif, ...prev.filter(n => n.id !== newNotif.id)]);
+        setUnreadCount(prev => prev + 1);
 
         triggerNotificationBanner(title, body, remoteMessage?.data || {});
       },
     );
 
+    // Listen for count updates
+    const countSub = DeviceEventEmitter.addListener(
+      'NOTIFICATION_COUNT_UPDATED',
+      count => {
+        setUnreadCount(count);
+      },
+    );
+
+    // Listen for refresh requests
+    const refreshSub = DeviceEventEmitter.addListener(
+      'REFRESH_NOTIFICATIONS',
+      () => {
+        loadUnreadCount();
+        loadNotifications(true);
+      },
+    );
+
+    // Listen for external open drawer signal
+    const openDrawerSub = DeviceEventEmitter.addListener(
+      'OPEN_NOTIFICATION_DRAWER',
+      () => {
+        openNotificationDrawer();
+      },
+    );
+
     return () => {
       notificationSub.remove();
+      countSub.remove();
+      refreshSub.remove();
+      openDrawerSub.remove();
       if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
     };
-  }, [triggerNotificationBanner]);
+  }, [loadUnreadCount, loadNotifications, openNotificationDrawer, triggerNotificationBanner]);
 
   const handleScroll = () => {
     if (isCartBarVisible) {
@@ -907,6 +993,7 @@ export default function DashBoard() {
     useCallback(() => {
       getWishlistIds();
       getCartItems();
+      loadUnreadCount();
 
       const onBackPress = () => {
         const now = Date.now();
@@ -930,7 +1017,7 @@ export default function DashBoard() {
       return () => {
         subscription.remove();
       };
-    }, [Navigation])
+    }, [Navigation, loadUnreadCount])
   );
 
   const getSearchText = async (value) => {
@@ -1765,7 +1852,7 @@ export default function DashBoard() {
 
       const result = await response.json();
       // console.log('Cart Items:', result);
-      const itemsList = result.data || [];
+      const itemsList = (result?.data && Array.isArray(result.data)) ? result.data : [];
       setCartItems(itemsList);
 
       let qtyObj = {};
@@ -1775,6 +1862,11 @@ export default function DashBoard() {
 
       setCartQty(qtyObj);
 
+      if (itemsList.length === 0) {
+        await clearActiveCartSeller();
+      } else {
+        await saveActiveCartSeller(itemsList[0]);
+      }
     } catch (e) {
       // console.log(e);
     }
@@ -1787,6 +1879,44 @@ export default function DashBoard() {
     if (!token || !userId) {
       Navigation.navigate('Login');
       return;
+    }
+
+    // Single-seller policy check
+    let currentCart = cartItems;
+    if (!currentCart || currentCart.length === 0) {
+      try {
+        const formData = new FormData();
+        formData.append('user_id', userId);
+        const cartResp = await fetch(`${BASE_URL}cart-view`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
+          body: formData,
+        });
+        const cartJson = await cartResp.json();
+        currentCart = (cartJson?.data && Array.isArray(cartJson.data)) ? cartJson.data : [];
+        setCartItems(currentCart);
+      } catch (e) {
+        console.log('Error refreshing cart in dashboard:', e);
+      }
+    }
+
+    const cachedSeller = await getActiveCartSeller();
+    if (currentCart && currentCart.length > 0) {
+      const sellerCheck = await checkDifferentSeller(currentCart, item, cachedSeller);
+      if (sellerCheck.isDifferent) {
+        setSellerModalData({
+          cartSellerName: sellerCheck.cartSellerName,
+          cartSellerId: sellerCheck.cartSellerId,
+          targetSellerName: sellerCheck.targetSellerName,
+          targetSellerId: sellerCheck.targetSellerId,
+          targetProduct: item,
+        });
+        setSellerModalVisible(true);
+        return;
+      }
     }
 
     // Optimistically update quantity
@@ -1838,6 +1968,7 @@ export default function DashBoard() {
         setCartItems(prev => prev.filter(ci => String(ci.product_id) !== String(id)));
         Alert.alert('Error', data.message || 'Something went wrong');
       } else {
+        await saveActiveCartSeller(item);
         // Background sync
         getCartItems();
       }
@@ -1908,7 +2039,7 @@ export default function DashBoard() {
               />
               {(item.title || item.name) ? (
                 <View style={styles.bannerTextContainer}>
-                  <Text style={styles.bannerTitleText} numberOfLines={1}>
+                  <Text style={styles.sliderBannerTitleText} numberOfLines={1}>
                     {item.title || item.name}
                   </Text>
                   {(item.desc || item.description) ? (
@@ -3042,24 +3173,44 @@ export default function DashBoard() {
             )}
 
             {/* Notifications List */}
-            {notifications.length === 0 ? (
+            {isNotificationsLoading && notifications.length === 0 ? (
+              <View style={styles.drawerLoadingContainer}>
+                <ActivityIndicator size="large" color={AllColors.primary} />
+                <Text style={[styles.drawerLoadingText, { color: theme.textSecondary }]}>Loading notifications...</Text>
+              </View>
+            ) : notifications.length === 0 ? (
               <View style={styles.drawerEmptyContainer}>
                 <View style={[styles.emptyBellCircle, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}>
                   <Ionicons name="notifications-off-outline" size={44} color={isDarkMode ? '#94A3B8' : '#94A3B8'} />
                 </View>
                 <Text style={[styles.drawerEmptyTitle, { color: theme.textPrimary }]}>No Notifications</Text>
                 <Text style={[styles.drawerEmptySub, { color: theme.textSecondary }]}>
-                  You're all caught up! Updates and promos will appear here.
+                  You have no notifications yet.
                 </Text>
               </View>
             ) : (
               <FlatList
                 data={notifications}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item, index) => String(item.id || index)}
                 contentContainerStyle={styles.drawerListPadding}
                 showsVerticalScrollIndicator={false}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={isNotificationsLoading}
+                    onRefresh={() => {
+                      markAllNotificationsAsRead().catch(() => {});
+                      loadNotifications(true, true);
+                    }}
+                    colors={[AllColors.primary]}
+                  />
+                }
                 renderItem={({ item }) => {
-                  const isUnread = !item.isRead;
+                  const isUnread = !item.is_read && !item.isRead;
+                  const isOrder =
+                    item.event_type === 'seller_new_order' ||
+                    item.event_type === 'order_placed' ||
+                    item.type === 'order';
+
                   return (
                     <TouchableOpacity
                       activeOpacity={0.8}
@@ -3085,11 +3236,11 @@ export default function DashBoard() {
                       >
                         <Ionicons
                           name={
-                            item.type === 'order'
+                            isOrder
                               ? 'cube-outline'
                               : item.type === 'cart'
                                 ? 'cart-outline'
-                                : 'pricetag-outline'
+                                : 'notifications-outline'
                           }
                           size={16}
                           color={isUnread ? AllColors.primary : (isDarkMode ? '#94A3B8' : '#64748B')}
@@ -3111,35 +3262,16 @@ export default function DashBoard() {
                           {isUnread && <View style={styles.unreadDot} />}
                         </View>
                         <Text numberOfLines={2} style={[styles.itemBodyText, { color: theme.textSecondary }]}>
-                          {item.body}
+                          {item.message || item.body}
                         </Text>
-                        <Text style={styles.itemTimeText}>{item.time}</Text>
+                        <Text style={styles.itemTimeText}>
+                          {formatNotificationTime(item.sent_at || item.created_at || item.time)}
+                        </Text>
                       </View>
-
-                      <TouchableOpacity
-                        style={styles.itemDeleteBtn}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        onPress={() => handleDeleteNotification(item.id)}
-                      >
-                        <Ionicons name="trash-outline" size={16} color={isDarkMode ? '#94A3B8' : '#94A3B8'} />
-                      </TouchableOpacity>
                     </TouchableOpacity>
                   );
                 }}
               />
-            )}
-
-            {/* Footer */}
-            {notifications.length > 0 && (
-              <View style={[styles.drawerFooter, { borderTopColor: theme.divider, backgroundColor: theme.modalBg }]}>
-                <TouchableOpacity
-                  style={styles.clearAllBtn}
-                  onPress={handleClearAll}
-                >
-                  <Ionicons name="trash-outline" size={16} color="#EF4444" />
-                  <Text style={styles.clearAllText}>Clear All</Text>
-                </TouchableOpacity>
-              </View>
             )}
           </Animated.View>
         </View>
@@ -3464,6 +3596,27 @@ export default function DashBoard() {
           </View>
         </View>
       </Modal>
+
+      {/* ================= Different Seller Alert Modal ================= */}
+      <DifferentSellerModal
+        visible={sellerModalVisible}
+        cartSellerName={sellerModalData.cartSellerName}
+        cartSellerId={sellerModalData.cartSellerId}
+        targetSellerName={sellerModalData.targetSellerName}
+        targetSellerId={sellerModalData.targetSellerId}
+        targetProduct={sellerModalData.targetProduct}
+        onClose={() => setSellerModalVisible(false)}
+        onViewSellerProducts={() => {
+          const sId = sellerModalData.cartSellerId;
+          const sName = sellerModalData.cartSellerName;
+          setSellerModalVisible(false);
+          Navigation.navigate('ViewAllProducts', {
+            sellerId: sId,
+            sellerName: sName,
+            title: sName ? `${sName}'s Products` : "Seller's Products",
+          });
+        }}
+      />
     </View>
   );
 }
@@ -4254,7 +4407,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     maxWidth: '80%',
   },
-  bannerTitleText: {
+  sliderBannerTitleText: {
     color: '#ffffff',
     fontWeight: '700',
     fontSize: 14,
@@ -4292,22 +4445,6 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: '#E2E8F0',
-  },
-  iconButton: {
-    padding: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  verticalDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: '#E2E8F0',
-    marginHorizontal: 4,
-  },
-  input: {
-    flex: 1,
-    height: 40,
-    paddingHorizontal: 10,
   },
   skeletonSearchContainer: {
     flexDirection: 'row',
@@ -4652,10 +4789,6 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     marginTop: 6,
   },
-  itemDeleteBtn: {
-    padding: 4,
-    marginLeft: 4,
-  },
   drawerEmptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -4683,24 +4816,15 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 18,
   },
-  drawerFooter: {
-    padding: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    backgroundColor: '#FFFFFF',
-  },
-  clearAllBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  drawerLoadingContainer: {
+    flex: 1,
     justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#FEE2E2',
-    gap: 6,
+    alignItems: 'center',
+    paddingVertical: 40,
   },
-  clearAllText: {
-    color: '#EF4444',
+  drawerLoadingText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
+    marginTop: 12,
   },
 });
