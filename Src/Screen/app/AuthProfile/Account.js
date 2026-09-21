@@ -10,6 +10,8 @@ import {
   Switch,
   Linking,
   TextInput,
+  Image,
+  DeviceEventEmitter,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -36,6 +38,7 @@ export default function Account() {
   const [userName, setUserName] = useState('User');
   const [userEmail, setUserEmail] = useState('');
   const [userMobile, setUserMobile] = useState('');
+  const [userAvatar, setUserAvatar] = useState(null);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [selectedReason, setSelectedReason] = useState(null);
   const [isOtpModalVisible, setIsOtpModalVisible] = useState(false);
@@ -58,7 +61,20 @@ export default function Account() {
     const timer = setTimeout(() => {
       setLoading(false);
     }, 1500);
-    return () => clearTimeout(timer);
+
+    const sub = DeviceEventEmitter.addListener('USER_PROFILE_UPDATED', (u) => {
+      if (u) {
+        if (u.name) setUserName(u.name);
+        if (u.email) setUserEmail(u.email);
+        if (u.mobile) setUserMobile(u.mobile);
+        if (u.avatar || u.logo) setUserAvatar(u.avatar || u.logo);
+      }
+    });
+
+    return () => {
+      clearTimeout(timer);
+      sub.remove();
+    };
   }, []);
 
 
@@ -125,6 +141,7 @@ export default function Account() {
           setUserName(data.user.name || 'User');
           setUserEmail(data.user.email || '');
           setUserMobile(data.user.mobile || data.user.phone || '');
+          setUserAvatar(data.user.avatar || data.user.logo || null);
         } else {
           const mob = await getMobile();
           if (mob) setUserMobile(mob);
@@ -313,8 +330,8 @@ export default function Account() {
           </View>
         ) : (
           /* LOGGED IN USER INFO HEADER */
-          <View style={[styles.content, { backgroundColor: theme.cardBg, borderBottomColor: theme.divider }]}>
-            <Text style={[styles.userName, { color: theme.textPrimary }]}>Hey! {userName}</Text>
+          <View style={[styles.content, { backgroundColor: theme.cardBg, borderBottomColor: theme.divider, flexDirection: 'row', alignItems: 'center' }]}>
+
           </View>
         )}
 
@@ -635,12 +652,12 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: AllColors.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
   headerText: {
     color: '#fff',
-    fontSize: 26,
+    fontSize: 18,
     fontWeight: '700',
   },
 
@@ -693,7 +710,7 @@ const styles = StyleSheet.create({
     borderBottomColor: AllColors.divider,
   },
   userName: {
-    fontSize: 20,
+    fontSize: 17,
     color: AllColors.slateDark,
     fontWeight: '700',
   },

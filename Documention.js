@@ -179,47 +179,47 @@
 
 // ---
 
-// ### Update Profile
-// Update user profile information.
+//User Profile Update :
+// POST : {{base_url}}api/user/profile
+// authorization : bearer_token {seller_token}
 
-// **Endpoint:** `PUT /api/user/profile`
+// body :
+// name: User_A59bgo
+// //email: rajesh.kumar@example.com
+// mobile: 8240804149
+// //state: Odisha
+// //city: Cuttack
+// //zipCode: 753001
+// //address: 123 Main Road, Buxi Bazar
+// //landmark: Near City Hospital
+// //alternativePhone: 9861234567ma
+// logo : file
 
-// **Headers:**
-// ```
-// Authorization: Bearer {token}
-// ```
-
-// **Request Body:**
-// ```json
+// response:
 // {
-//   "name": "John Doe",
-//   "email": "john@example.com",
-//   "mobile": "9876543210",
-//   "state": "Karnataka",
-//   "city": "Bangalore",
-//   "zipCode": "560001",
-//   "address": "123 Main Street",
-//   "landmark": "Near Park",
-//   "alternativePhone": "9876543211",
-// "logo":'link'
+//     "status": 200,
+//     "message": "Profile updated successfully",
+//     "user": {
+//         "id": "82",
+//         "name": "User_A59bgo",
+//         "email": null,
+//         "mobile": "8240804149",
+//         "role": "user",
+//         "status": "active",
+//         "approval_status": "approved",
+//         "avatar": "https://deebazar.com/admin/images/uploads/logo/1789544914_6aaa49d299eb4.png",
+//         "store_name": null,
+//         "store_description": null,
+//         "state": null,
+//         "city": null,
+//         "zipCode": null,
+//         "address": null,
+//         "landmark": null,
+//         "alternativePhone": null,
+//         "joinedDate": "2026-08-21T13:23:00+05:30",
+//         "lastLoginAt": "2026-09-14T21:15:15+05:30"
+//     }
 // }
-// ```
-
-// **Response (200):**
-// ```json
-// {
-//   "status": 200,
-//   "message": "Profile updated successfully",
-//   "user": {
-//     "id": "123",
-//     "name": "John Doe",
-//     "email": "john@example.com",
-//     "mobile": "9876543210"
-//   }
-// }
-// ```
-
-// ---
 
 // ### Logout
 // Logout current user session.

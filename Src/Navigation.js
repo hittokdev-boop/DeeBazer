@@ -4,6 +4,7 @@ import FontAwesome6 from 'react-native-vector-icons/FontAwesome6';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import DashBoard from './Screen/app/ProductsDashboard/DashBoard';
 import Home from './Screen/app/ProductsDashboard/Home';
+import AllCategories from './Screen/app/ProductsDashboard/AllCategories';
 import Account from './Screen/app/AuthProfile/Account';
 import CartPage from './Screen/app/CartCheckout/CartPage';
 import AllColors from './Constants/Color';
@@ -95,6 +96,7 @@ const AppStack = () => {
       <Stack.Screen name="HelpCenter" component={HelpCenter} />
       <Stack.Screen name="OrderDetails" component={OrderDetails} />
       <Stack.Screen name="OrderSuccess" component={OrderSuccess} />
+      <Stack.Screen name="AllCategories" component={AllCategories} />
     </Stack.Navigator>
   )
 }
@@ -136,12 +138,12 @@ const AppTab = () => {
 
       <Tab.Screen
         name="Home"
-        component={Home}
+        component={AllCategories}
         options={{
           tabBarIcon: ({ color }) => (
-            <FontAwesome6
-              name="hand-holding-dollar"
-              size={22}
+            <Entypo
+              name="grid"
+              size={24}
               color={color}
             />
           ),

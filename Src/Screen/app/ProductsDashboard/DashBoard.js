@@ -175,8 +175,36 @@ export default function DashBoard() {
   const [banners, setBanners] = useState([]);
   const [bannersLoading, setBannersLoading] = useState(false);
   const [userName, setUserName] = useState('User');
+  const [userAvatar, setUserAvatar] = useState(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const skeletonOpacity = React.useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    AsyncStorage.getItem('USER_NAME').then(nm => {
+      if (nm) setUserName(nm);
+    }).catch(() => {});
+    AsyncStorage.getItem('USER_AVATAR').then(av => {
+      if (av) setUserAvatar(av);
+    }).catch(() => {});
+
+    const profileListener = DeviceEventEmitter.addListener('USER_PROFILE_UPDATED', (u) => {
+      if (u) {
+        if (u.name) {
+          setUserName(u.name);
+          AsyncStorage.setItem('USER_NAME', u.name).catch(() => {});
+        }
+        const avUrl = u.avatar || u.logo || u.image || u.profile_photo;
+        if (avUrl) {
+          setUserAvatar(avUrl);
+          AsyncStorage.setItem('USER_AVATAR', avUrl).catch(() => {});
+        }
+      }
+    });
+
+    return () => {
+      profileListener.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (isInitialLoading) {
@@ -1458,20 +1486,37 @@ export default function DashBoard() {
       try {
         const response = await fetch(`${BASE_URL}me`, {
           method: 'GET',
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
         });
         const data = await response.json();
         if (data.status === 200 && data.user) {
-          setUserName(data.user.name || 'User');
+          const name = data.user.name || 'User';
+          setUserName(name);
+          AsyncStorage.setItem('USER_NAME', name).catch(() => {});
+
+          const avUrl =
+            data.user.avatar ||
+            data.user.logo ||
+            data.user.image ||
+            data.user.profile_photo ||
+            null;
+
+          if (avUrl) {
+            setUserAvatar(avUrl);
+            AsyncStorage.setItem('USER_AVATAR', avUrl).catch(() => {});
+          }
         } else {
           setUserName('Guest');
         }
       } catch (error) {
         console.log('Profile fetch error:', error);
-        setUserName('Guest');
       }
     } else {
       setUserName('Guest');
+      setUserAvatar(null);
     }
   };
 
@@ -2129,9 +2174,13 @@ export default function DashBoard() {
             >
               <Image
                 source={{
-                  uri: 'https://www.vhv.rs/dpng/d/409-4090121_transparent-background-user-icon-hd-png-download.png',
+                  uri:
+                    userAvatar ||
+                    'https://www.vhv.rs/dpng/d/409-4090121_transparent-background-user-icon-hd-png-download.png',
                 }}
                 style={styles.logo}
+                resizeMode="cover"
+                onError={() => setUserAvatar(null)}
               />
               <View>
                 <Text style={[styles.logoText, { color: theme.textPrimary }]}>Hello, {userName} 👋</Text>
