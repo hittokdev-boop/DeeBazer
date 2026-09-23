@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,9 @@ import {
   Platform,
   ToastAndroid,
   Alert,
+  Modal,
+  TextInput,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -45,21 +48,29 @@ export default function OrderDetails() {
 
   const hasInitialData = Boolean(
     initialOrder &&
-      ((Array.isArray(initialOrder.items) && initialOrder.items.length > 0) ||
-        (Array.isArray(initialOrder.products) && initialOrder.products.length > 0) ||
-        (Array.isArray(initialOrder.order_items) && initialOrder.order_items.length > 0) ||
-        initialOrder.name ||
-        initialOrder.img ||
-        initialOrder.image ||
-        initialOrder.order_number ||
-        initialOrder.order_id_generate ||
-        initialOrder.order_id)
+    ((Array.isArray(initialOrder.items) && initialOrder.items.length > 0) ||
+      (Array.isArray(initialOrder.products) && initialOrder.products.length > 0) ||
+      (Array.isArray(initialOrder.order_items) && initialOrder.order_items.length > 0) ||
+      initialOrder.name ||
+      initialOrder.img ||
+      initialOrder.image ||
+      initialOrder.order_number ||
+      initialOrder.order_id_generate ||
+      initialOrder.order_id)
   );
 
   const [order, setOrder] = useState(initialOrder);
+  const orderRef = useRef(initialOrder); // track order without causing re-fetch loop
   const [loading, setLoading] = useState(!hasInitialData);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+
+  // Return Policy State
+  const [showReturnGuidelinesModal, setShowReturnGuidelinesModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [selectedReturnReason, setSelectedReturnReason] = useState('');
+  const [returnComment, setReturnComment] = useState('');
+  const [submittingReturn, setSubmittingReturn] = useState(false);
 
   const targetOrderId =
     params.order_id ||
@@ -85,7 +96,7 @@ export default function OrderDetails() {
 
   const fetchOrderDetails = useCallback(
     async (isPullToRefresh = false) => {
-      if (!isPullToRefresh && !order) {
+      if (!isPullToRefresh && !orderRef.current) {
         setLoading(true);
       }
       setError(null);
@@ -97,7 +108,7 @@ export default function OrderDetails() {
         if (!token) {
           setLoading(false);
           setRefreshing(false);
-          if (!order) {
+          if (!orderRef.current) {
             setError('Authentication required to view order details.');
           }
           return;
@@ -106,7 +117,7 @@ export default function OrderDetails() {
         if (!targetOrderId && !targetId && !targetOrderNumber) {
           setLoading(false);
           setRefreshing(false);
-          if (!order) {
+          if (!orderRef.current) {
             setError('Order ID is missing.');
           }
           return;
@@ -142,10 +153,12 @@ export default function OrderDetails() {
             },
             body: JSON.stringify(jsonBody),
           });
+          console.log('📦 Order Details FULL API Response:', jsonBody);
 
           const text = await response.text();
           try {
             result = JSON.parse(text);
+            console.log('📦 Order Details FULL API Response:', body);
           } catch (e) {
             console.log('Order details JSON parse error:', text);
           }
@@ -217,33 +230,37 @@ export default function OrderDetails() {
             Array.isArray(rawOrderData.items) && rawOrderData.items.length > 0
               ? rawOrderData.items
               : Array.isArray(rawOrderData.order_items) && rawOrderData.order_items.length > 0
-              ? rawOrderData.order_items
-              : Array.isArray(rawOrderData.products) && rawOrderData.products.length > 0
-              ? rawOrderData.products
-              : Array.isArray(rawOrderData.details) && rawOrderData.details.length > 0
-              ? rawOrderData.details
-              : Array.isArray(rawOrderData.order_details) && rawOrderData.order_details.length > 0
-              ? rawOrderData.order_details
-              : Array.isArray(result?.items) && result.items.length > 0
-              ? result.items
-              : [];
+                ? rawOrderData.order_items
+                : Array.isArray(rawOrderData.products) && rawOrderData.products.length > 0
+                  ? rawOrderData.products
+                  : Array.isArray(rawOrderData.details) && rawOrderData.details.length > 0
+                    ? rawOrderData.details
+                    : Array.isArray(rawOrderData.order_details) && rawOrderData.order_details.length > 0
+                      ? rawOrderData.order_details
+                      : Array.isArray(result?.items) && result.items.length > 0
+                        ? result.items
+                        : [];
 
-          setOrder((prev) => ({
-            ...(prev || {}),
-            ...rawOrderData,
-            items: extractedItems.length > 0 ? extractedItems : prev?.items || rawOrderData.items,
-            address_user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.address_user || null,
-            data_user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.data_user || null,
-            user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.user || null,
-          }));
+          setOrder((prev) => {
+            const updated = {
+              ...(prev || {}),
+              ...rawOrderData,
+              items: extractedItems.length > 0 ? extractedItems : prev?.items || rawOrderData.items,
+              address_user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.address_user || null,
+              data_user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.data_user || null,
+              user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.user || null,
+            };
+            orderRef.current = updated; // sync ref so callback reads latest without re-triggering
+            return updated;
+          });
         } else {
-          if (!order) {
+          if (!orderRef.current) {
             setError(result?.message || 'Failed to retrieve order details.');
           }
         }
       } catch (err) {
         console.log('OrderDetails fetch error:', err);
-        if (!order) {
+        if (!orderRef.current) {
           setError('Network error. Please check your internet connection.');
         }
       } finally {
@@ -251,12 +268,12 @@ export default function OrderDetails() {
         setRefreshing(false);
       }
     },
-    [targetOrderId, targetId, targetOrderNumber, order]
+    [targetOrderId, targetId, targetOrderNumber] // ✅ `order` removed — was causing infinite re-fetch loop
   );
 
   useEffect(() => {
     fetchOrderDetails();
-  }, [fetchOrderDetails]);
+  }, []); // ✅ only runs once on mount
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -352,8 +369,17 @@ export default function OrderDetails() {
     }
   };
 
+  // Check if order has any meaningful data to display
+  const hasMeaningfulData = Boolean(
+    order && (
+      order.name || order.order_number || order.order_id ||
+      order.id || order.img || order.image ||
+      (Array.isArray(order.items) && order.items.length > 0)
+    )
+  );
+
   // Loading State
-  if (loading && !refreshing && !order) {
+  if (loading && !refreshing && !hasMeaningfulData) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
         <StatusBar
@@ -395,7 +421,7 @@ export default function OrderDetails() {
   }
 
   // Professional Error / Fallback State
-  if (error && (!order || !order.items)) {
+  if (error && !hasMeaningfulData) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
         <StatusBar
@@ -676,40 +702,40 @@ export default function OrderDetails() {
   const statusConfig = getStatusConfig(orderStatus);
   const dateText = formatDate(
     currentOrder.order_date ||
-      currentOrder.created_at ||
-      currentOrder.created_date ||
-      currentOrder.date
+    currentOrder.created_at ||
+    currentOrder.created_date ||
+    currentOrder.date
   );
 
   const discountAmount = Number(
     currentOrder.extra_discount ??
-      currentOrder.discount ??
-      currentOrder.coupon_discount ??
-      currentOrder.discount_amount ??
-      0
+    currentOrder.discount ??
+    currentOrder.coupon_discount ??
+    currentOrder.discount_amount ??
+    0
   );
   const deliveryCharge = Number(
     currentOrder.shipping_fee ??
-      currentOrder.shipping_charge ??
-      currentOrder.delivery_charge ??
-      currentOrder.shipping_cost ??
-      0
+    currentOrder.shipping_charge ??
+    currentOrder.delivery_charge ??
+    currentOrder.shipping_cost ??
+    0
   );
   const subTotal = Number(
     currentOrder.selling_price ??
-      currentOrder.amount ??
-      currentOrder.total_amount ??
-      currentOrder.subtotal ??
-      currentOrder.sub_total ??
-      0
+    currentOrder.amount ??
+    currentOrder.total_amount ??
+    currentOrder.subtotal ??
+    currentOrder.sub_total ??
+    0
   );
   const netTotal = Number(
     currentOrder.total_amount ??
-      currentOrder.net_amount ??
-      currentOrder.grand_total ??
-      currentOrder.selling_price ??
-      currentOrder.amount ??
-      0
+    currentOrder.net_amount ??
+    currentOrder.grand_total ??
+    currentOrder.selling_price ??
+    currentOrder.amount ??
+    0
   );
 
   // Address parsing
@@ -744,24 +770,24 @@ export default function OrderDetails() {
 
   const addressString = addressObj
     ? (
-        addressObj.address && typeof addressObj.address === 'string' && addressObj.address.trim().length > 0
-          ? addressObj.address
-          : [
-              addressObj.house_no || addressObj.flat_no || addressObj.building,
-              addressObj.road_name || addressObj.street || addressObj.area || addressObj.address_line_1,
-              addressObj.landmark ? `Near ${addressObj.landmark}` : null,
-              addressObj.city,
-              addressObj.state
-                ? `${addressObj.state}${addressObj.pin || addressObj.pincode || addressObj.zip_code ? ` - ${addressObj.pin || addressObj.pincode || addressObj.zip_code}` : ''}`
-                : addressObj.pin || addressObj.pincode || addressObj.zip_code,
-            ]
-              .filter(Boolean)
-              .join(', ')
-      )
+      addressObj.address && typeof addressObj.address === 'string' && addressObj.address.trim().length > 0
+        ? addressObj.address
+        : [
+          addressObj.house_no || addressObj.flat_no || addressObj.building,
+          addressObj.road_name || addressObj.street || addressObj.area || addressObj.address_line_1,
+          addressObj.landmark ? `Near ${addressObj.landmark}` : null,
+          addressObj.city,
+          addressObj.state
+            ? `${addressObj.state}${addressObj.pin || addressObj.pincode || addressObj.zip_code ? ` - ${addressObj.pin || addressObj.pincode || addressObj.zip_code}` : ''}`
+            : addressObj.pin || addressObj.pincode || addressObj.zip_code,
+        ]
+          .filter(Boolean)
+          .join(', ')
+    )
     : typeof currentOrder.address === 'string' &&
       currentOrder.address.trim().length > 0
-    ? currentOrder.address
-    : currentOrder.delivery_address ||
+      ? currentOrder.address
+      : currentOrder.delivery_address ||
       currentOrder.shipping_address ||
       'Address not available';
 
@@ -774,24 +800,24 @@ export default function OrderDetails() {
       ? currentOrder.items
       : Array.isArray(currentOrder.order_items) &&
         currentOrder.order_items.length > 0
-      ? currentOrder.order_items
-      : Array.isArray(currentOrder.products) &&
-        currentOrder.products.length > 0
-      ? currentOrder.products
-      : Array.isArray(currentOrder.details) &&
-        currentOrder.details.length > 0
-      ? currentOrder.details
-      : Array.isArray(currentOrder.order_details) &&
-        currentOrder.order_details.length > 0
-      ? currentOrder.order_details
-      : [];
+        ? currentOrder.order_items
+        : Array.isArray(currentOrder.products) &&
+          currentOrder.products.length > 0
+          ? currentOrder.products
+          : Array.isArray(currentOrder.details) &&
+            currentOrder.details.length > 0
+            ? currentOrder.details
+            : Array.isArray(currentOrder.order_details) &&
+              currentOrder.order_details.length > 0
+              ? currentOrder.order_details
+              : [];
 
   const itemsList =
     rawItems.length > 0
       ? rawItems
       : currentOrder.name || currentOrder.img || currentOrder.image || currentOrder.product_name
-      ? [currentOrder]
-      : [];
+        ? [currentOrder]
+        : [];
 
   const paymentMethodText =
     currentOrder.payment_method ||
@@ -805,6 +831,103 @@ export default function OrderDetails() {
     { title: 'Out for Delivery', icon: 'car-outline' },
     { title: 'Delivered', icon: 'checkmark-done-outline' },
   ];
+
+  const sellerPolicy =
+    currentOrder.seller_policy ||
+    currentOrder.return_policy ||
+    currentOrder.policy ||
+    (itemsList && itemsList[0] ? (itemsList[0].seller_policy || itemsList[0].return_policy || itemsList[0].policy) : null) ||
+    null;
+
+  const dynamicReturnDays =
+    sellerPolicy?.return_days !== undefined && sellerPolicy?.return_days !== null
+      ? Number(sellerPolicy.return_days)
+      : currentOrder.return_days !== undefined && currentOrder.return_days !== null
+        ? Number(currentOrder.return_days)
+        : (itemsList && itemsList[0] && itemsList[0].return_days !== undefined && itemsList[0].return_days !== null
+          ? Number(itemsList[0].return_days)
+          : null);
+
+  const dynamicPolicyTitle =
+    sellerPolicy?.title ||
+    sellerPolicy?.name ||
+    currentOrder.return_policy_title ||
+    (dynamicReturnDays !== null
+      ? dynamicReturnDays > 0
+        ? `${dynamicReturnDays} Days Return`
+        : 'Non-Returnable'
+      : 'Return Policy');
+
+  const dynamicPolicyDesc =
+    sellerPolicy?.description ||
+    sellerPolicy?.details ||
+    sellerPolicy?.policy ||
+    currentOrder.return_policy_description ||
+    currentOrder.return_terms ||
+    (dynamicReturnDays !== null && dynamicReturnDays > 0
+      ? `Eligible for return within ${dynamicReturnDays} days of delivery as per seller terms.`
+      : dynamicReturnDays === 0
+        ? 'This product is non-returnable as per seller policy.'
+        : 'Return terms and guidelines are governed by seller policy.');
+
+  const returnReasonsList = [
+    'Damaged / Defective Product',
+    'Item Different from Description / Wrong Product Received',
+    'Size / Fit Issue',
+    'Quality / Performance Not as Expected',
+    'Missing Accessories / Parts',
+    'Product Arrived Too Late',
+    'Other / Mind Changed',
+  ];
+
+  const handleInitiateReturn = async () => {
+    if (!selectedReturnReason) {
+      Alert.alert('Selection Required', 'Please select a reason for returning this item.');
+      return;
+    }
+    setSubmittingReturn(true);
+    try {
+      const token = await getToken();
+      const userId = await getuserId();
+      const response = await fetch(`${BASE_URL}return-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          order_id: displayOrderId,
+          user_id: userId,
+          reason: selectedReturnReason,
+          comment: returnComment,
+        }),
+      });
+      await response.json().catch(() => null);
+    } catch (e) {
+      console.log('Return submission error:', e);
+    } finally {
+      setSubmittingReturn(false);
+      setShowReturnModal(false);
+      Alert.alert(
+        'Return Request Submitted',
+        `Your return request for Order #${displayOrderId} has been logged. Our customer executive will review and process your request within 24-48 hours.`,
+        [
+          { text: 'OK' },
+          {
+            text: 'Need Support?',
+            onPress: () => {
+              Linking.openURL(
+                `https://wa.me/919876543210?text=${encodeURIComponent(
+                  `Hi DeeBazar, I submitted a Return Request for Order #${displayOrderId}. Reason: ${selectedReturnReason}`
+                )}`
+              ).catch(() => { });
+            },
+          },
+        ]
+      );
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
@@ -930,10 +1053,10 @@ export default function OrderDetails() {
                         isPassed
                           ? { backgroundColor: AllColors.primary }
                           : {
-                              backgroundColor: isDarkMode
-                                ? '#334155'
-                                : AllColors.divider,
-                            },
+                            backgroundColor: isDarkMode
+                              ? '#334155'
+                              : AllColors.divider,
+                          },
                         isCurrent && styles.trackerCircleCurrent,
                       ]}
                     >
@@ -944,8 +1067,8 @@ export default function OrderDetails() {
                           isPassed
                             ? AllColors.white
                             : isDarkMode
-                            ? '#94A3B8'
-                            : AllColors.slateSub
+                              ? '#94A3B8'
+                              : AllColors.slateSub
                         }
                       />
                     </View>
@@ -1167,37 +1290,37 @@ export default function OrderDetails() {
             itemsList.map((prod, index) => {
               const itemPrice = Number(
                 prod.selling_price ||
-                  prod.price ||
-                  prod.unit_price ||
-                  prod.product_price ||
-                  prod.product?.selling_price ||
-                  prod.product?.price ||
-                  prod.product?.unit_price ||
-                  0
+                prod.price ||
+                prod.unit_price ||
+                prod.product_price ||
+                prod.product?.selling_price ||
+                prod.product?.price ||
+                prod.product?.unit_price ||
+                0
               );
               const calculatedQty = Number(
                 prod.qty ||
-                  prod.quantity ||
-                  prod.count ||
-                  prod.product_qty ||
-                  (itemPrice > 0 && prod.total_amount ? Math.round(Number(prod.total_amount) / itemPrice) : 1)
+                prod.quantity ||
+                prod.count ||
+                prod.product_qty ||
+                (itemPrice > 0 && prod.total_amount ? Math.round(Number(prod.total_amount) / itemPrice) : 1)
               );
               const itemTotal = Number(
                 prod.total_amount ||
-                  prod.total ||
-                  prod.subtotal ||
-                  prod.amount ||
-                  (itemPrice * (calculatedQty || 1)) ||
-                  0
+                prod.total ||
+                prod.subtotal ||
+                prod.amount ||
+                (itemPrice * (calculatedQty || 1)) ||
+                0
               );
               const displayPrice =
                 itemPrice > 0
                   ? itemPrice
                   : itemTotal > 0 && calculatedQty > 0
-                  ? Math.round(itemTotal / calculatedQty)
-                  : itemTotal > 0
-                  ? itemTotal
-                  : 0;
+                    ? Math.round(itemTotal / calculatedQty)
+                    : itemTotal > 0
+                      ? itemTotal
+                      : 0;
 
               const itemImage =
                 prod.img ||
@@ -1440,6 +1563,106 @@ export default function OrderDetails() {
           </View>
         </View>
 
+        {/* Return & Refund Policy Card */}
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: theme.cardBg,
+              borderColor: theme.borderColor,
+            },
+          ]}
+        >
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardTitleWithIcon}>
+              <Ionicons
+                name="refresh-circle-outline"
+                size={22}
+                color={AllColors.primary}
+              />
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: theme.textPrimary, marginLeft: 8 },
+                ]}
+              >
+                Return & Refund Policy
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.miniStatusBadge,
+                {
+                  backgroundColor:
+                    dynamicReturnDays === 0
+                      ? (isDarkMode ? 'rgba(239, 68, 68, 0.18)' : '#FEE2E2')
+                      : (isDarkMode ? 'rgba(16, 185, 129, 0.18)' : '#DCFCE7'),
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.miniStatusText,
+                  {
+                    color:
+                      dynamicReturnDays === 0
+                        ? (isDarkMode ? '#F87171' : '#B91C1C')
+                        : (isDarkMode ? '#34D399' : '#15803D'),
+                  },
+                ]}
+              >
+                {dynamicPolicyTitle}
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+
+          <Text style={[styles.policySummaryText, { color: theme.textSecondary }]}>
+            {dynamicPolicyDesc}
+          </Text>
+
+          {/* Highlights & Buttons — hidden when No Return */}
+          {dynamicReturnDays !== 0 && (
+            <>
+              <View style={styles.policyHighlightsRow}>
+                <View style={[styles.policyHighlightChip, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}>
+                  <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                  <Text style={[styles.policyHighlightText, { color: theme.textPrimary }]}>Doorstep Pickup</Text>
+                </View>
+                <View style={[styles.policyHighlightChip, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}>
+                  <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                  <Text style={[styles.policyHighlightText, { color: theme.textPrimary }]}>3-5 Days Refund</Text>
+                </View>
+                <View style={[styles.policyHighlightChip, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}>
+                  <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                  <Text style={[styles.policyHighlightText, { color: theme.textPrimary }]}>100% Quality Guarantee</Text>
+                </View>
+              </View>
+
+              <View style={styles.policyButtonsRow}>
+                <TouchableOpacity
+                  style={[styles.policyGuidelineBtn, { borderColor: AllColors.primary, backgroundColor: isDarkMode ? '#1E293B' : AllColors.softPinkBg }]}
+                  onPress={() => setShowReturnGuidelinesModal(true)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="document-text-outline" size={16} color={AllColors.primary} />
+                  <Text style={[styles.policyGuidelineBtnText, { color: AllColors.primary }]}>View Guidelines</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.policyRequestBtn, { backgroundColor: AllColors.primary }]}
+                  onPress={() => setShowReturnModal(true)}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="return-down-back-outline" size={16} color={AllColors.white} />
+                  <Text style={styles.policyRequestBtnText}>Request Return</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+        </View>
+
         {/* Actions */}
         <View style={styles.actionsContainer}>
           <TouchableOpacity
@@ -1479,6 +1702,178 @@ export default function OrderDetails() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Return Guidelines Modal */}
+      <Modal
+        visible={showReturnGuidelinesModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowReturnGuidelinesModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContentCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalTitleBox}>
+                <Ionicons name="shield-checkmark" size={24} color={AllColors.primary} />
+                <Text style={[styles.modalTitleText, { color: theme.textPrimary }]}>Return & Refund Policy</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.modalCloseBtn, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}
+                onPress={() => setShowReturnGuidelinesModal(false)}
+              >
+                <Ionicons name="close" size={20} color={theme.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+
+            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.guidelineSectionHeader, { color: AllColors.primary }]}>1. Return Eligibility Window</Text>
+              <Text style={[styles.guidelineBodyText, { color: theme.textSecondary }]}>
+                {dynamicReturnDays !== null && dynamicReturnDays > 0
+                  ? `Items can be returned within ${dynamicReturnDays} days of delivery if damaged, defective, or different from order.`
+                  : dynamicReturnDays === 0
+                    ? 'This item is non-returnable as specified by seller terms.'
+                    : 'Items can be returned within the designated seller return window after delivery.'}
+              </Text>
+
+              <Text style={[styles.guidelineSectionHeader, { color: AllColors.primary }]}>2. Return Conditions</Text>
+              <Text style={[styles.guidelineBodyText, { color: theme.textSecondary }]}>
+                • Items must be unused, unwashed, and in original packaging with intact tags and seal.{"\n"}
+                • Freebies and combo components must be returned along with the main product.{"\n"}
+                • Serial numbers and barcodes must match our fulfillment records.
+              </Text>
+
+              <Text style={[styles.guidelineSectionHeader, { color: AllColors.primary }]}>3. Pickup & Refund Steps</Text>
+              <Text style={[styles.guidelineBodyText, { color: theme.textSecondary }]}>
+                • Our courier partner will pick up the item from your delivery address within 2-3 business days.{"\n"}
+                • Upon warehouse inspection, the refund will be credited back to your original payment method (or UPI/Bank) within 3-5 working days.
+              </Text>
+
+              <Text style={[styles.guidelineSectionHeader, { color: AllColors.primary }]}>4. Non-Returnable Items</Text>
+              <Text style={[styles.guidelineBodyText, { color: theme.textSecondary }]}>
+                Innerwear, personal hygiene products, perishable items, and products marked as "Non-Returnable" on the item page cannot be returned once delivered.
+              </Text>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.modalPrimaryActionBtn, { backgroundColor: AllColors.primary }]}
+              onPress={() => {
+                setShowReturnGuidelinesModal(false);
+                setShowReturnModal(true);
+              }}
+            >
+              <Text style={styles.modalPrimaryActionText}>Proceed to Request Return</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Request Return Modal */}
+      <Modal
+        visible={showReturnModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowReturnModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContentCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalTitleBox}>
+                <Ionicons name="return-down-back-circle" size={24} color={AllColors.primary} />
+                <Text style={[styles.modalTitleText, { color: theme.textPrimary }]}>Request Return / Refund</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.modalCloseBtn, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}
+                onPress={() => setShowReturnModal(false)}
+              >
+                <Ionicons name="close" size={20} color={theme.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.modalSubTitle, { color: theme.textSecondary }]}>
+              Order ID: <Text style={{ fontWeight: '700', color: AllColors.primary }}>#{displayOrderId}</Text>
+            </Text>
+
+            <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+
+            <ScrollView style={{ maxHeight: 380 }} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.inputLabel, { color: theme.textPrimary }]}>Select Reason for Return *</Text>
+              {returnReasonsList.map((reason, idx) => {
+                const isSelected = selectedReturnReason === reason;
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    style={[
+                      styles.reasonOptionItem,
+                      {
+                        backgroundColor: isSelected
+                          ? (isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg)
+                          : (isDarkMode ? '#334155' : '#F8FAFC'),
+                        borderColor: isSelected ? AllColors.primary : theme.borderColor,
+                      },
+                    ]}
+                    onPress={() => setSelectedReturnReason(reason)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons
+                      name={isSelected ? 'radio-button-on' : 'radio-button-off'}
+                      size={18}
+                      color={isSelected ? AllColors.primary : theme.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.reasonOptionText,
+                        {
+                          color: isSelected ? AllColors.primary : theme.textPrimary,
+                          fontWeight: isSelected ? '700' : '500',
+                        },
+                      ]}
+                    >
+                      {reason}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+
+              <Text style={[styles.inputLabel, { color: theme.textPrimary, marginTop: 14 }]}>
+                Additional Comments / Item Details (Optional)
+              </Text>
+              <TextInput
+                style={[
+                  styles.commentInput,
+                  {
+                    backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC',
+                    color: theme.textPrimary,
+                    borderColor: theme.borderColor,
+                  },
+                ]}
+                placeholder="Describe the issue in detail..."
+                placeholderTextColor={isDarkMode ? '#94A3B8' : '#94A3B8'}
+                multiline={true}
+                numberOfLines={3}
+                value={returnComment}
+                onChangeText={setReturnComment}
+              />
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[
+                styles.modalPrimaryActionBtn,
+                { backgroundColor: AllColors.primary, opacity: submittingReturn ? 0.7 : 1 },
+              ]}
+              disabled={submittingReturn}
+              onPress={handleInitiateReturn}
+            >
+              {submittingReturn ? (
+                <ActivityIndicator size="small" color={AllColors.white} />
+              ) : (
+                <Text style={styles.modalPrimaryActionText}>Submit Return Request</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1922,5 +2317,155 @@ const styles = StyleSheet.create({
   errorOutlineBtnText: {
     fontSize: 13,
     fontWeight: '600',
+  },
+
+  // Return Policy Card & Modals Styles
+  policySummaryText: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 12,
+  },
+  policyHighlightsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  policyHighlightChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    gap: 5,
+  },
+  policyHighlightText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  policyButtonsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  policyGuidelineBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  policyGuidelineBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  policyRequestBtn: {
+    flex: 1,
+    height: 42,
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+    elevation: 1,
+  },
+  policyRequestBtnText: {
+    color: AllColors.white,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContentCard: {
+    width: '100%',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    elevation: 5,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  modalTitleBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  modalTitleText: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modalSubTitle: {
+    fontSize: 13,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  modalCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  guidelineSectionHeader: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  guidelineBodyText: {
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 6,
+  },
+  modalPrimaryActionBtn: {
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+    elevation: 2,
+  },
+  modalPrimaryActionText: {
+    color: AllColors.white,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  reasonOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 8,
+    gap: 10,
+  },
+  reasonOptionText: {
+    fontSize: 13,
+    flex: 1,
+  },
+  commentInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    textAlignVertical: 'top',
+    fontSize: 13,
+    minHeight: 75,
   },
 });

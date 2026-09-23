@@ -386,16 +386,20 @@ export default function Orders() {
               rawItemsList.length > 0
                 ? rawItemsList
                 : item.name || item.img || item.product_name
-                ? [item]
-                : [];
+                  ? [item]
+                  : [];
             const dateText = formatDate(item.created_at || item.created_date || item.order_date || item.date || item.createdAt);
+
+            const itemPolicy = item.seller_policy || item.return_policy || item.policy || (rawItemsList && rawItemsList[0] ? (rawItemsList[0].seller_policy || rawItemsList[0].return_policy || rawItemsList[0].policy) : null) || null;
+            const itemReturnDays = itemPolicy?.return_days !== undefined && itemPolicy?.return_days !== null ? Number(itemPolicy.return_days) : (item.return_days !== undefined && item.return_days !== null ? Number(item.return_days) : null);
+            const itemPolicyLabel = itemPolicy?.title || (itemReturnDays !== null ? (itemReturnDays > 0 ? `${itemReturnDays} Days Easy Return` : 'Non-Returnable Item') : 'Seller Return Policy Applicable');
 
             return (
               <TouchableOpacity
                 style={[styles.orderCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
                 onPress={() =>
                   navigation.navigate('OrderDetails', {
-                    order_id: item.id || item.order_id || item.order_number || item.order_id_generate,
+                    order_id: item.order_id,
                     id: item.id,
                     order_number: item.order_number,
                     order: item,
@@ -450,6 +454,13 @@ export default function Orders() {
                     </View>
                   </View>
                 )}
+
+                <View style={[styles.policyBannerRow, { backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC', borderColor: isDarkMode ? '#334155' : AllColors.divider }]}>
+                  <Ionicons name="refresh-circle-outline" size={16} color={itemReturnDays === 0 ? '#EF4444' : AllColors.primary} />
+                  <Text style={[styles.policyBannerText, { color: theme.textSecondary }]}>
+                    <Text style={{ fontWeight: '700', color: itemReturnDays === 0 ? (isDarkMode ? '#F87171' : '#DC2626') : AllColors.primary }}>{itemPolicyLabel}</Text>
+                  </Text>
+                </View>
 
                 <View style={[styles.cardDivider, { backgroundColor: isDarkMode ? '#334155' : AllColors.divider }]} />
 
@@ -765,6 +776,21 @@ const styles = StyleSheet.create({
   orderInfoWrapper: {
     flex: 1,
     marginLeft: 12,
+  },
+  policyBannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 8,
+    marginBottom: 4,
+    gap: 6,
+  },
+  policyBannerText: {
+    fontSize: 11,
+    flex: 1,
   },
   headerSpacer: {
     width: 40,

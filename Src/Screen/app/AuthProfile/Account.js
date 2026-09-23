@@ -127,6 +127,13 @@ export default function Account() {
     });
   };
 
+  const openReturnPolicy = () => {
+    Linking.openURL('https://deebazar.com/return-policy.php').catch(err => {
+      console.log("Couldn't load page", err);
+      handleNavigate('HelpCenter');
+    });
+  };
+
   const checkLogin = async () => {
     try {
       const token = await getToken();
@@ -513,6 +520,17 @@ export default function Account() {
             <View style={styles.rowLeft}>
               <MaterialCommunityIcons name="file-document-outline" size={22} color={theme.iconPrimary} />
               <Text style={[styles.rowText, { color: theme.textSecondary }]}>Terms & Conditions</Text>
+            </View>
+            <AntDesign name="right" size={18} color={theme.modalSubText} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.row, { borderBottomColor: theme.divider }]}
+            activeOpacity={0.7}
+            onPress={openReturnPolicy}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="refresh-circle-outline" size={22} color={theme.iconPrimary} />
+              <Text style={[styles.rowText, { color: theme.textSecondary }]}>Return & Refund Policy</Text>
             </View>
             <AntDesign name="right" size={18} color={theme.modalSubText} />
           </TouchableOpacity>

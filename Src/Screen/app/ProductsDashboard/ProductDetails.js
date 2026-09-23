@@ -545,6 +545,11 @@ export default function ProductDetails({ route }) {
 
   const reviewsCount = product?.reviews ?? product?.rating_count ?? product?.reviews_count ?? null;
   const sellerName = product?.seller_name || product?.seller?.name || product?.seller?.shop_name || null;
+  const sellerPolicy = product?.seller_policy || product?.return_policy || product?.policy || null;
+  const returnDays = sellerPolicy?.return_days !== undefined && sellerPolicy?.return_days !== null
+    ? Number(sellerPolicy.return_days)
+    : null;
+  console.log('🔁 sellerPolicy:', sellerPolicy, '| returnDays:', returnDays);
   const productImages = getProductImages();
 
   if (loading) {
@@ -845,6 +850,76 @@ export default function ProductDetails({ route }) {
             </Text>
           </View>
 
+          {/* Seller Return Policy Section */}
+          {sellerPolicy ? (
+            <View
+              style={[
+                styles.policyCard,
+                {
+                  backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC',
+                  borderColor: isDarkMode ? '#334155' : '#E2E8F0',
+                },
+              ]}
+            >
+              <View style={styles.policyHeader}>
+                <View style={styles.policyTitleRow}>
+                  <View
+                    style={[
+                      styles.policyIconBox,
+                      {
+                        backgroundColor: sellerPolicy?.return_days > 0 ? (isDarkMode ? '#064E3B' : '#DEF7EC') : (isDarkMode ? '#7F1D1D' : '#FDE8E8'),
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name={sellerPolicy?.return_days > 0 ? 'refresh-outline' : 'alert-circle-outline'}
+                      size={20}
+                      color={sellerPolicy?.return_days > 0 ? (isDarkMode ? '#34D399' : '#0E9F6E') : (isDarkMode ? '#FCA5A5' : '#E02424')}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.policyHeaderTitle, { color: theme.textPrimary }]}>
+                      Return Policy
+                    </Text>
+                    {sellerPolicy?.title ? (
+                      <Text style={[styles.policySubTitle, { color: sellerPolicy?.return_days > 0 ? '#10B981' : '#EF4444' }]}>
+                        {sellerPolicy.title}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+                {sellerPolicy?.return_days !== undefined && sellerPolicy?.return_days !== null && (
+                  <View
+                    style={[
+                      styles.policyBadge,
+                      {
+                        backgroundColor: sellerPolicy.return_days > 0 ? (isDarkMode ? '#075985' : '#E0F2FE') : (isDarkMode ? '#7F1D1D' : '#FEE2E2'),
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.policyBadgeText,
+                        {
+                          color: sellerPolicy.return_days > 0 ? (isDarkMode ? '#38BDF8' : '#0284C7') : (isDarkMode ? '#FCA5A5' : '#DC2626'),
+                        },
+                      ]}
+                    >
+                      {sellerPolicy.return_days > 0
+                        ? `${sellerPolicy.return_days} Days Return`
+                        : 'No Return'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              {sellerPolicy?.description ? (
+                <Text style={[styles.policyDescText, { color: theme.textSecondary }]}>
+                  {sellerPolicy.description}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
           {/* Highlight Features Row */}
           <View
             style={[
@@ -865,11 +940,18 @@ export default function ProductDetails({ route }) {
               <Feather name="truck" size={18} color={AllColors.primary} />
               <Text style={[styles.featureText, { color: theme.textPrimary }]}>Fast Delivery</Text>
             </View>
-            <View style={[styles.featureDivider, { backgroundColor: theme.divider }]} />
-            <View style={styles.featureItem}>
-              <Ionicons name="refresh-outline" size={18} color={AllColors.primary} />
-              <Text style={[styles.featureText, { color: theme.textPrimary }]}>Easy Return</Text>
-            </View>
+            {/* Show return chip only when return is allowed (returnDays > 0 or policy not set) */}
+            {returnDays !== 0 && (
+              <>
+                <View style={[styles.featureDivider, { backgroundColor: theme.divider }]} />
+                <View style={styles.featureItem}>
+                  <Ionicons name="refresh-outline" size={18} color={AllColors.primary} />
+                  <Text style={[styles.featureText, { color: theme.textPrimary }]}>
+                    {returnDays > 0 ? `${returnDays} Days Return` : 'Easy Return'}
+                  </Text>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -1217,6 +1299,56 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
     paddingHorizontal: 8,
     marginTop: 6,
+  },
+  /* Return Policy Card */
+  policyCard: {
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  policyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  policyTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 10,
+  },
+  policyIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  policyHeaderTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  policySubTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  policyBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginLeft: 8,
+  },
+  policyBadgeText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  policyDescText: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    marginTop: 8,
   },
   featureItem: {
     flexDirection: 'row',

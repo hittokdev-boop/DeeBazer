@@ -37,12 +37,6 @@ export default function EditProfileScreen() {
   const [mobile, setMobileState] = useState('');
   const [alternativePhone, setAlternativePhone] = useState('');
 
-  // Address Info
-  const [stateVal, setStateVal] = useState('');
-  const [city, setCity] = useState('');
-  const [zipCode, setZipCode] = useState('');
-  const [address, setAddress] = useState('');
-  const [landmark, setLandmark] = useState('');
 
   // Avatar & Image Picker
   const [profileImage, setProfileImage] = useState(DEFAULT_AVATAR);
@@ -82,11 +76,7 @@ export default function EditProfileScreen() {
         setAlternativePhone(
           u.alternativePhone || u.alternative_phone || u.alt_phone || ''
         );
-        setStateVal(u.state || '');
-        setCity(u.city || '');
-        setZipCode(u.zipCode || u.zip_code || '');
-        setAddress(u.address || '');
-        setLandmark(u.landmark || '');
+
 
         const avatarUrl =
           u.avatar || u.logo || u.image || u.profile_photo;
@@ -156,21 +146,7 @@ export default function EditProfileScreen() {
       if (alternativePhone.trim()) {
         formData.append('alternativePhone', alternativePhone.trim());
       }
-      if (stateVal.trim()) {
-        formData.append('state', stateVal.trim());
-      }
-      if (city.trim()) {
-        formData.append('city', city.trim());
-      }
-      if (zipCode.trim()) {
-        formData.append('zipCode', zipCode.trim());
-      }
-      if (address.trim()) {
-        formData.append('address', address.trim());
-      }
-      if (landmark.trim()) {
-        formData.append('landmark', landmark.trim());
-      }
+
 
       // Append image file if picked
       if (selectedImageFile && selectedImageFile.uri) {
@@ -519,182 +495,6 @@ export default function EditProfileScreen() {
             </View>
           </View>
 
-          {/* Section 3: Address Details */}
-          <View
-            style={[
-              styles.formCard,
-              {
-                backgroundColor: theme.cardBg,
-                borderColor: theme.borderColor,
-                borderWidth: isDarkMode ? 1 : 0,
-                marginTop: 16,
-              },
-            ]}
-          >
-            <Text style={[styles.sectionHeading, { color: theme.textPrimary }]}>
-              Address Information (Optional)
-            </Text>
-
-            {/* STATE & CITY ROW */}
-            <View style={styles.row}>
-              <View style={[styles.inputBox, { flex: 1, marginRight: 8 }]}>
-                <Text style={[styles.label, { color: theme.textPrimary }]}>
-                  State
-                </Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    {
-                      backgroundColor: isDarkMode
-                        ? '#334155'
-                        : AllColors.screenBg,
-                      borderColor: isDarkMode
-                        ? '#475569'
-                        : AllColors.lightGrey,
-                    },
-                  ]}
-                >
-                  <TextInput
-                    value={stateVal}
-                    onChangeText={setStateVal}
-                    placeholder="e.g. West Bengal"
-                    placeholderTextColor={
-                      isDarkMode ? '#94A3B8' : AllColors.slateLight
-                    }
-                    style={[styles.input, { color: theme.textPrimary }]}
-                  />
-                </View>
-              </View>
-
-              <View style={[styles.inputBox, { flex: 1, marginLeft: 8 }]}>
-                <Text style={[styles.label, { color: theme.textPrimary }]}>
-                  City
-                </Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    {
-                      backgroundColor: isDarkMode
-                        ? '#334155'
-                        : AllColors.screenBg,
-                      borderColor: isDarkMode
-                        ? '#475569'
-                        : AllColors.lightGrey,
-                    },
-                  ]}
-                >
-                  <TextInput
-                    value={city}
-                    onChangeText={setCity}
-                    placeholder="e.g. Kolkata"
-                    placeholderTextColor={
-                      isDarkMode ? '#94A3B8' : AllColors.slateLight
-                    }
-                    style={[styles.input, { color: theme.textPrimary }]}
-                  />
-                </View>
-              </View>
-            </View>
-
-            {/* ZIP CODE & LANDMARK ROW */}
-            <View style={styles.row}>
-              <View style={[styles.inputBox, { flex: 1, marginRight: 8 }]}>
-                <Text style={[styles.label, { color: theme.textPrimary }]}>
-                  Pin Code / Zip
-                </Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    {
-                      backgroundColor: isDarkMode
-                        ? '#334155'
-                        : AllColors.screenBg,
-                      borderColor: isDarkMode
-                        ? '#475569'
-                        : AllColors.lightGrey,
-                    },
-                  ]}
-                >
-                  <TextInput
-                    value={zipCode}
-                    onChangeText={setZipCode}
-                    placeholder="e.g. 700001"
-                    placeholderTextColor={
-                      isDarkMode ? '#94A3B8' : AllColors.slateLight
-                    }
-                    keyboardType="number-pad"
-                    style={[styles.input, { color: theme.textPrimary }]}
-                  />
-                </View>
-              </View>
-
-              <View style={[styles.inputBox, { flex: 1, marginLeft: 8 }]}>
-                <Text style={[styles.label, { color: theme.textPrimary }]}>
-                  Landmark
-                </Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    {
-                      backgroundColor: isDarkMode
-                        ? '#334155'
-                        : AllColors.screenBg,
-                      borderColor: isDarkMode
-                        ? '#475569'
-                        : AllColors.lightGrey,
-                    },
-                  ]}
-                >
-                  <TextInput
-                    value={landmark}
-                    onChangeText={setLandmark}
-                    placeholder="Near City Hospital"
-                    placeholderTextColor={
-                      isDarkMode ? '#94A3B8' : AllColors.slateLight
-                    }
-                    style={[styles.input, { color: theme.textPrimary }]}
-                  />
-                </View>
-              </View>
-            </View>
-
-            {/* STREET ADDRESS */}
-            <View style={styles.inputBox}>
-              <Text style={[styles.label, { color: theme.textPrimary }]}>
-                Street Address
-              </Text>
-              <View
-                style={[
-                  styles.inputWrapper,
-                  {
-                    backgroundColor: isDarkMode
-                      ? '#334155'
-                      : AllColors.screenBg,
-                    borderColor: isDarkMode
-                      ? '#475569'
-                      : AllColors.lightGrey,
-                    height: 52,
-                  },
-                ]}
-              >
-                <Ionicons
-                  name="location-outline"
-                  size={18}
-                  color={isDarkMode ? '#94A3B8' : AllColors.slateSub}
-                  style={styles.inputIcon}
-                />
-                <TextInput
-                  value={address}
-                  onChangeText={setAddress}
-                  placeholder="123 Main Road, Building / Flat No"
-                  placeholderTextColor={
-                    isDarkMode ? '#94A3B8' : AllColors.slateLight
-                  }
-                  style={[styles.input, { color: theme.textPrimary }]}
-                />
-              </View>
-            </View>
-          </View>
 
           {/* SAVE BUTTON */}
           <TouchableOpacity
