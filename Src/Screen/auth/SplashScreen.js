@@ -212,8 +212,6 @@ const SplashScreen = ({ navigation }) => {
     <Animated.View style={[styles.container, { opacity: screenOpacity }]}>
       <StatusBar
         barStyle="dark-content"
-        backgroundColor={AllColors.white}
-        translucent={false}
       />
 
       {/* Decorative Background Pulsing Circles */}

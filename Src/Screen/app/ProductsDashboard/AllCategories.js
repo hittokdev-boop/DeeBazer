@@ -191,7 +191,6 @@ export default function AllCategories() {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar
-        backgroundColor={theme.cardBg}
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
       />
 

@@ -383,7 +383,6 @@ export default function OrderDetails() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
         <StatusBar
-          backgroundColor={isDarkMode ? theme.cardBg : AllColors.white}
           barStyle={isDarkMode ? 'light-content' : 'dark-content'}
         />
         <View
@@ -425,7 +424,6 @@ export default function OrderDetails() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
         <StatusBar
-          backgroundColor={isDarkMode ? theme.cardBg : AllColors.white}
           barStyle={isDarkMode ? 'light-content' : 'dark-content'}
         />
         {/* Header */}
@@ -932,7 +930,6 @@ export default function OrderDetails() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar
-        backgroundColor={isDarkMode ? theme.cardBg : AllColors.white}
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
       />
 

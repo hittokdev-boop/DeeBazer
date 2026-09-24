@@ -199,7 +199,7 @@ export default function Wishlist() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
         <TouchableOpacity onPress={() => {
           if (navigation?.canGoBack && navigation.canGoBack()) {

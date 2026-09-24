@@ -559,7 +559,7 @@ export default function MapScreen() {
   if (hasLocationPermission === false) {
     return (
       <SafeAreaView style={[styles.mapContainer, { backgroundColor: theme.bg }]}>
-        <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <View style={[styles.topHeader, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
             <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
@@ -588,7 +588,7 @@ export default function MapScreen() {
   if (latitude === null || longitude === null) {
     return (
       <SafeAreaView style={[styles.mapContainer, { backgroundColor: theme.bg }]}>
-        <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <View style={[styles.topHeader, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
             <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
@@ -608,7 +608,7 @@ export default function MapScreen() {
 
   return (
     <SafeAreaView style={[styles.mapContainer, { backgroundColor: theme.bg }]}>
-      <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       {/* Header Bar */}
       <View style={[styles.topHeader, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>

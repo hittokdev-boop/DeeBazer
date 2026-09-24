@@ -76,8 +76,6 @@ export default function EditProfileScreen() {
         setAlternativePhone(
           u.alternativePhone || u.alternative_phone || u.alt_phone || ''
         );
-
-
         const avatarUrl =
           u.avatar || u.logo || u.image || u.profile_photo;
         if (avatarUrl) {
@@ -146,8 +144,6 @@ export default function EditProfileScreen() {
       if (alternativePhone.trim()) {
         formData.append('alternativePhone', alternativePhone.trim());
       }
-
-
       // Append image file if picked
       if (selectedImageFile && selectedImageFile.uri) {
         const fileUri =
@@ -236,7 +232,6 @@ export default function EditProfileScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar
-        backgroundColor={isDarkMode ? theme.cardBg : AllColors.white}
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
       />
 
@@ -494,7 +489,6 @@ export default function EditProfileScreen() {
               </View>
             </View>
           </View>
-
 
           {/* SAVE BUTTON */}
           <TouchableOpacity

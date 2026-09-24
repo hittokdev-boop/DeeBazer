@@ -253,7 +253,7 @@ export default function Orders() {
   if (!isLoggedIn) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-        <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
           <TouchableOpacity
             style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]}
@@ -288,7 +288,7 @@ export default function Orders() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar backgroundColor={isDarkMode ? theme.cardBg : AllColors.white} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
       {/* Top App Header */}
       <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>

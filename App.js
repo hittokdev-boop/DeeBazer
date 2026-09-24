@@ -7,6 +7,7 @@ import {
   getFcmToken,
   notificationListener,
 } from "./Src/Services/NotificationService";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 export default function App() {
   useEffect(() => {
@@ -30,10 +31,12 @@ export default function App() {
   }, []);
 
   return (
-    <ThemeProvider>
-      <Navigation />
-      <GlobalNotificationBanner />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <Navigation />
+        <GlobalNotificationBanner />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
-
+

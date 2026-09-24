@@ -224,7 +224,6 @@ export default function OrderSuccess() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar
-        backgroundColor={isDarkMode ? theme.cardBg : AllColors.white}
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
       />
 

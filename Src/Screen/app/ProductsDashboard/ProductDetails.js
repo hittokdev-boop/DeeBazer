@@ -556,7 +556,6 @@ export default function ProductDetails({ route }) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.bg }]}>
         <StatusBar
-          backgroundColor={isDarkMode ? theme.bg : '#fff'}
           barStyle={isDarkMode ? 'light-content' : 'dark-content'}
         />
         <ActivityIndicator size="large" color={AllColors.primary} />
@@ -569,7 +568,6 @@ export default function ProductDetails({ route }) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.bg }]}>
         <StatusBar
-          backgroundColor={isDarkMode ? theme.bg : '#fff'}
           barStyle={isDarkMode ? 'light-content' : 'dark-content'}
         />
         <Ionicons name="alert-circle-outline" size={60} color={AllColors.primary} />
@@ -610,7 +608,6 @@ export default function ProductDetails({ route }) {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar
-        backgroundColor={isDarkMode ? theme.cardBg : '#F4F5F9'}
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
       />
 
