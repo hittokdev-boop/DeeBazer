@@ -230,6 +230,116 @@ export const checkDifferentSeller = async (cartItems = [], targetProduct = null,
 */
 };
 
+const LOCAL_CART_DETAILS_KEY = 'LOCAL_CART_DETAILS_V2';
+let localCartUpdateQueue = Promise.resolve();
+
+export const getCartSkuId = (item) => {
+  if (!item || typeof item !== 'object') return null;
+  const skuId =
+    item.product_sku_id ??
+    item.sku_id ??
+    item.sku?.product_sku_id ??
+    item.sku?.id;
+  if (skuId === undefined || skuId === null) return null;
+  const normalizedSkuId = String(skuId).trim();
+  return normalizedSkuId || null;
+};
+
+export const getLocalCartDetails = async () => {
+  try {
+    const raw = await AsyncStorage.getItem(LOCAL_CART_DETAILS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+export const saveLocalCartDetails = async (items) => {
+  try {
+    await AsyncStorage.setItem(LOCAL_CART_DETAILS_KEY, JSON.stringify(items || []));
+  } catch (e) {}
+};
+
+export const updateLocalCartDetails = (updateItems) => {
+  const update = localCartUpdateQueue.then(async () => {
+    const currentItems = await getLocalCartDetails();
+    const nextItems = updateItems(Array.isArray(currentItems) ? currentItems : []);
+    await saveLocalCartDetails(nextItems);
+    return nextItems;
+  });
+  localCartUpdateQueue = update.then(() => undefined, () => undefined);
+  return update;
+};
+
+export const isCartItemMatching = (ci, cardItem) => {
+  if (!ci || !cardItem) return false;
+  const cardSellerSku = cardItem.seller_sku_id;
+  const ciSellerSku = ci.seller_sku_id;
+  if (cardSellerSku && ciSellerSku && String(cardSellerSku) !== String(ciSellerSku)) {
+    return false;
+  }
+  const cardSku = getCartSkuId(cardItem);
+  const ciSku = getCartSkuId(ci);
+  if (!cardSku || !ciSku || cardSku !== ciSku) return false;
+
+  const cardSeller = cardItem.seller_id ?? cardItem.sellerId ?? cardItem.vendor_id;
+  const ciSeller = ci.seller_id ?? ci.sellerId ?? ci.vendor_id;
+  const hasCardSeller = cardSeller !== undefined && cardSeller !== null && cardSeller !== '';
+  const hasCiSeller = ciSeller !== undefined && ciSeller !== null && ciSeller !== '';
+  if (hasCardSeller && hasCiSeller && String(cardSeller) !== String(ciSeller)) {
+    return false;
+  }
+  return true;
+};
+
+export const syncCartItemsWithServer = (serverItems = [], localItems = []) => {
+  if (!Array.isArray(serverItems) || serverItems.length === 0) {
+    return [];
+  }
+
+  const validLocal = Array.isArray(localItems) ? localItems : [];
+  const result = [];
+
+  serverItems.forEach(serverItem => {
+    const serverSku = getCartSkuId(serverItem);
+    const serverQty = Number(serverItem.qty) || 1;
+
+    const matches = serverSku
+      ? validLocal.filter(localItem => isCartItemMatching(localItem, serverItem))
+      : [];
+
+    if (matches.length === 0) {
+      result.push(serverItem);
+    } else if (matches.length === 1) {
+      result.push({
+        ...serverItem,
+        ...matches[0],
+        qty: serverQty,
+      });
+    } else {
+      // Multiple seller cards exist locally for this same product_sku_id
+      const totalLocalQty = matches.reduce((sum, m) => sum + (Number(m.qty) || 1), 0);
+      if (totalLocalQty === serverQty) {
+        matches.forEach(m => result.push({ ...serverItem, ...m }));
+      } else {
+        // Distribute or preserve local quantities
+        let remaining = serverQty;
+        matches.forEach((m, idx) => {
+          if (idx === matches.length - 1) {
+            result.push({ ...serverItem, ...m, qty: Math.max(1, remaining) });
+          } else {
+            const allocate = Math.min(Number(m.qty) || 1, Math.max(1, remaining - 1));
+            remaining -= allocate;
+            result.push({ ...serverItem, ...m, qty: allocate });
+          }
+        });
+      }
+    }
+  });
+
+  return result;
+};
+
 export default {
   extractSellerInfo,
   resolveSellerInfo,
@@ -237,4 +347,10 @@ export default {
   getActiveCartSeller,
   clearActiveCartSeller,
   checkDifferentSeller,
+  getLocalCartDetails,
+  saveLocalCartDetails,
+  updateLocalCartDetails,
+  getCartSkuId,
+  isCartItemMatching,
+  syncCartItemsWithServer,
 };

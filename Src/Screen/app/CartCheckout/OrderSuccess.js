@@ -14,6 +14,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
 import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
 import { clearActiveCartSeller } from '../../../Common/sellerUtils';
@@ -224,7 +225,9 @@ export default function OrderSuccess() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar
+        backgroundColor="transparent"
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        translucent={true}
       />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -350,7 +353,7 @@ const styles = StyleSheet.create({
   },
   successHeader: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: STATUSBAR_HEIGHT + 14,
     marginBottom: 24,
     paddingHorizontal: 16,
   },

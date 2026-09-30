@@ -24,8 +24,10 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
 import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
+import ProductReviewModal, { getStoredReviews } from './ProductReviewModal';
 
 export default function OrderDetails() {
   const navigation = useNavigation();
@@ -71,6 +73,36 @@ export default function OrderDetails() {
   const [selectedReturnReason, setSelectedReturnReason] = useState('');
   const [returnComment, setReturnComment] = useState('');
   const [submittingReturn, setSubmittingReturn] = useState(false);
+
+  // Review & Rating State
+  const [storedReviews, setStoredReviews] = useState({});
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [selectedReviewProduct, setSelectedReviewProduct] = useState(null);
+  const [selectedExistingReview, setSelectedExistingReview] = useState(null);
+
+  useEffect(() => {
+    getStoredReviews().then((revs) => {
+      if (revs && typeof revs === 'object') {
+        setStoredReviews(revs);
+      }
+    });
+  }, []);
+
+  const handleOpenReviewModal = (prod, existing) => {
+    setSelectedReviewProduct(prod);
+    setSelectedExistingReview(existing);
+    setReviewModalVisible(true);
+  };
+
+  const handleReviewSubmitted = (newReview) => {
+    const pId = newReview.product_id;
+    const oId = newReview.order_id;
+    const key = `${oId}_${pId}`;
+    setStoredReviews((prev) => ({
+      ...prev,
+      [key]: newReview,
+    }));
+  };
 
   const targetOrderId =
     params.order_id ||
@@ -135,35 +167,28 @@ export default function OrderDetails() {
 
         let result = null;
 
-        // 1. Primary Attempt: JSON POST
+        // 1. Primary Attempt: FormData POST with order_id
         try {
-          const jsonBody = {
-            order_id: parsedOrderId || parsedId,
-          };
-          if (parsedId && parsedId !== parsedOrderId) jsonBody.id = parsedId;
-          if (targetOrderNumber) jsonBody.order_number = targetOrderNumber;
-          if (userId) jsonBody.user_id = isNaN(userId) ? userId : Number(userId);
+          const formData = new FormData();
+          formData.append('order_id', String(parsedOrderId || parsedId));
 
           const response = await fetch(`${BASE_URL}order-details`, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
               Accept: 'application/json',
             },
-            body: JSON.stringify(jsonBody),
+            body: formData,
           });
-          console.log('📦 Order Details FULL API Response:', jsonBody);
 
           const text = await response.text();
           try {
             result = JSON.parse(text);
-            console.log('📦 Order Details FULL API Response:', body);
           } catch (e) {
-            console.log('Order details JSON parse error:', text);
+            console.log('Order details FormData parse error:', text);
           }
         } catch (e) {
-          console.log('Order details JSON fetch error:', e);
+          console.log('Order details FormData fetch error:', e);
         }
 
         let rawOrderData =
@@ -174,43 +199,45 @@ export default function OrderDetails() {
           result?.order_details ||
           (result?.id || result?.order_id || result?.order_number ? result : null);
 
-        // 2. Fallback Attempt: FormData POST if JSON failed
+        // 2. Fallback Attempt: JSON POST if FormData returned no order data
         if (!rawOrderData || typeof rawOrderData !== 'object') {
           try {
-            const formData = new FormData();
-            if (parsedOrderId) formData.append('order_id', String(parsedOrderId));
-            if (parsedId) formData.append('id', String(parsedId));
-            if (targetOrderNumber) formData.append('order_number', String(targetOrderNumber));
-            if (userId) formData.append('user_id', String(userId));
+            const jsonBody = {
+              order_id: parsedOrderId || parsedId,
+            };
+            if (parsedId && parsedId !== parsedOrderId) jsonBody.id = parsedId;
+            if (targetOrderNumber) jsonBody.order_number = targetOrderNumber;
+            if (userId) jsonBody.user_id = isNaN(userId) ? userId : Number(userId);
 
-            const response = await fetch(`${BASE_URL}order-details`, {
+            const jsonResponse = await fetch(`${BASE_URL}order-details`, {
               method: 'POST',
               headers: {
+                'Content-Type': 'application/json',
                 Authorization: `Bearer ${token}`,
                 Accept: 'application/json',
               },
-              body: formData,
+              body: JSON.stringify(jsonBody),
             });
 
-            const text = await response.text();
+            const jsonText = await jsonResponse.text();
             try {
-              const formResult = JSON.parse(text);
+              const jsonResult = JSON.parse(jsonText);
               rawOrderData =
-                formResult?.data_order ||
-                formResult?.data?.order ||
-                formResult?.data ||
-                formResult?.order ||
-                formResult?.order_details ||
-                (formResult?.id || formResult?.order_id ? formResult : null);
+                jsonResult?.data_order ||
+                jsonResult?.data?.order ||
+                jsonResult?.data ||
+                jsonResult?.order ||
+                jsonResult?.order_details ||
+                (jsonResult?.id || jsonResult?.order_id ? jsonResult : null);
 
-              if (formResult?.message && !rawOrderData) {
-                result = formResult;
+              if (rawOrderData) {
+                result = jsonResult;
               }
             } catch (e) {
-              console.log('Order details FormData parse error:', text);
+              console.log('Order details JSON parse error:', jsonText);
             }
           } catch (e) {
-            console.log('Order details FormData fetch error:', e);
+            console.log('Order details JSON fetch error:', e);
           }
         }
 
@@ -239,13 +266,15 @@ export default function OrderDetails() {
                       ? rawOrderData.order_details
                       : Array.isArray(result?.items) && result.items.length > 0
                         ? result.items
-                        : [];
+                        : (rawOrderData.name || rawOrderData.img || rawOrderData.image)
+                          ? [rawOrderData]
+                          : [];
 
           setOrder((prev) => {
             const updated = {
               ...(prev || {}),
               ...rawOrderData,
-              items: extractedItems.length > 0 ? extractedItems : prev?.items || rawOrderData.items,
+              items: extractedItems.length > 0 ? extractedItems : (prev?.items || (rawOrderData.name ? [rawOrderData] : [])),
               address_user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.address_user || null,
               data_user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.data_user || null,
               user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.user || null,
@@ -381,9 +410,11 @@ export default function OrderDetails() {
   // Loading State
   if (loading && !refreshing && !hasMeaningfulData) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      <SafeAreaView edges={[]} style={[styles.container, { backgroundColor: theme.bg }]}>
         <StatusBar
+          backgroundColor="transparent"
           barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          translucent={true}
         />
         <View
           style={[
@@ -422,9 +453,11 @@ export default function OrderDetails() {
   // Professional Error / Fallback State
   if (error && !hasMeaningfulData) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      <SafeAreaView edges={[]} style={[styles.container, { backgroundColor: theme.bg }]}>
         <StatusBar
+          backgroundColor="transparent"
           barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          translucent={true}
         />
         {/* Header */}
         <View
@@ -698,6 +731,12 @@ export default function OrderDetails() {
     'Pending';
 
   const statusConfig = getStatusConfig(orderStatus);
+  const sLower = String(orderStatus || '').toLowerCase().trim();
+  const isDelivered =
+    sLower.includes('delivered') ||
+    sLower.includes('completed') ||
+    sLower.includes('done') ||
+    sLower.includes('success');
   const dateText = formatDate(
     currentOrder.order_date ||
     currentOrder.created_at ||
@@ -928,9 +967,11 @@ export default function OrderDetails() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+    <SafeAreaView edges={[]} style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar
+        backgroundColor="transparent"
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        translucent={true}
       />
 
       {/* Header */}
@@ -1452,6 +1493,57 @@ export default function OrderDetails() {
                         </View>
                       ) : null}
                     </View>
+
+                    {/* Review Button for Delivered Item */}
+                    {isDelivered && (
+                      <View style={styles.itemReviewActionContainer}>
+                        {(() => {
+                          const prodId = prod.id || prod.product_id || prod.product?.id || 'general';
+                          const key = `${displayOrderId}_${prodId}`;
+                          const itemReview = storedReviews[key] || null;
+
+                          if (itemReview) {
+                            return (
+                              <TouchableOpacity
+                                style={[
+                                  styles.itemReviewedBadge,
+                                  {
+                                    backgroundColor: isDarkMode ? 'rgba(16, 185, 129, 0.15)' : '#DCFCE7',
+                                    borderColor: isDarkMode ? 'rgba(52, 211, 153, 0.3)' : '#BBF7D0',
+                                  },
+                                ]}
+                                onPress={() => handleOpenReviewModal(prod, itemReview)}
+                                activeOpacity={0.8}
+                              >
+                                <Ionicons name="star" size={13} color="#15803D" />
+                                <Text style={[styles.itemReviewedBadgeText, { color: isDarkMode ? '#34D399' : '#15803D' }]}>
+                                  Rated {itemReview.rating}★ (Tap to view/edit)
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          }
+
+                          return (
+                            <TouchableOpacity
+                              style={[
+                                styles.itemRateBtn,
+                                {
+                                  backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.12)' : AllColors.softPinkBg,
+                                  borderColor: AllColors.primary,
+                                },
+                              ]}
+                              onPress={() => handleOpenReviewModal(prod, null)}
+                              activeOpacity={0.8}
+                            >
+                              <Ionicons name="star-outline" size={13} color={AllColors.primary} />
+                              <Text style={[styles.itemRateBtnText, { color: AllColors.primary }]}>
+                                Rate & Review Product
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })()}
+                      </View>
+                    )}
                   </View>
                 </View>
               );
@@ -1472,6 +1564,99 @@ export default function OrderDetails() {
             </View>
           )}
         </View>
+
+        {/* Delivered Order Review Card */}
+        {isDelivered && (
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: theme.cardBg,
+                borderColor: theme.borderColor,
+              },
+            ]}
+          >
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.cardTitleWithIcon}>
+                <Ionicons
+                  name="star-half-outline"
+                  size={20}
+                  color="#F59E0B"
+                />
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    { color: theme.textPrimary, marginLeft: 8 },
+                  ]}
+                >
+                  Ratings & Reviews
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.miniStatusBadge,
+                  {
+                    backgroundColor: isDarkMode
+                      ? 'rgba(16, 185, 129, 0.18)'
+                      : '#DCFCE7',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.miniStatusText,
+                    {
+                      color: isDarkMode ? '#34D399' : '#15803D',
+                    },
+                  ]}
+                >
+                  Verified Delivery
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+
+            <Text
+              style={[
+                styles.policySummaryText,
+                { color: theme.textSecondary, marginBottom: 12 },
+              ]}
+            >
+              How was your experience? Rate product quality, upload real photos, and write your feedback to help fellow shoppers!
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.primaryBtn,
+                { backgroundColor: AllColors.primary, marginTop: 4 },
+              ]}
+              onPress={() => {
+                const targetProd = (itemsList && itemsList[0]) || {
+                  id: currentOrder.product_id || currentOrder.id || 'order',
+                  name: currentOrder.name || currentOrder.product_name || `Order #${displayOrderId}`,
+                  img: currentOrder.img || currentOrder.image,
+                };
+                const pId = targetProd.id || targetProd.product_id || 'general';
+                const key = `${displayOrderId}_${pId}`;
+                handleOpenReviewModal(targetProd, storedReviews[key] || null);
+              }}
+              activeOpacity={0.88}
+            >
+              <Ionicons
+                name="star"
+                size={18}
+                color={AllColors.white}
+                style={styles.btnIconLeft}
+              />
+              <Text style={styles.primaryBtnText}>
+                {Object.keys(storedReviews).some((k) => k.startsWith(`${displayOrderId}_`))
+                  ? 'View / Update Your Review'
+                  : 'Write a Review with Photos'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Price Breakdown Card */}
         <View
@@ -1871,6 +2056,16 @@ export default function OrderDetails() {
           </View>
         </View>
       </Modal>
+
+      {/* Product Review Modal */}
+      <ProductReviewModal
+        visible={reviewModalVisible}
+        onClose={() => setReviewModalVisible(false)}
+        product={selectedReviewProduct}
+        orderId={displayOrderId}
+        existingReview={selectedExistingReview}
+        onReviewSubmitted={handleReviewSubmitted}
+      />
     </SafeAreaView>
   );
 }
@@ -1880,7 +2075,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    height: 56,
+    height: 56 + STATUSBAR_HEIGHT,
+    paddingTop: STATUSBAR_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -2464,5 +2660,35 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     fontSize: 13,
     minHeight: 75,
+  },
+  itemReviewActionContainer: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  itemRateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 5,
+  },
+  itemRateBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  itemReviewedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 5,
+  },
+  itemReviewedBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

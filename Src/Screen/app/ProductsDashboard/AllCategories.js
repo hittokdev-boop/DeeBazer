@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import Entypo from 'react-native-vector-icons/Entypo';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AllColors from '../../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
 import { BASE_URL } from '../../../Api/Api';
 
@@ -191,7 +192,9 @@ export default function AllCategories() {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar
+        backgroundColor="transparent"
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        translucent={true}
       />
 
       {/* Top Header Bar */}
@@ -803,7 +806,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 14,
+    paddingTop: STATUSBAR_HEIGHT + 10,
     paddingBottom: 10,
     borderBottomWidth: 1,
   },

@@ -19,6 +19,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import OtpVerify from '@pushpendersingh/react-native-otp-verify';
 
 import AllColors from '../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../Constants/ScreenUtils';
 import CustomAlert from '../../Common/Alert';
 import { useTheme } from '../../Context/ThemeContext';
 import {
@@ -566,7 +567,7 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
     paddingHorizontal: 18,
-    paddingTop: Platform.OS === 'ios' ? 45 : 14,
+    paddingTop: Platform.OS === 'ios' ? 45 : STATUSBAR_HEIGHT + 14,
     paddingBottom: 30,
   },
   topBar: {

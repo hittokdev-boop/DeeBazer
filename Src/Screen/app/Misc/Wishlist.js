@@ -18,6 +18,7 @@ import {
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
 import AllColors from '../../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import LottieView from "lottie-react-native";
 import { useTheme } from '../../../Context/ThemeContext';
@@ -228,9 +229,12 @@ export default function Wishlist() {
       }
     }
 
+    const skuId = item?.product_sku_id ?? item?.sku_id ?? id;
     const formData = new FormData();
-    formData.append('user_id', userId);
-    formData.append('product_id', id);
+    formData.append('product_sku_id', skuId);
+    if (userId) {
+      formData.append('user_id', userId);
+    }
     formData.append('qty', 1);
 
     try {
@@ -296,7 +300,7 @@ export default function Wishlist() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} translucent={true} />
       <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
         <TouchableOpacity onPress={() => {
           if (navigation?.canGoBack && navigation.canGoBack()) {
@@ -373,6 +377,10 @@ export default function Wishlist() {
                 onPress={() =>
                   navigation.navigate('ProductDetails', {
                     id: item.id || item.product_id,
+                    sku_id: item.sku_id || item.product_sku_id || item.id,
+                    product_sku_id: item.product_sku_id || item.sku_id || item.id,
+                    seller_id: item.seller_id || item.sellerId || item.vendor_id || item.seller?.id || item.user_id,
+                    item,
                   })
                 }
                 style={styles.productRow}
@@ -505,7 +513,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingTop: STATUSBAR_HEIGHT + 10,
+    paddingBottom: 10,
     backgroundColor: AllColors.white,
     elevation: 3,
   },

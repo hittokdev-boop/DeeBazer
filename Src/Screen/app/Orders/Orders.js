@@ -20,7 +20,9 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { BASE_URL, getToken, getuserId, setuserId } from '../../../Api/Api';
 import AllColors from '../../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
+import ProductReviewModal, { getStoredReviews } from './ProductReviewModal';
 
 const TABS = ['All', 'Processing', 'Delivered', 'Cancelled'];
 
@@ -32,6 +34,13 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(true);
+
+  // Review Modal State
+  const [storedReviews, setStoredReviews] = useState({});
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [selectedReviewProduct, setSelectedReviewProduct] = useState(null);
+  const [selectedReviewOrderId, setSelectedReviewOrderId] = useState(null);
+  const [selectedExistingReview, setSelectedExistingReview] = useState(null);
 
   const extractOrdersArray = (result) => {
     if (!result) return [];
@@ -95,19 +104,13 @@ export default function Orders() {
       const parsedUserId = userId && !isNaN(userId) ? Number(userId) : userId;
       let orderListResult = null;
 
-      // 1. Primary Attempt: JSON POST
       try {
-        const jsonBody = {};
-        if (parsedUserId) jsonBody.user_id = parsedUserId;
-
         const response = await fetch(`${BASE_URL}order-list`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
             Accept: 'application/json',
           },
-          body: JSON.stringify(jsonBody),
         });
 
         const text = await response.text();
@@ -117,12 +120,12 @@ export default function Orders() {
           console.log('Order list JSON parse error:', text);
         }
       } catch (e) {
-        console.log('Order list JSON fetch error:', e);
+        console.log('Order list fetch error:', e);
       }
 
       let parsedOrders = extractOrdersArray(orderListResult);
 
-      // 2. Fallback Attempt: FormData POST if no orders found or status not successful
+      // Fallback: If empty, try with user_id parameter if available
       if (
         (!parsedOrders || parsedOrders.length === 0) &&
         (!orderListResult || (orderListResult.status !== 200 && orderListResult.status !== '200' && !orderListResult.success))
@@ -168,6 +171,11 @@ export default function Orders() {
   useFocusEffect(
     useCallback(() => {
       fetchOrders();
+      getStoredReviews().then((revs) => {
+        if (revs && typeof revs === 'object') {
+          setStoredReviews(revs);
+        }
+      });
     }, [])
   );
 
@@ -253,7 +261,7 @@ export default function Orders() {
   if (!isLoggedIn) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+        <StatusBar backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} translucent={true} />
         <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
           <TouchableOpacity
             style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]}
@@ -288,7 +296,7 @@ export default function Orders() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} translucent={true} />
 
       {/* Top App Header */}
       <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
@@ -471,6 +479,73 @@ export default function Orders() {
                   </View>
 
                   <View style={styles.customerActionRow}>
+                    {/* Quick Review Button for Delivered Orders */}
+                    {(() => {
+                      const sLower = String(statusVal || '').toLowerCase();
+                      const isDelivered =
+                        sLower.includes('delivered') ||
+                        sLower.includes('completed') ||
+                        sLower.includes('done') ||
+                        sLower.includes('success');
+
+                      if (!isDelivered) return null;
+
+                      const firstProd = (itemsList && itemsList[0]) || {
+                        id: item.product_id || item.id || 'order',
+                        name: item.name || item.product_name || `Order #${orderId}`,
+                        img: item.img || item.image,
+                      };
+                      const pId = firstProd.id || firstProd.product_id || 'general';
+                      const reviewKey = `${orderId}_${pId}`;
+                      const existingRev =
+                        storedReviews[reviewKey] ||
+                        Object.values(storedReviews).find((r) => String(r.order_id) === String(orderId)) ||
+                        null;
+                      const isReviewed = Boolean(existingRev);
+
+                      return (
+                        <TouchableOpacity
+                          style={[
+                            styles.reviewQuickBtn,
+                            {
+                              backgroundColor: isReviewed
+                                ? (isDarkMode ? 'rgba(16, 185, 129, 0.15)' : '#DCFCE7')
+                                : (isDarkMode ? 'rgba(247, 22, 112, 0.12)' : AllColors.softPinkBg),
+                              borderColor: isReviewed
+                                ? (isDarkMode ? 'rgba(52, 211, 153, 0.3)' : '#BBF7D0')
+                                : AllColors.primary,
+                            },
+                          ]}
+                          onPress={() => {
+                            setSelectedReviewProduct(firstProd);
+                            setSelectedReviewOrderId(orderId);
+                            setSelectedExistingReview(existingRev);
+                            setReviewModalVisible(true);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons
+                            name={isReviewed ? 'star' : 'star-outline'}
+                            size={12}
+                            color={isReviewed ? (isDarkMode ? '#34D399' : '#15803D') : AllColors.primary}
+                            style={styles.iconMarginRight}
+                          />
+                          <Text
+                            style={[
+                              styles.reviewQuickBtnText,
+                              {
+                                color: isReviewed
+                                  ? (isDarkMode ? '#34D399' : '#15803D')
+                                  : AllColors.primary,
+                              },
+                            ]}
+                          >
+                            {isReviewed ? `${existingRev.rating}★` : 'Review'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })()}
+
                     <TouchableOpacity
                       style={[styles.helpBtn, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}
                       onPress={() => navigation.navigate('HelpCenter')}
@@ -501,6 +576,19 @@ export default function Orders() {
           }}
         />
       )}
+
+      {/* Product Review Modal */}
+      <ProductReviewModal
+        visible={reviewModalVisible}
+        onClose={() => setReviewModalVisible(false)}
+        product={selectedReviewProduct}
+        orderId={selectedReviewOrderId}
+        existingReview={selectedExistingReview}
+        onReviewSubmitted={(newRev) => {
+          const key = `${newRev.order_id}_${newRev.product_id}`;
+          setStoredReviews((prev) => ({ ...prev, [key]: newRev }));
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -511,7 +599,8 @@ const styles = StyleSheet.create({
     backgroundColor: AllColors.screenBg,
   },
   header: {
-    height: 56,
+    height: 56 + STATUSBAR_HEIGHT,
+    paddingTop: STATUSBAR_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -794,5 +883,18 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 40,
+  },
+  reviewQuickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  reviewQuickBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

@@ -29,7 +29,7 @@ const getMessagingInstance = () => {
       return messaging;
     }
   } catch (e) {
-    console.log('⚠️ Firebase Messaging Instance Error:', e?.message || e);
+    // Silently handle error
   }
   return null;
 };
@@ -39,34 +39,30 @@ const getMessagingInstance = () => {
  */
 export const requestUserPermission = async () => {
   try {
-    console.log('📱 Requesting notification permissions...');
     if (Platform.OS === 'android') {
       if (Platform.Version >= 33) {
-        const granted = await PermissionsAndroid.request(
+        await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
         );
-        console.log('📱 Android POST_NOTIFICATIONS granted:', granted);
       }
     }
 
     const msg = getMessagingInstance();
     if (msg) {
       try {
-        let authStatus;
         if (typeof requestPermission === 'function') {
-          authStatus = await requestPermission(msg);
+          await requestPermission(msg);
         } else if (typeof msg.requestPermission === 'function') {
-          authStatus = await msg.requestPermission();
+          await msg.requestPermission();
         }
-        console.log('✅ FCM Permission Auth Status:', authStatus);
       } catch (permErr) {
-        console.log('⚠️ FCM requestPermission warning:', permErr?.message || permErr);
+        // Silently handle warning
       }
     }
 
     await getFcmToken();
   } catch (error) {
-    console.log('❌ Error requesting notification permission:', error);
+    // Silently handle error
   }
 };
 
@@ -75,7 +71,6 @@ export const requestUserPermission = async () => {
  */
 export const getFcmToken = async () => {
   try {
-    console.log('🔄 Attempting to fetch FCM Token...');
     let fcmToken = null;
     const msg = getMessagingInstance();
 
@@ -88,7 +83,7 @@ export const getFcmToken = async () => {
           fcmToken = await msg.getToken();
         }
       } catch (fcmErr) {
-        console.log('⚠️ Primary getToken attempt:', fcmErr?.message || fcmErr);
+        // Silently handle error
       }
     }
 
@@ -103,7 +98,7 @@ export const getFcmToken = async () => {
           fcmToken = await defaultMessaging.getToken();
         }
       } catch (fallbackErr) {
-        console.log('⚠️ Secondary getToken attempt:', fallbackErr?.message || fallbackErr);
+        // Silently handle error
       }
     }
 
@@ -114,17 +109,9 @@ export const getFcmToken = async () => {
 
     if (fcmToken) {
       await AsyncStorage.setItem(FCM_TOKEN_KEY, fcmToken);
-      console.log('\n╔════════════════════════════════════════════════════════════════╗');
-      console.log('║                   🔥 FCM DEVICE TOKEN 🔥                      ║');
-      console.log('╠════════════════════════════════════════════════════════════════╣');
-      console.log(fcmToken);
-      console.log('╚════════════════════════════════════════════════════════════════╝\n');
-    } else {
-      console.log('⚠️ Could not fetch FCM token (returned empty). Please check internet and Google Play Services.');
     }
     return fcmToken;
   } catch (error) {
-    console.log('❌ Error getting FCM token:', error);
     return null;
   }
 };
@@ -135,15 +122,12 @@ export const getFcmToken = async () => {
 export const handleNotificationRouting = (remoteMessage) => {
   if (!remoteMessage) return;
 
-  console.log('📲 Routing notification data:', remoteMessage.data);
   const data = remoteMessage?.data || {};
   const notificationId = data.id || data.notification_id || remoteMessage?.id;
 
   // Auto-mark notification as read on the server when clicked
   if (notificationId) {
-    markNotificationAsRead(notificationId).catch(err =>
-      console.log('Error auto-marking notification as read:', err)
-    );
+    markNotificationAsRead(notificationId).catch(() => { });
   }
 
   try {
@@ -169,7 +153,6 @@ export const handleNotificationRouting = (remoteMessage) => {
     } else if (data.type === 'cart') {
       navigate('CartPage');
     } else {
-      console.log('🔔 Opened general notification:', remoteMessage.notification?.title);
       // Navigate to main tab and signal opening notification drawer
       navigate('Profile');
       DeviceEventEmitter.emit('OPEN_NOTIFICATION_DRAWER', remoteMessage);
@@ -178,7 +161,7 @@ export const handleNotificationRouting = (remoteMessage) => {
     // Refresh notifications list in UI
     DeviceEventEmitter.emit('REFRESH_NOTIFICATIONS', remoteMessage);
   } catch (e) {
-    console.log('Error routing notification:', e);
+    // Silently handle error
   }
 };
 
@@ -195,12 +178,6 @@ export const notificationListener = (customOnOpened) => {
   try {
     // 1. BACKGROUND CLICK: Notification clicked when app is running in background
     const logBackgroundClick = (remoteMessage) => {
-      console.log('\n================================================');
-      console.log('🔔 [BACKGROUND CLICK] NOTIFICATION OPENED APP!');
-      console.log('📌 Title:', remoteMessage?.notification?.title);
-      console.log('📌 Body:', remoteMessage?.notification?.body);
-      console.log('📌 Data:', JSON.stringify(remoteMessage?.data || {}));
-      console.log('================================================\n');
       handleNotificationRouting(remoteMessage);
       if (customOnOpened && typeof customOnOpened === 'function') {
         customOnOpened(remoteMessage);
@@ -216,12 +193,6 @@ export const notificationListener = (customOnOpened) => {
     // 2. QUIT STATE CLICK: Notification clicked when app was completely closed
     const logQuitClick = (remoteMessage) => {
       if (remoteMessage) {
-        console.log('\n================================================');
-        console.log('🔔 [QUIT STATE CLICK] APP LAUNCHED VIA NOTIFICATION!');
-        console.log('📌 Title:', remoteMessage?.notification?.title);
-        console.log('📌 Body:', remoteMessage?.notification?.body);
-        console.log('📌 Data:', JSON.stringify(remoteMessage?.data || {}));
-        console.log('================================================\n');
         handleNotificationRouting(remoteMessage);
         if (customOnOpened && typeof customOnOpened === 'function') {
           customOnOpened(remoteMessage);
@@ -230,20 +201,13 @@ export const notificationListener = (customOnOpened) => {
     };
 
     if (msg && typeof getInitialNotification === 'function') {
-      getInitialNotification(msg).then(logQuitClick).catch(err => console.log('Error initial notification:', err));
+      getInitialNotification(msg).then(logQuitClick).catch(() => { });
     } else if (msg && typeof msg.getInitialNotification === 'function') {
-      msg.getInitialNotification().then(logQuitClick).catch(err => console.log('Error initial notification:', err));
+      msg.getInitialNotification().then(logQuitClick).catch(() => { });
     }
 
     // 3. FOREGROUND RECEIVE: Notification received while app is actively open
     const handleForegroundMessage = async (remoteMessage) => {
-      console.log('\n================================================');
-      console.log('🔔 [FOREGROUND RECEIVE] FCM MESSAGE RECEIVED!');
-      console.log('📌 Title:', remoteMessage?.notification?.title);
-      console.log('📌 Body:', remoteMessage?.notification?.body);
-      console.log('📌 Payload Data:', JSON.stringify(remoteMessage?.data || {}));
-      console.log('================================================\n');
-
       // Refresh unread count from API in background
       fetchUnreadNotificationCount().catch(() => { });
 
@@ -262,17 +226,15 @@ export const notificationListener = (customOnOpened) => {
     // 4. Token Refresh Listener
     if (msg && typeof onTokenRefresh === 'function') {
       unsubscribeTokenRefresh = onTokenRefresh(msg, async newToken => {
-        console.log('🔄 FCM Token Refreshed:', newToken);
         await AsyncStorage.setItem(FCM_TOKEN_KEY, newToken);
       });
     } else if (msg && typeof msg.onTokenRefresh === 'function') {
       unsubscribeTokenRefresh = msg.onTokenRefresh(async newToken => {
-        console.log('🔄 FCM Token Refreshed:', newToken);
         await AsyncStorage.setItem(FCM_TOKEN_KEY, newToken);
       });
     }
   } catch (e) {
-    console.log('Error setting notification listeners:', e);
+    // Silently handle error
   }
 
   // Return cleanup function

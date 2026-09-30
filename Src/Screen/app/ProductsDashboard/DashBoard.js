@@ -23,6 +23,7 @@ import {
   DeviceEventEmitter,
   NativeModules,
   Vibration,
+  StatusBar,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Voice from '@react-native-voice/voice';
@@ -39,6 +40,7 @@ import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import Feather from 'react-native-vector-icons/Feather';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import AllColors from '../../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 
 import CommonLoginModal from '../../auth/Login';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -50,6 +52,11 @@ import {
   saveActiveCartSeller,
   getActiveCartSeller,
   clearActiveCartSeller,
+  getCartSkuId,
+  isCartItemMatching,
+  saveLocalCartDetails,
+  updateLocalCartDetails,
+  syncCartItemsWithServer,
 } from '../../../Common/sellerUtils';
 
 // import Feather from 'react-native-vector-icons/Feather'
@@ -162,6 +169,7 @@ export default function DashBoard() {
   const [loading, setLoading] = useState(false);
   const [productLoading, setProductLoading] = useState(false);
   const [wishlistIds, setWishlistIds] = useState([]);
+  const [wishlistData, setWishlistData] = useState([]);
   const [cartQty, setCartQty] = useState({});
   const [cartItems, setCartItems] = useState([]);
   const [sellerModalVisible, setSellerModalVisible] = useState(false);
@@ -172,6 +180,7 @@ export default function DashBoard() {
     targetSellerId: null,
     targetProduct: null,
   });
+  const cartOperationLock = useRef({});
   const [banners, setBanners] = useState([]);
   const [bannersLoading, setBannersLoading] = useState(false);
   const [userName, setUserName] = useState('User');
@@ -182,21 +191,21 @@ export default function DashBoard() {
   useEffect(() => {
     AsyncStorage.getItem('USER_NAME').then(nm => {
       if (nm) setUserName(nm);
-    }).catch(() => {});
+    }).catch(() => { });
     AsyncStorage.getItem('USER_AVATAR').then(av => {
       if (av) setUserAvatar(av);
-    }).catch(() => {});
+    }).catch(() => { });
 
     const profileListener = DeviceEventEmitter.addListener('USER_PROFILE_UPDATED', (u) => {
       if (u) {
         if (u.name) {
           setUserName(u.name);
-          AsyncStorage.setItem('USER_NAME', u.name).catch(() => {});
+          AsyncStorage.setItem('USER_NAME', u.name).catch(() => { });
         }
         const avUrl = u.avatar || u.logo || u.image || u.profile_photo;
         if (avUrl) {
           setUserAvatar(avUrl);
-          AsyncStorage.setItem('USER_AVATAR', avUrl).catch(() => {});
+          AsyncStorage.setItem('USER_AVATAR', avUrl).catch(() => { });
         }
       }
     });
@@ -561,6 +570,8 @@ export default function DashBoard() {
     const options = {
       mediaType: 'photo',
       quality: 0.8,
+      maxWidth: 1600,
+      maxHeight: 1600,
       saveToPhotos: false,
     };
     launchCamera(options, (response) => {
@@ -582,6 +593,8 @@ export default function DashBoard() {
     const options = {
       mediaType: 'photo',
       quality: 0.8,
+      maxWidth: 1600,
+      maxHeight: 1600,
     };
     launchImageLibrary(options, (response) => {
       if (response.didCancel) return;
@@ -675,7 +688,7 @@ export default function DashBoard() {
         setUnreadCount(count);
       }
     } catch (e) {
-      console.log('Error fetching unread notification count:', e);
+      // Silently handle count error
     }
   }, []);
 
@@ -699,7 +712,7 @@ export default function DashBoard() {
         }
       }
     } catch (e) {
-      console.log('Error loading seller notifications:', e);
+      // Silently handle notifications loading error
     } finally {
       setIsNotificationsLoading(false);
     }
@@ -720,9 +733,7 @@ export default function DashBoard() {
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true, isRead: true })));
 
     // 2. Call backend API to mark all notifications as read
-    markAllNotificationsAsRead().catch(err => {
-      console.log('Error auto-marking all notifications as read on enter:', err);
-    });
+    markAllNotificationsAsRead().catch(() => { });
 
     // 3. Fetch fresh notifications from server with markAsRead = true
     loadNotifications(true, true);
@@ -785,7 +796,7 @@ export default function DashBoard() {
     try {
       await markAllNotificationsAsRead();
     } catch (e) {
-      console.log('Error in handleMarkAllRead:', e);
+      // Silently handle error
     }
   };
 
@@ -800,7 +811,7 @@ export default function DashBoard() {
 
     // Call API in background
     if (item.id) {
-      markNotificationAsRead(item.id).catch(() => {});
+      markNotificationAsRead(item.id).catch(() => { });
     }
 
     // Build raw routing message
@@ -822,8 +833,8 @@ export default function DashBoard() {
 
   useEffect(() => {
     // Purge any old mock/default notification history
-    AsyncStorage.removeItem('NOTIFICATION_HISTORY').catch(() => {});
-    AsyncStorage.removeItem('DELETED_NOTIFICATION_IDS').catch(() => {});
+    AsyncStorage.removeItem('NOTIFICATION_HISTORY').catch(() => { });
+    AsyncStorage.removeItem('DELETED_NOTIFICATION_IDS').catch(() => { });
 
     // Load live unread count and real seller notifications on mount
     loadUnreadCount();
@@ -940,7 +951,7 @@ export default function DashBoard() {
     ];
     const uniquePool = allPool.filter(
       (item, index, self) =>
-        item && item.id && index === self.findIndex((t) => String(t.id) === String(item.id))
+        item && (item.product_sku_id || item.id || item.product_id) && index === self.findIndex((t) => String(t.product_sku_id || t.id || t.product_id) === String(item.product_sku_id || item.id || item.product_id))
     );
 
     let sourceList = searchText.trim()
@@ -1156,7 +1167,29 @@ export default function DashBoard() {
   };
 
   getSearchTextRef.current = getSearchText;
-  const removeCart = async (id) => {
+
+  const isCartItemMatchingCard = (ci, cardItem) => {
+    return isCartItemMatching(ci, cardItem);
+  };
+
+  const resolveItemKeys = (itemOrId) => {
+    if (!itemOrId) return { skuId: null, sellerId: null, sellerSkuId: null, currentQty: 0 };
+    const isObj = typeof itemOrId === 'object' && itemOrId !== null;
+    const skuId = isObj ? getCartSkuId(itemOrId) : String(itemOrId);
+    const sellerId = isObj ? (itemOrId.seller_id ?? itemOrId.sellerId ?? itemOrId.vendor_id) : null;
+    const sellerSkuId = isObj ? itemOrId.seller_sku_id : null;
+
+    let foundInCart = null;
+    if (cartItems && cartItems.length > 0) {
+      foundInCart = cartItems.find(ci => isCartItemMatchingCard(ci, itemOrId));
+    }
+
+    const currentQty = foundInCart ? Number(foundInCart.qty) : getQtyForItem(itemOrId);
+
+    return { skuId, sellerId, sellerSkuId, currentQty: Number(currentQty) || 0 };
+  };
+
+  const removeCart = async (itemOrId) => {
     const token = await getToken();
     const userId = await getuserId();
     if (!token || !userId) {
@@ -1164,42 +1197,73 @@ export default function DashBoard() {
       return;
     }
 
+    const { skuId, sellerId, sellerSkuId } = resolveItemKeys(itemOrId);
+    const primaryId = skuId;
+    if (!primaryId) return;
+
     // Optimistically remove from cart
     setCartQty(prev => {
       const updated = { ...prev };
-      delete updated[id];
+      if (sellerSkuId) delete updated[String(sellerSkuId)];
+      if (sellerId && primaryId) delete updated[`${sellerId}_${primaryId}`];
+      if (!sellerSkuId && !sellerId && primaryId) delete updated[String(primaryId)];
       return updated;
     });
-    setCartItems(prev => prev.filter(ci => String(ci.product_id) !== String(id)));
 
-    const formData = new FormData();
-    formData.append("user_id", userId);
-    formData.append("product_id", id);
+    const currentItems = cartItems;
+    const remainingItems = currentItems.filter(ci => !isCartItemMatchingCard(ci, itemOrId));
+    setCartItems(remainingItems);
+    await saveLocalCartDetails(remainingItems);
+
+    // Calculate total backend quantity remaining for this product_sku_id across other sellers
+    const totalRemainingForSku = remainingItems
+      .filter(ci => getCartSkuId(ci) === String(primaryId))
+      .reduce((sum, ci) => sum + (Number(ci.qty) || 1), 0);
 
     try {
-      const response = await fetch(`${BASE_URL}cart-remove`, {
+      const removeFormData = new FormData();
+      removeFormData.append("product_sku_id", String(primaryId));
+      if (userId) {
+        removeFormData.append("user_id", String(userId));
+      }
+      await fetch(`${BASE_URL}cart-remove`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
         },
-        body: formData,
+        body: removeFormData,
       });
 
-      const data = await response.json();
+      if (totalRemainingForSku > 0) {
+        const formData = new FormData();
+        formData.append("product_sku_id", String(primaryId));
+        if (userId) {
+          formData.append("user_id", String(userId));
+        }
+        formData.append("qty", totalRemainingForSku);
 
-      if (data.status !== 200) {
-        // Revert on error
-        getCartItems();
-      } else {
-        getCartItems();
+        await fetch(`${BASE_URL}cart-to-add`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
+          body: formData,
+        });
       }
+
+      if (remainingItems.length === 0) {
+        await clearActiveCartSeller();
+      }
+      getCartItems();
     } catch (error) {
       console.log("Remove cart error:", error);
       getCartItems();
     }
   };
-  const increaseQty = async (id) => {
+
+  const increaseQty = async (itemOrId) => {
     const token = await getToken();
     const userId = await getuserId();
     if (!token || !userId) {
@@ -1207,21 +1271,33 @@ export default function DashBoard() {
       return;
     }
 
-    const qty = (cartQty[id] || 0) + 1;
+    const { skuId, sellerId, sellerSkuId, currentQty } = resolveItemKeys(itemOrId);
+    const primaryId = skuId;
+    if (!primaryId) return;
+
+    const nextQty = currentQty + 1;
 
     // Optimistically update
-    setCartQty(prev => ({
-      ...prev,
-      [id]: qty,
-    }));
-    setCartItems(prev =>
-      prev.map(ci => String(ci.product_id) === String(id) ? { ...ci, qty: qty } : ci)
-    );
+    setCartQty(prev => {
+      const updated = { ...prev };
+      if (sellerSkuId) updated[String(sellerSkuId)] = nextQty;
+      if (sellerId && primaryId) updated[`${sellerId}_${primaryId}`] = nextQty;
+      if (!sellerSkuId && !sellerId && primaryId) updated[String(primaryId)] = nextQty;
+      return updated;
+    });
+
+    const updated = cartItems.map(ci => isCartItemMatchingCard(ci, itemOrId) ? { ...ci, qty: nextQty } : ci);
+    setCartItems(updated);
+    await saveLocalCartDetails(updated);
 
     const formData = new FormData();
-    formData.append("user_id", userId);
-    formData.append("product_id", id);
-    formData.append("qty", qty);
+    formData.append("product_sku_id", String(primaryId));
+    if (sellerId) formData.append("seller_id", String(sellerId));
+    if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
+    if (userId) {
+      formData.append("user_id", String(userId));
+    }
+    formData.append("qty", 1);
 
     try {
       const response = await fetch(`${BASE_URL}cart-to-add`, {
@@ -1234,31 +1310,20 @@ export default function DashBoard() {
       });
 
       const data = await response.json();
+      const isSuccess = response.ok && (data?.status == 200 || data?.success || data?.status === '200');
 
-      if (data.status !== 200) {
-        // Revert
-        setCartQty(prev => ({
-          ...prev,
-          [id]: qty - 1,
-        }));
-        setCartItems(prev =>
-          prev.map(ci => String(ci.product_id) === String(id) ? { ...ci, qty: qty - 1 } : ci)
-        );
+      if (!isSuccess) {
+        getCartItems();
       } else {
         getCartItems();
       }
     } catch (error) {
       console.log("Increase qty error:", error);
-      setCartQty(prev => ({
-        ...prev,
-        [id]: qty - 1,
-      }));
-      setCartItems(prev =>
-        prev.map(ci => String(ci.product_id) === String(id) ? { ...ci, qty: qty - 1 } : ci)
-      );
+      getCartItems();
     }
   };
-  const decreaseQty = async (id) => {
+
+  const decreaseQty = async (itemOrId) => {
     const token = await getToken();
     const userId = await getuserId();
     if (!token || !userId) {
@@ -1266,107 +1331,191 @@ export default function DashBoard() {
       return;
     }
 
-    const qty = cartQty[id];
+    const { skuId, sellerId, sellerSkuId, currentQty } = resolveItemKeys(itemOrId);
+    const primaryId = skuId;
+    if (!primaryId) return;
 
-    if (qty <= 1) {
-      await removeCart(id);
+    if (currentQty <= 1) {
+      await removeCart(itemOrId);
       return;
     }
 
-    const newQty = qty - 1;
+    const nextQty = currentQty - 1;
 
     // Optimistically update
-    setCartQty(prev => ({
-      ...prev,
-      [id]: newQty,
-    }));
-    setCartItems(prev =>
-      prev.map(ci => String(ci.product_id) === String(id) ? { ...ci, qty: newQty } : ci)
-    );
+    setCartQty(prev => {
+      const updated = { ...prev };
+      if (sellerSkuId) updated[String(sellerSkuId)] = nextQty;
+      if (sellerId && primaryId) updated[`${sellerId}_${primaryId}`] = nextQty;
+      if (!sellerSkuId && !sellerId && primaryId) updated[String(primaryId)] = nextQty;
+      return updated;
+    });
 
-    const formData = new FormData();
-    formData.append("user_id", userId);
-    formData.append("product_id", id);
-    formData.append("qty", newQty);
+    const currentItems = cartItems;
+    const updatedItems = currentItems.map(ci =>
+      isCartItemMatchingCard(ci, itemOrId) ? { ...ci, qty: nextQty } : ci
+    );
+    setCartItems(updatedItems);
+    await saveLocalCartDetails(updatedItems);
+
+    const totalBackendQtyForSku = updatedItems
+      .filter(ci => getCartSkuId(ci) === String(primaryId))
+      .reduce((sum, ci) => sum + (Number(ci.qty) || 1), 0);
 
     try {
-      const response = await fetch(`${BASE_URL}cart-to-add`, {
+      const removeFormData = new FormData();
+      removeFormData.append("product_sku_id", String(primaryId));
+      if (userId) {
+        removeFormData.append("user_id", String(userId));
+      }
+      await fetch(`${BASE_URL}cart-remove`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
         },
-        body: formData,
+        body: removeFormData,
       });
 
-      const data = await response.json();
+      if (totalBackendQtyForSku > 0) {
+        const formData = new FormData();
+        formData.append("product_sku_id", String(primaryId));
+        if (userId) {
+          formData.append("user_id", String(userId));
+        }
+        formData.append("qty", totalBackendQtyForSku);
 
-      if (data.status !== 200) {
-        // Revert
-        setCartQty(prev => ({
-          ...prev,
-          [id]: qty,
-        }));
-        setCartItems(prev =>
-          prev.map(ci => String(ci.product_id) === String(id) ? { ...ci, qty: qty } : ci)
-        );
-      } else {
-        getCartItems();
+        await fetch(`${BASE_URL}cart-to-add`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+          },
+          body: formData,
+        });
       }
+
+      getCartItems();
     } catch (error) {
       console.log("Decrease qty error:", error);
-      setCartQty(prev => ({
-        ...prev,
-        [id]: qty,
-      }));
-      setCartItems(prev =>
-        prev.map(ci => String(ci.product_id) === String(id) ? { ...ci, qty: qty } : ci)
-      );
+      getCartItems();
     }
   };
+
   const isItemWishlisted = (item) => {
-    return wishlistIds.includes(String(item.id));
+    if (!item) return false;
+    const sellerSkuId = item?.seller_sku_id;
+    const sellerId = item?.seller_id ?? item?.sellerId ?? item?.vendor_id;
+    const skuId = getCartSkuId(item);
+
+    if (wishlistData && wishlistData.length > 0) {
+      return wishlistData.some((w) => {
+        const wSellerSku = w.seller_sku_id;
+        const wSeller = w.seller_id ?? w.sellerId ?? w.vendor_id;
+        const wSku = w.product_sku_id ?? w.sku_id ?? w.id;
+
+        if (sellerSkuId && wSellerSku) {
+          return String(sellerSkuId) === String(wSellerSku);
+        }
+        if (skuId && wSku && String(skuId) === String(wSku)) {
+          if (sellerId && wSeller) {
+            return String(sellerId) === String(wSeller);
+          }
+          if (sellerId && !wSeller) {
+            return false;
+          }
+          if (!sellerId && wSeller) {
+            return false;
+          }
+          return true;
+        }
+        return false;
+      });
+    }
+
+    if (sellerSkuId && wishlistIds.includes(String(sellerSkuId))) return true;
+    if (sellerId && skuId && wishlistIds.includes(`${sellerId}_${skuId}`)) return true;
+    if (!sellerId && !sellerSkuId && skuId && wishlistIds.includes(String(skuId))) return true;
+    return false;
   };
+
   const isOutOfStock = (item) => {
     if (!item) return false;
     if (item.in_stock === false || item.in_stock === 0 || item.in_stock === 'false') return true;
     if (item.stock_quantity !== undefined && item.stock_quantity !== null && Number(item.stock_quantity) <= 0) return true;
     return false;
   };
+
   const getQtyForItem = (item) => {
     if (!item) return 0;
-    const id = item?.id ?? item?.product_id;
-    return cartQty[id] || cartQty[String(id)] || cartQty[Number(id)] || 0;
+    const sellerSkuId = item?.seller_sku_id;
+    const sellerId = item?.seller_id ?? item?.sellerId ?? item?.vendor_id;
+    const skuId = getCartSkuId(item);
+
+    // Check directly in cartItems for precise seller match
+    if (cartItems && cartItems.length > 0) {
+      const match = cartItems.find((ci) => isCartItemMatchingCard(ci, item));
+      if (match) {
+        return Number(match.qty) || 1;
+      }
+      return 0;
+    }
+
+    if (sellerSkuId && (cartQty[sellerSkuId] || cartQty[String(sellerSkuId)])) {
+      return Number(cartQty[sellerSkuId] || cartQty[String(sellerSkuId)]);
+    }
+    if (sellerId && skuId && cartQty[`${sellerId}_${skuId}`]) {
+      return Number(cartQty[`${sellerId}_${skuId}`]);
+    }
+    if (!sellerId && !sellerSkuId && skuId && (cartQty[skuId] || cartQty[String(skuId)])) {
+      return Number(cartQty[skuId] || cartQty[String(skuId)]);
+    }
+    return 0;
   };
+
   const getWishlistItems = async () => {
     const token = await getToken();
     const userId = await getuserId();
 
     if (!token || !userId) {
       setWishlistIds([]);
+      setWishlistData([]);
       return;
     }
 
     try {
       const formData = new FormData();
-      formData.append('user_id', userId);
+      formData.append('user_id', String(userId));
 
       const response = await fetch(`${BASE_URL}wishlist-view`, {
         method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: formData,
       });
 
       const data = await response.json();
       const items = data?.data || data?.products || data?.wishlist || [];
-      const ids = items
-        .map((entry) => entry?.product_id ?? entry?.id ?? entry?.product?.id)
-        .filter(Boolean);
+      const validItems = Array.isArray(items) ? items : [];
+      setWishlistData(validItems);
+
+      const ids = [];
+      validItems.forEach((entry) => {
+        if (entry.seller_sku_id) ids.push(String(entry.seller_sku_id));
+        const sId = entry.seller_id ?? entry.sellerId ?? entry.vendor_id;
+        const pSkuId = entry.product_sku_id ?? entry.sku_id ?? entry.id;
+        if (sId && pSkuId) ids.push(`${sId}_${pSkuId}`);
+        if (!sId && !entry.seller_sku_id && pSkuId) ids.push(String(pSkuId));
+      });
 
       setWishlistIds(ids);
     } catch (error) {
       console.log('Wishlist fetch error:', error);
     }
   };
+
   const updateCartQty = async (productId, qty) => {
     const token = await getToken();
     const userId = await getuserId();
@@ -1375,10 +1524,30 @@ export default function DashBoard() {
       return;
     }
 
+    const targetItem = cartItems.find(ci => getCartSkuId(ci) === String(productId));
+    const skuId = targetItem ? getCartSkuId(targetItem) : String(productId ?? '').trim();
+    if (!skuId) return;
+
     const formData = new FormData();
-    formData.append("user_id", userId);
-    formData.append("product_id", productId);
+    formData.append("product_sku_id", String(skuId));
+    if (userId) {
+      formData.append("user_id", String(userId));
+    }
     formData.append("qty", qty);
+
+    const removeFormData = new FormData();
+    removeFormData.append("product_sku_id", String(skuId));
+    if (userId) {
+      removeFormData.append("user_id", String(userId));
+    }
+    await fetch(`${BASE_URL}cart-remove`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+      body: removeFormData,
+    });
 
     await fetch(`${BASE_URL}cart-to-add`, {
       method: "POST",
@@ -1389,6 +1558,7 @@ export default function DashBoard() {
       body: formData,
     });
   };
+
   const toggleWishlist = async (item) => {
     const token = await getToken();
     const userId = await getuserId();
@@ -1398,46 +1568,72 @@ export default function DashBoard() {
       return;
     }
 
-    const productId = item?.id ?? item?.product_id;
+    const sellerSkuId = item?.seller_sku_id;
+    const sellerId = item?.seller_id ?? item?.sellerId ?? item?.vendor_id;
+    const skuId = item?.product_sku_id ?? item?.sku_id ?? item?.id ?? item?.product_id;
     const isWishlisted = isItemWishlisted(item);
     const endpoint = isWishlisted ? 'wishlist-remove' : 'wishlist-add';
+
+    const cardWishlistKey = sellerSkuId
+      ? String(sellerSkuId)
+      : (sellerId && skuId ? `${sellerId}_${skuId}` : String(skuId));
 
     // Optimistically update
     setWishlistIds((prev) =>
       isWishlisted
-        ? prev.filter((id) => String(id) !== String(productId))
-        : [...prev, String(productId)]
+        ? prev.filter((id) => id !== cardWishlistKey)
+        : [...prev, cardWishlistKey]
+    );
+
+    setWishlistData((prev) =>
+      isWishlisted
+        ? prev.filter((w) => {
+          const wSellerSku = w.seller_sku_id;
+          const wSeller = w.seller_id ?? w.sellerId ?? w.vendor_id;
+          const wSku = w.product_sku_id ?? w.sku_id ?? w.id;
+          if (sellerSkuId && wSellerSku) return String(sellerSkuId) !== String(wSellerSku);
+          if (sellerId && wSeller && skuId && wSku) {
+            return !(String(sellerId) === String(wSeller) && String(skuId) === String(wSku));
+          }
+          return String(wSku) !== String(skuId);
+        })
+        : [...prev, { ...item, id: skuId, product_sku_id: skuId, seller_id: sellerId, seller_sku_id: sellerSkuId }]
     );
 
     const formData = new FormData();
-    formData.append('user_id', userId);
-    formData.append('product_id', productId);
+    formData.append('user_id', String(userId));
+    formData.append('product_sku_id', String(skuId));
+    if (sellerId) {
+      formData.append('seller_id', String(sellerId));
+    }
+    if (sellerSkuId) {
+      formData.append('seller_sku_id', String(sellerSkuId));
+    }
+    if (item?.product_id) {
+      formData.append('product_id', String(item.product_id));
+    }
 
     try {
       const response = await fetch(`${BASE_URL}${endpoint}`, {
         method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: formData,
       });
 
       const data = await response.json();
 
       if (!(data?.status === 200 || data?.success)) {
-        // Revert optimistic update on error
-        setWishlistIds((prev) =>
-          isWishlisted
-            ? [...prev, String(productId)]
-            : prev.filter((id) => String(id) !== String(productId))
-        );
+        getWishlistItems();
         Alert.alert('Error', data?.message || 'Wishlist action failed');
+      } else {
+        getWishlistItems();
       }
     } catch (error) {
       console.log('Wishlist toggle error:', error);
-      // Revert optimistic update on error
-      setWishlistIds((prev) =>
-        isWishlisted
-          ? [...prev, String(productId)]
-          : prev.filter((id) => String(id) !== String(productId))
-      );
+      getWishlistItems();
     }
   };
   // const gotoCart = async () => {
@@ -1495,7 +1691,7 @@ export default function DashBoard() {
         if (data.status === 200 && data.user) {
           const name = data.user.name || 'User';
           setUserName(name);
-          AsyncStorage.setItem('USER_NAME', name).catch(() => {});
+          AsyncStorage.setItem('USER_NAME', name).catch(() => { });
 
           const avUrl =
             data.user.avatar ||
@@ -1506,7 +1702,7 @@ export default function DashBoard() {
 
           if (avUrl) {
             setUserAvatar(avUrl);
-            AsyncStorage.setItem('USER_AVATAR', avUrl).catch(() => {});
+            AsyncStorage.setItem('USER_AVATAR', avUrl).catch(() => { });
           }
         } else {
           setUserName('Guest');
@@ -1615,8 +1811,13 @@ export default function DashBoard() {
   }, []);
 
   const gotoProductDetails = (item) => {
+    const skuId = getCartSkuId(item);
     Navigation.navigate('ProductDetails', {
-      id: item.id,
+      id: item.product_id ?? item.id,
+      product_sku_id: skuId,
+      sku_id: skuId,
+      seller_id: item.seller_id ?? item.sellerId ?? item.vendor_id ?? item.seller?.id ?? item.user_id,
+      item,
     });
   };
 
@@ -1702,54 +1903,66 @@ export default function DashBoard() {
     const selectedCategoryId = catId !== undefined ? catId : catagoriesId;
     const selectedSubId = subCatId !== undefined ? subCatId : selectedSubCategoryId;
 
+    const token = await getToken();
+    const headers = {
+      Accept: 'application/json',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
     const formData = new FormData();
     if (selectedCategoryId && selectedCategoryId !== 'all') {
       formData.append('category_id', selectedCategoryId);
-    } else {
-      formData.append('category_id', 'all');
     }
-    if (selectedSubId) {
+    if (selectedSubId && selectedSubId !== 'all') {
       formData.append('sub_category_id', selectedSubId);
     }
-    formData.append("per_page", 8);
+    formData.append("per_page", 12);
     formData.append("page", pageNum);
     try {
-      const response = await fetch(`${BASE_URL}product`, {
+      const response = await fetch(`${BASE_URL}sku`, {
         method: 'POST',
+        headers,
         body: formData,
       });
 
       const data = await response.json();
-
+      console.log(data, ' sku data')
       if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
-        setProduct(data.data);
+        setProduct(data.data.map((sku) => ({
+          ...sku,
+          product_sku_id: sku.product_sku_id ?? sku.sku_id ?? sku.id,
+        })));
         setProductPage(pageNum);
       } else if (pageNum > 1) {
         // If the next page is empty (reached the end), restart from page 1
         const fallbackFormData = new FormData();
         if (selectedCategoryId && selectedCategoryId !== 'all') {
           fallbackFormData.append('category_id', selectedCategoryId);
-        } else {
-          fallbackFormData.append('category_id', 'all');
         }
-        if (selectedSubId) {
+        if (selectedSubId && selectedSubId !== 'all') {
           fallbackFormData.append('sub_category_id', selectedSubId);
         }
-        fallbackFormData.append("per_page", 8);
+        fallbackFormData.append("per_page", 12);
         fallbackFormData.append("page", 1);
 
-        const fallbackResponse = await fetch(`${BASE_URL}product`, {
+        const fallbackResponse = await fetch(`${BASE_URL}sku`, {
           method: 'POST',
+          headers,
           body: fallbackFormData,
         });
         const fallbackData = await fallbackResponse.json();
         if (fallbackData?.data && Array.isArray(fallbackData.data)) {
-          setProduct(fallbackData.data);
+          setProduct(fallbackData.data.map((sku) => ({
+            ...sku,
+            product_sku_id: sku.product_sku_id ?? sku.sku_id ?? sku.id,
+          })));
         }
         setProductPage(1);
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error fetching sku list:', error);
     } finally {
       setProductLoading(false);
     }
@@ -1795,29 +2008,7 @@ export default function DashBoard() {
     // }
   }
   const getWishlistIds = async () => {
-    const userId = await getuserId();
-
-    if (!userId) return;
-
-    const formData = new FormData();
-    formData.append("user_id", userId);
-
-    try {
-      const response = await fetch(`${BASE_URL}wishlist-view`, {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      const ids = (data.data || []).map((item) =>
-        String(item.id)
-      );
-
-      setWishlistIds(ids);
-    } catch (e) {
-      // console.log(e);
-    }
+    return getWishlistItems();
   };
   const getDealOfTheDay = async () => {
     try {
@@ -1878,6 +2069,7 @@ export default function DashBoard() {
     if (!userId) {
       setCartItems([]);
       setCartQty({});
+      await saveLocalCartDetails([]);
       return;
     }
 
@@ -1898,99 +2090,112 @@ export default function DashBoard() {
       const result = await response.json();
       // console.log('Cart Items:', result);
       const itemsList = (result?.data && Array.isArray(result.data)) ? result.data : [];
-      setCartItems(itemsList);
+
+      if (itemsList.length === 0) {
+        setCartItems([]);
+        setCartQty({});
+        await saveLocalCartDetails([]);
+        await clearActiveCartSeller();
+        return;
+      }
+
+      const mergedItems = await updateLocalCartDetails((localItems) =>
+        syncCartItemsWithServer(itemsList, localItems)
+      );
+      setCartItems(mergedItems);
 
       let qtyObj = {};
-      itemsList.forEach(item => {
-        qtyObj[item.product_id] = Number(item.qty);
+      mergedItems.forEach(item => {
+        const qty = Number(item.qty) || 1;
+        const skuId = getCartSkuId(item);
+        const sSkuId = item.seller_sku_id;
+        const sId = item.seller_id;
+
+        if (sSkuId) {
+          qtyObj[String(sSkuId)] = qty;
+        }
+        if (sId && skuId) {
+          qtyObj[`${sId}_${skuId}`] = qty;
+        }
+        if (!sSkuId && !sId && skuId) {
+          qtyObj[String(skuId)] = qty;
+        }
       });
 
       setCartQty(qtyObj);
-
-      if (itemsList.length === 0) {
-        await clearActiveCartSeller();
-      } else {
-        await saveActiveCartSeller(itemsList[0]);
-      }
+      await saveActiveCartSeller(mergedItems[0]);
     } catch (e) {
       // console.log(e);
     }
   };
   const requestToCart = async (item) => {
-    const id = item?.id ?? item?.product_id;
-    if (!id) return;
+    const targetSku = getCartSkuId(item);
+
+    if (!targetSku) {
+      Alert.alert('Notice', 'Unable to add this item right now. Please view product details.');
+      return;
+    }
+
+    const sellerSkuId = item?.seller_sku_id;
+    const sellerId = item?.seller_id ?? item?.sellerId ?? item?.vendor_id;
+    const cardLockKey = sellerSkuId ? String(sellerSkuId) : (sellerId ? `${sellerId}_${targetSku}` : String(targetSku));
+
+    if (cartOperationLock.current[cardLockKey]) {
+      return;
+    }
+    cartOperationLock.current[cardLockKey] = true;
+
     const token = await getToken();
     const userId = await getuserId();
     if (!token || !userId) {
+      delete cartOperationLock.current[cardLockKey];
       Navigation.navigate('Login');
       return;
     }
 
-    // Single-seller policy check
-    let currentCart = cartItems;
-    if (!currentCart || currentCart.length === 0) {
-      try {
-        const formData = new FormData();
-        formData.append('user_id', userId);
-        const cartResp = await fetch(`${BASE_URL}cart-view`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-          },
-          body: formData,
-        });
-        const cartJson = await cartResp.json();
-        currentCart = (cartJson?.data && Array.isArray(cartJson.data)) ? cartJson.data : [];
-        setCartItems(currentCart);
-      } catch (e) {
-        console.log('Error refreshing cart in dashboard:', e);
-      }
-    }
+    const newCartItem = {
+      product_sku_id: targetSku,
+      sku_id: targetSku,
+      seller_id: sellerId,
+      seller_sku_id: sellerSkuId,
+      seller_name: item.seller_name || item.sellerName || '',
+      qty: 1,
+      name: item.name || '',
+      price: item.discount_price ?? item.price ?? item.actual_price ?? 0,
+      actual_price: item.actual_price ?? item.price ?? 0,
+      discount_price: item.discount_price ?? item.price ?? 0,
+      image: item.image || item.cat_image || '',
+    };
 
-    const cachedSeller = await getActiveCartSeller();
-    if (currentCart && currentCart.length > 0) {
-      const sellerCheck = await checkDifferentSeller(currentCart, item, cachedSeller);
-      if (sellerCheck.isDifferent) {
-        setSellerModalData({
-          cartSellerName: sellerCheck.cartSellerName,
-          cartSellerId: sellerCheck.cartSellerId,
-          targetSellerName: sellerCheck.targetSellerName,
-          targetSellerId: sellerCheck.targetSellerId,
-          targetProduct: item,
-        });
-        setSellerModalVisible(true);
-        return;
-      }
-    }
+    // Optimistically update quantity ONLY for this specific card
+    setCartQty(prev => {
+      const updated = { ...prev };
+      if (sellerSkuId) updated[String(sellerSkuId)] = 1;
+      if (sellerId && targetSku) updated[`${sellerId}_${targetSku}`] = 1;
+      if (!sellerSkuId && !sellerId) updated[String(targetSku)] = 1;
+      return updated;
+    });
 
-    // Optimistically update quantity
-    setCartQty(prev => ({
-      ...prev,
-      [id]: 1,
-    }));
-
-    // Optimistically update cart items preview
+    // Optimistically update cart items preview ONLY for this specific card
     setCartItems(prev => {
-      const exists = prev.some(ci => String(ci.product_id) === String(id));
+      const exists = prev.some(ci => isCartItemMatchingCard(ci, item));
       if (exists) {
-        return prev.map(ci => String(ci.product_id) === String(id) ? { ...ci, qty: 1 } : ci);
+        return prev.map(ci => isCartItemMatchingCard(ci, item) ? { ...ci, qty: 1 } : ci);
       } else {
-        const newCartItem = {
-          product_id: id,
-          qty: 1,
-          image: item.image || item.cat_image || '',
-        };
         return [...prev, newCartItem];
       }
     });
 
-    const formData = new FormData();
-    formData.append('user_id', userId);
-    formData.append('product_id', id);
-    formData.append('qty', 1);
-
     try {
+      const formData = new FormData();
+      formData.append('product_sku_id', String(targetSku));
+      if (sellerId) formData.append('seller_id', String(sellerId));
+      if (sellerSkuId) formData.append('seller_sku_id', String(sellerSkuId));
+      if (userId) {
+        formData.append('user_id', String(userId));
+      }
+      formData.append('qty', 1);
+
       const response = await fetch(`${BASE_URL}cart-to-add`, {
         method: 'POST',
         headers: {
@@ -2001,31 +2206,42 @@ export default function DashBoard() {
       });
 
       const data = await response.json();
-      console.log('data', formData);
+      console.log('cart-to-add data', data);
 
-      if (data.status != 200) {
+      const isSuccess = response.ok && (data?.status == 200 || data?.success || data?.status === '200');
+
+      if (!isSuccess) {
         // Revert optimistic updates
         setCartQty(prev => {
           const updated = { ...prev };
-          delete updated[id];
+          if (sellerSkuId) delete updated[String(sellerSkuId)];
+          if (sellerId && targetSku) delete updated[`${sellerId}_${targetSku}`];
+          if (!sellerSkuId && !sellerId) delete updated[String(targetSku)];
           return updated;
         });
-        setCartItems(prev => prev.filter(ci => String(ci.product_id) !== String(id)));
-        Alert.alert('Error', data.message || 'Something went wrong');
+        setCartItems(prev => prev.filter(ci => !isCartItemMatchingCard(ci, item)));
+        Alert.alert('Error', data?.message || 'Something went wrong');
       } else {
+        await updateLocalCartDetails((currentLocal) => [
+          ...currentLocal.filter(ci => !isCartItemMatchingCard(ci, item)),
+          newCartItem,
+        ]);
         await saveActiveCartSeller(item);
         // Background sync
-        getCartItems();
+        await getCartItems();
       }
     } catch (error) {
-      console.log('Error:', error);
-      // Revert optimistic updates
+      console.log('Error adding to cart:', error);
       setCartQty(prev => {
         const updated = { ...prev };
-        delete updated[id];
+        if (sellerSkuId) delete updated[String(sellerSkuId)];
+        if (sellerId && targetSku) delete updated[`${sellerId}_${targetSku}`];
+        if (!sellerSkuId && !sellerId) delete updated[String(targetSku)];
         return updated;
       });
-      setCartItems(prev => prev.filter(ci => String(ci.product_id) !== String(id)));
+      setCartItems(prev => prev.filter(ci => !isCartItemMatchingCard(ci, item)));
+    } finally {
+      delete cartOperationLock.current[cardLockKey];
     }
   };
   const IsUser = async (item) => {
@@ -2107,6 +2323,11 @@ export default function DashBoard() {
 
     return (
       <View style={[styles.skeletonContainer, { backgroundColor: theme.bg }]}>
+        <StatusBar
+          backgroundColor="transparent"
+          barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          translucent={true}
+        />
         {/* Header Skeleton */}
         <View style={[styles.skeletonHeader, { backgroundColor: theme.cardBg }]}>
           <View style={styles.flexRowGap12}>
@@ -2439,42 +2660,50 @@ export default function DashBoard() {
 
   const renderProductCard = ({ item }) => {
     return (
-      <TouchableOpacity
+      <View
         style={[styles.gridCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
-        onPress={() => gotoProductDetails(item)}
       >
-        <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
-          <Image
-            source={{ uri: item.image }}
-            style={styles.dealImage}
-          />
-          <TouchableOpacity
-            style={[
-              styles.wishlistButton,
-              {
-                backgroundColor: isDarkMode
-                  ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
-                  : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
-              },
-            ]}
-            onPress={() => toggleWishlist(item)}
-          >
-            <Ionicons
-              name={isItemWishlisted(item) ? "heart" : "heart-outline"}
-              size={18}
-              color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => gotoProductDetails(item)}
+        >
+          <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
+            <Image
+              source={{ uri: item.image }}
+              style={styles.dealImage}
             />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[
+                styles.wishlistButton,
+                {
+                  backgroundColor: isDarkMode
+                    ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
+                    : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
+                },
+              ]}
+              onPress={() => toggleWishlist(item)}
+            >
+              <Ionicons
+                name={isItemWishlisted(item) ? "heart" : "heart-outline"}
+                size={18}
+                color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
+              />
+            </TouchableOpacity>
+          </View>
 
-        <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
-          {item.name}
-        </Text>
+          <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
+            {item.name}
+          </Text>
 
-        <View style={styles.priceRow}>
-          <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.discount_price ?? item.price}</Text>
-          {item.actual_price ? <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.actual_price}</Text> : null}
-        </View>
+          {(item.discount_price !== undefined && item.discount_price !== null) || (item.price !== undefined && item.price !== null) || (item.actual_price !== undefined && item.actual_price !== null) ? (
+            <View style={styles.priceRow}>
+              <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.discount_price ?? item.price ?? item.actual_price}</Text>
+              {item.actual_price && (item.discount_price || item.price) && item.actual_price !== (item.discount_price ?? item.price) ? (
+                <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.actual_price}</Text>
+              ) : null}
+            </View>
+          ) : null}
+        </TouchableOpacity>
 
         <View style={styles.cardFooterRow}>
           <Text style={styles.offer}>
@@ -2489,7 +2718,8 @@ export default function DashBoard() {
               <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
                 <TouchableOpacity
                   style={styles.qtyBtn}
-                  onPress={() => decreaseQty(item.id ?? item.product_id)}>
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() => decreaseQty(item)}>
                   <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
                 </TouchableOpacity>
 
@@ -2497,7 +2727,8 @@ export default function DashBoard() {
 
                 <TouchableOpacity
                   style={styles.qtyBtn}
-                  onPress={() => increaseQty(item.id ?? item.product_id)}>
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() => increaseQty(item)}>
                   <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
                 </TouchableOpacity>
               </View>
@@ -2514,7 +2745,7 @@ export default function DashBoard() {
             )}
           </View>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -2537,42 +2768,45 @@ export default function DashBoard() {
               horizontal
               showsHorizontalScrollIndicator={false}
               data={dealOfTheDay.slice(0, 5)}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={(item, index) => String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${item.product_sku_id || item.sku_id || item.id}` : `${item.product_sku_id || item.id}_${index}`))}
+              extraData={{ cartItems, cartQty, wishlistIds, wishlistData }}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
               renderItem={({ item }) => (
-                <TouchableOpacity style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]} onPress={() => gotoProductDetails(item)}>
-                  <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
-                    <Image
-                      source={{ uri: item.image }}
-                      style={styles.dealImage}
-                    />
-                    <TouchableOpacity
-                      style={[
-                        styles.wishlistButton,
-                        {
-                          backgroundColor: isDarkMode
-                            ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
-                            : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
-                        },
-                      ]}
-                      onPress={() => toggleWishlist(item)}
-                    >
-                      <Ionicons
-                        name={isItemWishlisted(item) ? "heart" : "heart-outline"}
-                        size={16}
-                        color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
+                <View style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+                  <TouchableOpacity activeOpacity={0.9} onPress={() => gotoProductDetails(item)}>
+                    <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
+                      <Image
+                        source={{ uri: item.image }}
+                        style={styles.dealImage}
                       />
-                    </TouchableOpacity>
-                  </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.wishlistButton,
+                          {
+                            backgroundColor: isDarkMode
+                              ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
+                              : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
+                          },
+                        ]}
+                        onPress={() => toggleWishlist(item)}
+                      >
+                        <Ionicons
+                          name={isItemWishlisted(item) ? "heart" : "heart-outline"}
+                          size={16}
+                          color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
+                        />
+                      </TouchableOpacity>
+                    </View>
 
-                  <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
-                    {item.name}
-                  </Text>
+                    <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
+                      {item.name}
+                    </Text>
 
-                  <View style={styles.priceRow}>
-                    <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.originalPrice}</Text>
-                    <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.price}</Text>
-                  </View>
+                    <View style={styles.priceRow}>
+                      <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.originalPrice}</Text>
+                      <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.price}</Text>
+                    </View>
+                  </TouchableOpacity>
 
                   <View style={styles.cardFooterRow}>
                     <Text style={styles.offer}>
@@ -2583,19 +2817,21 @@ export default function DashBoard() {
                         <View style={styles.outOfStockBadge}>
                           <Text style={styles.outOfStockText}>Out of Stock</Text>
                         </View>
-                      ) : cartQty[item.id] ? (
+                      ) : getQtyForItem(item) > 0 ? (
                         <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => decreaseQty(item.id)}>
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            onPress={() => decreaseQty(item)}>
                             <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
                           </TouchableOpacity>
 
-                          <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{cartQty[item.id]}</Text>
+                          <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{getQtyForItem(item)}</Text>
 
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => increaseQty(item.id)}>
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            onPress={() => increaseQty(item)}>
                             <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
                           </TouchableOpacity>
                         </View>
@@ -2612,7 +2848,7 @@ export default function DashBoard() {
                       )}
                     </View>
                   </View>
-                </TouchableOpacity>
+                </View>
               )}
             />
           </>
@@ -2632,42 +2868,45 @@ export default function DashBoard() {
               horizontal
               showsHorizontalScrollIndicator={false}
               data={popularProduct.slice(0, 5)}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={(item, index) => String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${item.product_sku_id || item.sku_id || item.id}` : `${item.product_sku_id || item.id}_${index}`))}
+              extraData={{ cartItems, cartQty, wishlistIds, wishlistData }}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
               renderItem={({ item }) => (
-                <TouchableOpacity style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]} onPress={() => gotoProductDetails(item)}>
-                  <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
-                    <Image
-                      source={{ uri: item.image }}
-                      style={styles.dealImage}
-                    />
-                    <TouchableOpacity
-                      style={[
-                        styles.wishlistButton,
-                        {
-                          backgroundColor: isDarkMode
-                            ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
-                            : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
-                        },
-                      ]}
-                      onPress={() => toggleWishlist(item)}
-                    >
-                      <Ionicons
-                        name={isItemWishlisted(item) ? "heart" : "heart-outline"}
-                        size={16}
-                        color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
+                <View style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+                  <TouchableOpacity activeOpacity={0.9} onPress={() => gotoProductDetails(item)}>
+                    <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
+                      <Image
+                        source={{ uri: item.image }}
+                        style={styles.dealImage}
                       />
-                    </TouchableOpacity>
-                  </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.wishlistButton,
+                          {
+                            backgroundColor: isDarkMode
+                              ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
+                              : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
+                          },
+                        ]}
+                        onPress={() => toggleWishlist(item)}
+                      >
+                        <Ionicons
+                          name={isItemWishlisted(item) ? "heart" : "heart-outline"}
+                          size={16}
+                          color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
+                        />
+                      </TouchableOpacity>
+                    </View>
 
-                  <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
-                    {item.name}
-                  </Text>
+                    <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
+                      {item.name}
+                    </Text>
 
-                  <View style={styles.priceRow}>
-                    <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.price}</Text>
-                    <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.originalPrice}</Text>
-                  </View>
+                    <View style={styles.priceRow}>
+                      <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.price}</Text>
+                      <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.originalPrice}</Text>
+                    </View>
+                  </TouchableOpacity>
 
                   <View style={styles.cardFooterRow}>
                     <Text style={styles.offer}>
@@ -2682,7 +2921,8 @@ export default function DashBoard() {
                         <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => decreaseQty(item.id ?? item.product_id)}>
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            onPress={() => decreaseQty(item)}>
                             <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
                           </TouchableOpacity>
 
@@ -2690,7 +2930,8 @@ export default function DashBoard() {
 
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => increaseQty(item.id ?? item.product_id)}>
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            onPress={() => increaseQty(item)}>
                             <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
                           </TouchableOpacity>
                         </View>
@@ -2707,7 +2948,7 @@ export default function DashBoard() {
                       )}
                     </View>
                   </View>
-                </TouchableOpacity>
+                </View>
               )}
             />
           </>
@@ -2727,42 +2968,45 @@ export default function DashBoard() {
               horizontal
               showsHorizontalScrollIndicator={false}
               data={bestsellingProduct.slice(0, 5)}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={(item, index) => String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${item.product_sku_id || item.sku_id || item.id}` : `${item.product_sku_id || item.id}_${index}`))}
+              extraData={{ cartItems, cartQty, wishlistIds, wishlistData }}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
               renderItem={({ item }) => (
-                <TouchableOpacity style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]} onPress={() => gotoProductDetails(item)}>
-                  <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
-                    <Image
-                      source={{ uri: item.image }}
-                      style={styles.dealImage}
-                    />
-                    <TouchableOpacity
-                      style={[
-                        styles.wishlistButton,
-                        {
-                          backgroundColor: isDarkMode
-                            ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
-                            : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
-                        },
-                      ]}
-                      onPress={() => toggleWishlist(item)}
-                    >
-                      <Ionicons
-                        name={isItemWishlisted(item) ? "heart" : "heart-outline"}
-                        size={16}
-                        color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
+                <View style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+                  <TouchableOpacity activeOpacity={0.9} onPress={() => gotoProductDetails(item)}>
+                    <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
+                      <Image
+                        source={{ uri: item.image }}
+                        style={styles.dealImage}
                       />
-                    </TouchableOpacity>
-                  </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.wishlistButton,
+                          {
+                            backgroundColor: isDarkMode
+                              ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
+                              : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
+                          },
+                        ]}
+                        onPress={() => toggleWishlist(item)}
+                      >
+                        <Ionicons
+                          name={isItemWishlisted(item) ? "heart" : "heart-outline"}
+                          size={16}
+                          color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
+                        />
+                      </TouchableOpacity>
+                    </View>
 
-                  <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
-                    {item.name}
-                  </Text>
+                    <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
+                      {item.name}
+                    </Text>
 
-                  <View style={styles.priceRow}>
-                    <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.originalPrice}</Text>
-                    <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.price}</Text>
-                  </View>
+                    <View style={styles.priceRow}>
+                      <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.originalPrice}</Text>
+                      <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.price}</Text>
+                    </View>
+                  </TouchableOpacity>
 
                   <View style={styles.cardFooterRow}>
                     <Text style={styles.offer}>
@@ -2777,7 +3021,8 @@ export default function DashBoard() {
                         <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => decreaseQty(item.id ?? item.product_id)}>
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            onPress={() => decreaseQty(item)}>
                             <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
                           </TouchableOpacity>
 
@@ -2785,7 +3030,8 @@ export default function DashBoard() {
 
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => increaseQty(item.id ?? item.product_id)}>
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            onPress={() => increaseQty(item)}>
                             <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
                           </TouchableOpacity>
                         </View>
@@ -2802,7 +3048,7 @@ export default function DashBoard() {
                       )}
                     </View>
                   </View>
-                </TouchableOpacity>
+                </View>
               )}
             />
           </>
@@ -2822,42 +3068,45 @@ export default function DashBoard() {
               horizontal
               showsHorizontalScrollIndicator={false}
               data={featuredproducts.slice(0, 5)}
-              keyExtractor={(item) => item.id.toString()}
+              keyExtractor={(item, index) => String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${item.product_sku_id || item.sku_id || item.id}` : `${item.product_sku_id || item.id}_${index}`))}
+              extraData={{ cartItems, cartQty, wishlistIds, wishlistData }}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
               renderItem={({ item }) => (
-                <TouchableOpacity style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]} onPress={() => gotoProductDetails(item)}>
-                  <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
-                    <Image
-                      source={{ uri: item.image }}
-                      style={styles.dealImage}
-                    />
-                    <TouchableOpacity
-                      style={[
-                        styles.wishlistButton,
-                        {
-                          backgroundColor: isDarkMode
-                            ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
-                            : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
-                        },
-                      ]}
-                      onPress={() => toggleWishlist(item)}
-                    >
-                      <Ionicons
-                        name={isItemWishlisted(item) ? "heart" : "heart-outline"}
-                        size={16}
-                        color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
+                <View style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+                  <TouchableOpacity activeOpacity={0.9} onPress={() => gotoProductDetails(item)}>
+                    <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
+                      <Image
+                        source={{ uri: item.image }}
+                        style={styles.dealImage}
                       />
-                    </TouchableOpacity>
-                  </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.wishlistButton,
+                          {
+                            backgroundColor: isDarkMode
+                              ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
+                              : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
+                          },
+                        ]}
+                        onPress={() => toggleWishlist(item)}
+                      >
+                        <Ionicons
+                          name={isItemWishlisted(item) ? "heart" : "heart-outline"}
+                          size={16}
+                          color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
+                        />
+                      </TouchableOpacity>
+                    </View>
 
-                  <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
-                    {item.name}
-                  </Text>
+                    <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
+                      {item.name}
+                    </Text>
 
-                  <View style={styles.priceRow}>
-                    <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.originalPrice}</Text>
-                    <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.price}</Text>
-                  </View>
+                    <View style={styles.priceRow}>
+                      <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.originalPrice}</Text>
+                      <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.price}</Text>
+                    </View>
+                  </TouchableOpacity>
 
                   <View style={styles.cardFooterRow}>
                     <Text style={styles.offer}>
@@ -2872,7 +3121,8 @@ export default function DashBoard() {
                         <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => decreaseQty(item.id ?? item.product_id)}>
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            onPress={() => decreaseQty(item)}>
                             <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
                           </TouchableOpacity>
 
@@ -2880,7 +3130,8 @@ export default function DashBoard() {
 
                           <TouchableOpacity
                             style={styles.qtyBtn}
-                            onPress={() => increaseQty(item.id ?? item.product_id)}>
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            onPress={() => increaseQty(item)}>
                             <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
                           </TouchableOpacity>
                         </View>
@@ -2897,7 +3148,7 @@ export default function DashBoard() {
                       )}
                     </View>
                   </View>
-                </TouchableOpacity>
+                </View>
               )}
             />
           </>
@@ -2912,10 +3163,16 @@ export default function DashBoard() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar
+        backgroundColor="transparent"
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        translucent={true}
+      />
       <FlatList
         data={isFilterActive ? filteredProducts : (searchText.trim() ? searchProducts : product)}
         numColumns={2}
-        keyExtractor={(item) => String(item.id)}
+        keyExtractor={(item, index) => String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${item.product_sku_id || item.sku_id || item.id}` : `${item.product_sku_id || item.id}_${index}`))}
+        extraData={{ cartItems, cartQty, wishlistIds, wishlistData }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: cartItems.length > 0 ? 100 : 20 }}
         columnWrapperStyle={{
@@ -3247,7 +3504,7 @@ export default function DashBoard() {
                   <RefreshControl
                     refreshing={isNotificationsLoading}
                     onRefresh={() => {
-                      markAllNotificationsAsRead().catch(() => {});
+                      markAllNotificationsAsRead().catch(() => { });
                       loadNotifications(true, true);
                     }}
                     colors={[AllColors.primary]}
@@ -3790,7 +4047,7 @@ const styles = StyleSheet.create({
     backgroundColor: AllColors.screenBg,
   },
   topHeader: {
-    paddingTop: 16,
+    paddingTop: STATUSBAR_HEIGHT + 14,
     paddingBottom: 20,
     backgroundColor: AllColors.white,
     borderBottomLeftRadius: 24,
@@ -4117,8 +4374,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   qtyBtn: {
-    width: 22,
-    height: 22,
+    width: 26,
+    height: 32,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -4475,7 +4732,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: STATUSBAR_HEIGHT + 14,
     paddingBottom: 20,
     backgroundColor: '#FFFFFF',
   },

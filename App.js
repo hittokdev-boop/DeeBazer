@@ -1,7 +1,9 @@
 import React, { useEffect } from "react";
+import { StatusBar } from "react-native";
 import Navigation from "./Src/Navigation";
-import { ThemeProvider } from "./Src/Context/ThemeContext";
+import { ThemeProvider, useTheme } from "./Src/Context/ThemeContext";
 import GlobalNotificationBanner from "./Src/Common/GlobalNotificationBanner";
+import { GlobalAlertModal } from "./Src/Common/Alert";
 import {
   requestUserPermission,
   getFcmToken,
@@ -9,20 +11,34 @@ import {
 } from "./Src/Services/NotificationService";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+function AppContent() {
+  const { theme, isDarkMode } = useTheme();
+
+  return (
+    <>
+      <StatusBar
+        backgroundColor="transparent"
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        translucent={true}
+      />
+      <Navigation />
+      <GlobalNotificationBanner />
+      <GlobalAlertModal />
+    </>
+  );
+}
+
 export default function App() {
   useEffect(() => {
     // Request permission, fetch FCM token & setup FCM listeners
     const setupNotifications = async () => {
       await requestUserPermission();
-      const token = await getFcmToken();
-      if (token) {
-        console.log('📌 [App.js] Initial FCM Token ready:', token);
-      }
+      await getFcmToken();
     };
     setupNotifications();
 
     const unsubscribe = notificationListener(remoteMessage => {
-      console.log("App received notification click:", remoteMessage);
+      // Notification opened callback
     });
 
     return () => {
@@ -33,10 +49,8 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <Navigation />
-        <GlobalNotificationBanner />
+        <AppContent />
       </ThemeProvider>
     </SafeAreaProvider>
   );
 }
-

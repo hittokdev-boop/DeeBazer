@@ -1,15 +1,3 @@
-import React from "react";
-import { Text, TextInput } from "react-native";
+import SaveAddress from "./SaveAddress";
 
-export default function UpdateAddress(){
-    const getAllJSDocTags=(val)=>{
-        
-    }
-    return(
-        <View>
-            <Text>
-            <TextInput value="get mail" onChangeText={(val)=>getAllJSDocTags(val)}/>
-            </Text>
-        </View>
-    )
-}
+export default SaveAddress;

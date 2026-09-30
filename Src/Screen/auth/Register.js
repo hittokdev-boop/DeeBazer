@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AllColors from '../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../Constants/ScreenUtils';
 import CustomAlert from '../../Common/Alert';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { BASE_URL, setToken, getDeviceId, setuserId, setMobile as saveMobile, setPassword as saveApiPassword } from '../../Api/Api';
@@ -255,7 +256,7 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     paddingHorizontal: 22,
-    paddingTop: Platform.OS === 'ios' ? 45 : 16,
+    paddingTop: Platform.OS === 'ios' ? 45 : STATUSBAR_HEIGHT + 16,
     paddingBottom: 40,
     backgroundColor: AllColors.white,
   },

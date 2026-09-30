@@ -16,9 +16,10 @@ import AntDesign from "react-native-vector-icons/AntDesign";
 import Ionicons from "react-native-vector-icons/Ionicons";
 
 import AllColors from "../../../Constants/Color";
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
-import { BASE_URL } from "../../../Api/Api";
-import { extractSellerInfo } from '../../../Common/sellerUtils';
+import { BASE_URL, getToken } from "../../../Api/Api";
+import { extractSellerInfo, getCartSkuId } from '../../../Common/sellerUtils';
 
 export default function ViewAllProducts() {
   const route = useRoute();
@@ -83,13 +84,27 @@ export default function ViewAllProducts() {
       formData.append('per_page', 24);
       formData.append('page', pageNum);
 
-      const response = await fetch(`${BASE_URL}product`, {
+      const token = await getToken();
+      const headers = {
+        Accept: 'application/json',
+      };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${BASE_URL}sku`, {
         method: 'POST',
+        headers,
         body: formData,
       });
 
       const data = await response.json();
-      const allItems = (data?.data && Array.isArray(data.data)) ? data.data : [];
+      const allItems = (data?.data && Array.isArray(data.data))
+        ? data.data.map((sku) => ({
+            ...sku,
+            product_sku_id: sku.product_sku_id ?? sku.sku_id ?? sku.id,
+          }))
+        : [];
 
       let finalItems = allItems;
       if (sellerId || sellerName) {
@@ -134,8 +149,8 @@ export default function ViewAllProducts() {
 
       if (isLoadMore) {
         setProductList((prev) => {
-          const existingIds = new Set(prev.map((p) => String(p.id)));
-          const newItems = finalItems.filter((p) => !existingIds.has(String(p.id)));
+          const existingIds = new Set(prev.map((p) => String(p.product_sku_id ?? p.id ?? p.product_id)));
+          const newItems = finalItems.filter((p) => !existingIds.has(String(p.product_sku_id ?? p.id ?? p.product_id)));
           return [...prev, ...newItems];
         });
         setPage(pageNum);
@@ -207,14 +222,19 @@ export default function ViewAllProducts() {
   };
 
   const gotoDetails = (item) => {
+    const skuId = getCartSkuId(item);
     navigation.navigate("ProductDetails", {
-      id: item.id
+      id: item.product_id || item.id,
+      product_sku_id: skuId,
+      sku_id: skuId,
+      seller_id: item.seller_id || item.sellerId || item.vendor_id || item.seller?.id || item.user_id,
+      item,
     });
   };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} translucent={true} />
 
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
@@ -247,7 +267,7 @@ export default function ViewAllProducts() {
           numColumns={2}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
-          keyExtractor={(item, index) => item.id ? item.id.toString() : String(index)}
+          keyExtractor={(item, index) => String(item.product_sku_id ?? item.id ?? item.product_id ?? index)}
           contentContainerStyle={styles.listContent}
           columnWrapperStyle={styles.columnWrapper}
           showsVerticalScrollIndicator={false}
@@ -325,8 +345,8 @@ export default function ViewAllProducts() {
                   </Text>
 
                   <View style={styles.priceRow}>
-                    <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.price ?? item.discount_price}</Text>
-                    {item.originalPrice || item.actual_price ? (
+                    <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.discount_price ?? item.price ?? item.actual_price ?? '0'}</Text>
+                    {(item.originalPrice || item.actual_price) && (item.originalPrice ?? item.actual_price) !== (item.discount_price ?? item.price) ? (
                       <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.originalPrice ?? item.actual_price}</Text>
                     ) : null}
                   </View>
@@ -371,7 +391,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: STATUSBAR_HEIGHT + 10,
     paddingBottom: 12,
     backgroundColor: AllColors.white,
     borderBottomWidth: 1,

@@ -18,6 +18,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useNavigation } from '@react-navigation/native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import AllColors from '../../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
 
 const COUPONS_DATA = [
@@ -116,7 +117,7 @@ export default function Coupons() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} translucent={true} />
 
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
@@ -208,7 +209,8 @@ const styles = StyleSheet.create({
     backgroundColor: AllColors.screenBg,
   },
   header: {
-    height: 56,
+    height: 56 + STATUSBAR_HEIGHT,
+    paddingTop: STATUSBAR_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

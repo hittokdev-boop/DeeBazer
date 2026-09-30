@@ -8,11 +8,13 @@ import {
   StyleSheet,
   RefreshControl,
   ScrollView,
+  StatusBar,
 } from 'react-native';
 import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
 
 export default function AllAddress() {
@@ -23,27 +25,9 @@ export default function AllAddress() {
   const [menuId, setMenuId] = useState(null);
   const Navigation = useNavigation();
 
-  const confirmUpdate = (addressId) => {
-    Alert.alert(
-      'Update Address',
-      'Are you sure you want to update this location?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Yes',
-          style: 'destructive',
-          onPress: () => handleUpdatte(addressId),
-        },
-      ],
-      { cancelable: true }
-    );
-  };
-
-  const handleUpdatte = () => {
-    // Edit logic placeholder
+  const handleUpdate = (item) => {
+    setMenuId(null);
+    Navigation.navigate('SaveAddress', { addressData: item, isEdit: true });
   };
 
   const confirmDelete = (addressId) => {
@@ -291,6 +275,11 @@ export default function AllAddress() {
 
   return (
     <View style={[styles.screenContainer, { backgroundColor: theme.bg }]}>
+      <StatusBar
+        backgroundColor="transparent"
+        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        translucent={true}
+      />
       {/* Header */}
       <View style={styles.headerContainer}>
         <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>My Addresses</Text>
@@ -387,7 +376,7 @@ export default function AllAddress() {
                       <TouchableOpacity
                         style={styles.menuItem}
                         onPress={() => {
-                          setMenuId(null);
+                          handleUpdate(item);
                         }}>
                         <MaterialCommunityIcons
                           name="pencil-outline"
@@ -575,7 +564,9 @@ const styles = StyleSheet.create({
   },
   screenContainer: {
     flex: 1,
-    padding: 15,
+    paddingHorizontal: 15,
+    paddingTop: STATUSBAR_HEIGHT + 14,
+    paddingBottom: 15,
   },
   listContent: {
     paddingBottom: 20,

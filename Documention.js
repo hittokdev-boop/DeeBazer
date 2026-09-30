@@ -484,116 +484,201 @@
 
 // ---
 
-// ## Product APIs
+// ## Product SKU APIs
 
-// ### Get Products
-// Get products with optional filters and pagination.
+// ### Get Product SKU List
+// Get product SKU list with optional filters and pagination.
 
-// **Endpoint:** `POST /api/product`
+// **Endpoint:** `POST /api/sku`
+
+// **Headers:**
+// ```
+// Authorization: Bearer {token}
+// ```
 
 // **Request Body:**
-// ```json
-// {
-//   "category_id": "all",
-//   "sub_category_id": null,
-//   "child_category_id": null,
-//   "per_page": 12,
-//   "page": 1
-// }
+// ```
+// category_id: 1 (optional)
+// sub_category_id: 2 (optional)
+// child_category_id: 3 (optional)
+// product_id: 13 (optional)
+// sku_id: 8 (optional)
+// per_page: 12
+// page: 1
 // ```
 
 // **Response (200):**
 // ```json
 // {
-//   "status": 200,
-//   "message": "Product List",
-//   "title_category": "Electronics",
-//   "title_sub_category": "Mobiles",
-//   "title_child_category": "Smartphones",
-//   "data": [
-//     {
-//       "id": 1,
-//       "name": "iPhone 15",
-//       "actual_price": 79999,
-//       "discount_price": 69999,
-//       "short_desc": "Latest iPhone",
-//       "desc": "Product description",
-//       "category_id": 1,
-//       "category_name": "Electronics",
-//       "sub_category_id": 1,
-//       "sub_category_name": "Mobiles",
-//       "child_category_id": 1,
-//       "child_category_name": "Smartphones",
-//       "image": "https://example.com/products/iphone15.jpg",
-//       "stock_quantity": 50,
-//       "in_stock": true,
-//       "rating": 4.5,
-//       "reviews": 100,
-//       "seller_id": 1,
-//       "seller_name": "Apple Store"
-//     }
-//   ],
-//   "total": 100,
-//   "current_page": 1,
-//   "last_page": 9,
-//   "per_page": 12
+//     "status": 200,
+//     "message": "Product SKU List",
+//     "title_category": "Fashion",
+//     "title_sub_category": "",
+//     "title_child_category": "",
+//     "data": [
+//         {
+//             "product_sku_id": 8,
+//             "product_id": 13,
+//             "name": "Hand",
+//             "image": "https://deebazar.com/admin/images/uploads/skus/8/Gt4pvgBMjFW1P930Wta6_1790663632.jpg",
+//             "short_desc": "Ssjdndbjxxndnznznzn",
+//             "desc": "Xnxxnnxxndndndncn",
+//             "category_id": 2,
+//             "category_name": "Fashion",
+//             "sub_category_id": null,
+//             "sub_category_name": "",
+//             "child_category_id": null,
+//             "child_category_name": "",
+//             "reviews": null
+//         },
+//         {
+//             "product_sku_id": 6,
+//             "product_id": 12,
+//             "name": "Bisleri 1l",
+//             "image": "https://deebazar.com/admin/images/uploads/products/12/1D7et1FHsrma7REMfeMBqKuzVl4y9TDDLjvqxWw0.jpg",
+//             "short_desc": "Water bottle",
+//             "desc": "Water bottle",
+//             "category_id": 5,
+//             "category_name": "Sports & Outdoors",
+//             "sub_category_id": null,
+//             "sub_category_name": "",
+//             "child_category_id": null,
+//             "child_category_name": "",
+//             "reviews": null
+//         },
+//         {
+//             "product_sku_id": 4,
+//             "product_id": 10,
+//             "name": "Red",
+//             "image": "https://deebazar.com/admin/images/uploads/skus/4/sWr3LmRJ2lgIPaaK4YPn_1790598706.jpg",
+//             "short_desc": "Dhdhshansb",
+//             "desc": "Gdhhdjdjddb dhdhdbdfbdbdb hdhshdh",
+//             "category_id": 2,
+//             "category_name": "Fashion",
+//             "sub_category_id": null,
+//             "sub_category_name": "",
+//             "child_category_id": null,
+//             "child_category_name": "",
+//             "reviews": null
+//         },
+//         {
+//             "product_sku_id": 3,
+//             "product_id": 2,
+//             "name": "Red / XL",
+//             "image": "https://deebazar.com/admin/images/uploads/skus/3/5UnI6PsMT1hb3NMMlo07_1790583244.png",
+//             "short_desc": null,
+//             "desc": "hdgegfjsdfbjdbcvfdjsbfdjbfvdjmgd,mgjbfjgbfkjgnfknb cfkf ,mn,fdn,mgfn,m.,gnbh/,fn,.gm.",
+//             "category_id": 1,
+//             "category_name": "Electronics",
+//             "sub_category_id": null,
+//             "sub_category_name": "",
+//             "child_category_id": null,
+//             "child_category_name": "",
+//             "reviews": null
+//         },
+//         {
+//             "product_sku_id": 1,
+//             "product_id": 1,
+//             "name": "TestSKU",
+//             "image": "https://deebazar.com/admin/images/uploads/skus/1/gBlfgTuQbJqz2CoitmFH_1790576872.png",
+//             "short_desc": "D",
+//             "desc": "ertf4efcghchjvhj,gfju mnvhugmhnjvhjyfcb gnghfv ghy",
+//             "category_id": 1,
+//             "category_name": "Electronics",
+//             "sub_category_id": null,
+//             "sub_category_name": "",
+//             "child_category_id": null,
+//             "child_category_name": "",
+//             "reviews": null
+//         }
+//     ],
+//     "total": 5,
+//     "current_page": 1,
+//     "last_page": 1,
+//     "per_page": 12
 // }
 // ```
 
 // ---
 
-// ### Get Product Details
-// Get detailed information about a specific product.
+// ### Get SKU Details
+// Get detailed information about a specific product SKU and its variants.
 
-// **Endpoint:** `POST /api/product-details`
+// **Endpoint:** `POST /api/sku-details`
 
-// **Request Body:**
-// ```json
-// {
-//   "product_id": 1
-// }
-// ```**Endpoint:** `POST /api/product-details`
+// **Headers:**
+// ```
+// Authorization: Bearer {token}
+// ```
 
 // **Request Body:**
-// ```json
-// {
-//   "product_id": 1
-// }
+// ```
+// sku_id: 8
 // ```
 
 // **Response (200):**
 // ```json
 // {
-//   "status": 200,
-//   "message": "Product Details",
-//   "data": {
-//     "id": 1,
-//     "name": "iPhone 15",
-//     "slug": "iphone-15",
-//     "sku": "IP15-001",
-//     "actual_price": 79999,
-//     "discount_price": 69999,
-//     "short_desc": "Latest iPhone",
-//     "desc": "Product description",
-//     "category_id": 1,
-//     "category_name": "Electronics",
-//     "sub_category_id": 1,
-//     "sub_category_name": "Mobiles",
-//     "child_category_id": 1,
-//     "child_category_name": "Smartphones",
-//     "image": [
-//       "https://example.com/products/iphone15-1.jpg",
-//       "https://example.com/products/iphone15-2.jpg"
-//     ],
-//     "in_stock": true,
-//     "stock_quantity": 50,
-//     "rating": 0,
-//     "reviews": 0,
-//     "seller_id": 1,
-//     "seller_name": "Apple Store",
-//     "created_at": "2024-01-01T00:00:00Z",
-//     "updated_at": "2024-01-15T00:00:00Z"
-//   }
+//     "status": 200,
+//     "message": "SKU Details",
+//     "data": {
+//         "product": {
+//             "id": 13,
+//             "name": "Devdas",
+//             "short_desc": "Ssjdndbjxxndnznznzn",
+//             "desc": "Xnxxnnxxndndndncn",
+//             "category_id": 2,
+//             "category_name": "Fashion",
+//             "sub_category_id": null,
+//             "sub_category_name": "",
+//             "child_category_id": null,
+//             "child_category_name": "",
+//             "reviews": null
+//         },
+//         "sku": {
+//             "product_sku_id": 8,
+//             "sku_code": "SKU-3M6DAKIZ",
+//             "name": "Hand",
+//             "weight": 2,
+//             "dimensions": "3x5x12",
+//             "image": "https://deebazar.com/admin/images/uploads/skus/8/Gt4pvgBMjFW1P930Wta6_1790663632.jpg",
+//             "actual_price": 100,
+//             "discount_price": 80,
+//             "discount_percent": 20,
+//             "in_stock": true,
+//             "available_qty": 2
+//         },
+//         "variants": [
+//             {
+//                 "product_sku_id": 8,
+//                 "sku_code": "SKU-3M6DAKIZ",
+//                 "name": "Hand",
+//                 "weight": 2,
+//                 "dimensions": "3x5x12",
+//                 "image": "https://deebazar.com/admin/images/uploads/skus/8/Gt4pvgBMjFW1P930Wta6_1790663632.jpg",
+//                 "actual_price": 100,
+//                 "discount_price": 80,
+//                 "discount_percent": 20,
+//                 "in_stock": true,
+//                 "available_qty": 2,
+//                 "is_selected": true
+//             },
+//             {
+//                 "product_sku_id": 9,
+//                 "sku_code": "SKU-QBCRHZ0M",
+//                 "name": "Leg",
+//                 "weight": 10,
+//                 "dimensions": "15x12x120",
+//                 "image": "https://deebazar.com/admin/images/uploads/skus/9/YPl2WCRwLMMjnOWVuM72_1790663701.jpg",
+//                 "actual_price": 250,
+//                 "discount_price": 180,
+//                 "discount_percent": 28,
+//                 "in_stock": true,
+//                 "available_qty": 2,
+//                 "is_selected": false
+//             }
+//         ]
+//     }
 // }
 // ```
 
@@ -822,17 +907,19 @@
 
 // ## Cart APIs
 
-// ### Add to Cart
-// Add product to cart or update quantity.
+// ### Add to Cart / Update Cart
+// Add product SKU to cart or update quantity.
 
 // **Endpoint:** `POST /api/cart-to-add`
+
+// **Headers:**
+// - `Authorization: Bearer {token}`
 
 // **Request Body:**
 // ```json
 // {
-//   "user_id": 123,
-//   "product_id": 1,
-//   "qty": 2
+//   "product_sku_id": 2,
+//   "qty": 50
 // }
 // ```
 
@@ -840,26 +927,29 @@
 // ```json
 // {
 //   "status": 200,
-//   "message": "Add to Cart Successfully"
+//   "message": "Cart updated successfully."
 // }
 // ```
 
 // **Validation:**
-// - `user_id` (required) - User must be logged in
-// - `product_id` (required)
+// - `product_sku_id` (required, integer)
 // - `qty` (required, integer)
 
 // ---
 
 // ### View Cart
-// Get cart items for a user.
+// Get cart items and billing details for authenticated user.
 
 // **Endpoint:** `POST /api/cart-view`
+
+// **Headers:**
+// - `Authorization: Bearer {token}`
 
 // **Request Body:**
 // ```json
 // {
-//   "user_id": 123
+//   "user_id": 82,
+//   "address_id": 42
 // }
 // ```
 
@@ -869,79 +959,82 @@
 //   "status": 200,
 //   "message": "Cart View",
 //   "extra_data": {
-//     "sub_total": 139998,
+//     "sub_total": 0,
 //     "discount": 0,
 //     "delivery_charge": 0,
-//     "total_amount": 139998
+//     "total_amount": 0
 //   },
 //   "address_data": {
-//     "id": 1,
-//     "name": "John Doe",
-//     "mobile": "9876543210",
-//     "pin": "560001",
-//     "state": "Karnataka",
-//     "city": "Bangalore",
-//     "house_no": "123",
-//     "road_name": "Main Street",
-//     "landmark": "Near Park",
-//     "type": "Home"
+//     "id": 6,
+//     "name": "Ananya",
+//     "mobile": "8240804149",
+//     "pin": "700150",
+//     "state": "West Bengal",
+//     "city": "Rajpur Sonarpur",
+//     "house_no": "Xbxb",
+//     "road_name": "Dhelua",
+//     "landmark": "Xhxbxbxbxj",
+//     "type": "Mandir"
 //   },
 //   "data": [
 //     {
-//       "product_id": 1,
-//       "name": "iPhone 15",
-//       "qty": 2,
-//       "actual_price": 159996,
-//       "discount_price": 139998,
-//       "short_desc": "Latest iPhone",
-//       "image": "https://example.com/products/iphone15.jpg"
+//       "product_sku_id": 2,
+//       "name": "Test SKU 2",
+//       "qty": "25",
+//       "actual_price": null,
+//       "discount_price": null,
+//       "actual_total": 0,
+//       "discount_total": 0,
+//       "short_desc": null,
+//       "image": "https://deebazar.com/admin/images/uploads/skus/2/t2Fm5Y8ELQRBBUslIDPM_1790582828.png"
+//     },
+//     {
+//       "product_sku_id": 8,
+//       "name": "Hand",
+//       "qty": "2",
+//       "actual_price": null,
+//       "discount_price": null,
+//       "actual_total": 0,
+//       "discount_total": 0,
+//       "short_desc": null,
+//       "image": "https://deebazar.com/admin/images/uploads/skus/8/Gt4pvgBMjFW1P930Wta6_1790663632.jpg"
 //     }
 //   ]
 // }
 // ```
-// Debdas  [5:52 PM]
-// ### Add to Cart
-// Add or update product in cart.
 
-// **Endpoint:** `POST /api/cart-to-add`
+// **Validation:**
+// - `user_id` (required, integer)
+// - `address_id` (optional, integer)
 
-// **Request Body:**
-// ```json
-// {
-//   "user_id": 1,
-//   "product_id": 1,
-//   "qty": 2
-// }
-// ```
-
-// **Response:**
-// ```json
-// {
-//   "status": 200,
-//   "message": "Add to Cart Successfully"
-// }
-// ```
-
+// ---
 // ### Remove from Cart
-// Remove a product from cart.
+// Remove product SKU from user cart.
 
 // **Endpoint:** `POST /api/cart-remove`
 
+// **Headers:**
+// - `Authorization: Bearer {token}`
+
 // **Request Body:**
 // ```json
 // {
-//   "user_id": 1,
-//   "product_id": 1
+//   "product_sku_id": 2
 // }
 // ```
 
-// **Response:**
+// **Response (200):**
 // ```json
 // {
 //   "status": 200,
-//   "message": "Cart Remove Successfully"
+//   "message": "Cart removed successfully."
 // }
 // ```
+
+// **Validation:**
+// - `product_sku_id` (required, integer)
+
+// ---
 // ## Wishlist
 
 // ### Add to Wishlist
@@ -1008,7 +1101,7 @@
 // ### Save Address
 // Save a new address for the user.
 
-// **Endpoint:** `POST /api/save-address`
+// **Endpoint:** `POST /api/save-addresssave-address`
    
 // **Headers:**
 // ```
@@ -1018,6 +1111,7 @@
 // **Request Body:**
 // ```json
 // {
+//    user_id: ID,
 //   "name": "John Doe",
 //   "mobile": "9876543210",
 //   "pin": "560001",
@@ -1256,8 +1350,8 @@
 
 // ---
 
-// ### Create Order (Enhanced)
-// Create a new order with enhanced features.
+// ### Create Order
+// Create a new order by user.
 
 // **Endpoint:** `POST /api/orders`
 
@@ -1267,28 +1361,26 @@
 // ```
 
 // **Request Body:**
-// ```json
-// {
-//   
-//   "address_id": 1,
-//   "payment_method": "cod"
-// }
+// ```
+// address_id: 5
+// payment_method: cod
 // ```
 
 // **Response (200):**
 // ```json
 // {
-//   "status": 200,
-//   "message": "Order created successfully",
-//   "order_id": "123456",
-//   "payment_session_id": "session_xxxxxxxxx"
+//     "status": 200,
+//     "message": "Order created successfully",
+//     "order_ids": [
+//         841440
+//     ]
 // }
 // ```
 
 // ---
 
 // ### Order List
-// Get list of orders for the user.
+// Get list of orders for authenticated user.
 
 // **Endpoint:** `POST /api/order-list`
 
@@ -1297,28 +1389,23 @@
 // Authorization: Bearer {token}
 // ```
 
-// **Request Body:**
-// ```json
-// {
-//   "user_id": 123
-// }
-// ```
-
 // **Response (200):**
 // ```json
 // {
-//   "status": 200,
-//   "message": "Order list retrieved successfully",
-//   "data": [
-//     {
-//       "id": 1,
-//       "order_id_generate": "123456",
-//       "amount": 139998,
-//       "net_amount": 139998,
-//       "order_status": "Success",
-//       "created_at": "2024-01-15T10:30:00Z"
-//     }
-//   ]
+//     "status": 200,
+//     "message": "Order List",
+//     "data": [
+//         {
+//             "id": 1,
+//             "order_id": 1,
+//             "order_number": "841440",
+//             "name": "Test SKU 2",
+//             "selling_price": "799.00",
+//             "amount": "1598.00",
+//             "image": "https://deebazar.com/admin/images/uploads/skus/2/t2Fm5Y8ELQRBBUslIDPM_1790582828.png",
+//             "status": "pending"
+//         }
+//     ]
 // }
 // ```
 
@@ -1335,37 +1422,47 @@
 // ```
 
 // **Request Body:**
-// ```json
-// {
-//   "order_id": 123456
-// }
+// ```
+// order_id: 1
 // ```
 
 // **Response (200):**
 // ```json
 // {
-//   "status": 200,
-//   "message": "Order details retrieved successfully",
-//   "data": {
-//     "id": 1,
-//     "order_id_generate": "123456",
-//     "name": "John Doe",
-//     "mobile": "9876543210",
-//     "address": "123 Main Street",
-//     "amount": 139998,
-//     "net_amount": 139998,
-//     "order_status": "Success",
-//     "items": [
-//       {
+//     "status": 200,
+//     "message": "Order Details",
+//     "data_order": {
 //         "id": 1,
-//         "product_id": 1,
-//         "name": "iPhone 15",
-//         "selling_price": 69999,
-//         "total_amount": 139998,
-//         "status": "Pending"
-//       }
-//     ]
-//   }
+//         "order_id": 1,
+//         "order_number": "841440",
+//         "name": "Test SKU 2",
+//         "img": "https://deebazar.com/admin/images/uploads/skus/2/t2Fm5Y8ELQRBBUslIDPM_1790582828.png",
+//         "selling_price": "799.00",
+//         "extra_discount": 0,
+//         "shipping_fee": 0,
+//         "total_amount": "1598",
+//         "status": "pending",
+//         "order_date": "2026-Sep-29",
+//         "seller_policy": {
+//             "id": 5,
+//             "policy_type": "return",
+//             "title": "No Return",
+//             "return_days": 0,
+//             "description": "Products are not eligible for return.",
+//             "status": 1
+//         }
+//     },
+//     "data_user": {
+//         "name": "Ananya",
+//         "mobile": "8240804149",
+//         "pin": "700150",
+//         "state": "West Bengal",
+//         "city": "Rajpur Sonarpur",
+//         "house_no": "Hj",
+//         "road_name": "Dhelua",
+//         "landmark": "Hc uugugigi",
+//         "address_type": "Work"
+//     }
 // }
 // ```
 

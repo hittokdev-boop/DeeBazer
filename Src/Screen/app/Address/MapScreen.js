@@ -22,6 +22,7 @@ import { BASE_URL, getToken, getuserId, getMobile } from "../../../Api/Api";
 import SuccessModal from "../../../Common/SuccessScreen";
 import { useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
 
 const darkMapStyle = [
@@ -126,6 +127,7 @@ export default function MapScreen() {
   const [houseNo, setHouseNo] = useState('');
   const [roadName, setRoadName] = useState('');
   const [typeType, setTypeType] = useState('Home');
+  const [customType, setCustomType] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -196,6 +198,8 @@ export default function MapScreen() {
         .filter(Boolean)
         .join(', ');
 
+      const finalAddressType = typeType === 'Other' ? (customType.trim() || 'Other') : typeType;
+
       const response = await fetch(`${BASE_URL}save-address`, {
         method: "POST",
         headers: {
@@ -214,7 +218,7 @@ export default function MapScreen() {
           road_name: roadName.trim(),
           landmark: landmark.trim(),
           address: address.trim() || fullAddress,
-          type: typeType,
+          type: finalAddressType,
           status: "1"
         }),
       });
@@ -558,8 +562,8 @@ export default function MapScreen() {
   // Permission not granted view
   if (hasLocationPermission === false) {
     return (
-      <SafeAreaView style={[styles.mapContainer, { backgroundColor: theme.bg }]}>
-        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <SafeAreaView edges={[]} style={[styles.mapContainer, { backgroundColor: theme.bg }]}>
+        <StatusBar backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} translucent={true} />
         <View style={[styles.topHeader, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
             <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
@@ -587,8 +591,8 @@ export default function MapScreen() {
   // Loading coordinates view
   if (latitude === null || longitude === null) {
     return (
-      <SafeAreaView style={[styles.mapContainer, { backgroundColor: theme.bg }]}>
-        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <SafeAreaView edges={[]} style={[styles.mapContainer, { backgroundColor: theme.bg }]}>
+        <StatusBar backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} translucent={true} />
         <View style={[styles.topHeader, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
             <Ionicons name="arrow-back" size={24} color={theme.textPrimary} />
@@ -607,8 +611,8 @@ export default function MapScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.mapContainer, { backgroundColor: theme.bg }]}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+    <SafeAreaView edges={[]} style={[styles.mapContainer, { backgroundColor: theme.bg }]}>
+      <StatusBar backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} translucent={true} />
       {/* Header Bar */}
       <View style={[styles.topHeader, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
@@ -812,16 +816,45 @@ export default function MapScreen() {
                       backgroundColor: isDarkMode ? '#334155' : AllColors.screenBg,
                       borderColor: isDarkMode ? '#475569' : AllColors.lightGrey,
                     },
-                    typeType === 'Office' && styles.activeTypeBtn,
+                    typeType === 'Work' && styles.activeTypeBtn,
                   ]}
-                  onPress={() => setTypeType('Office')}
+                  onPress={() => setTypeType('Work')}
                   activeOpacity={0.8}
                 >
-                  <Text style={[styles.typeBtnText, { color: theme.textPrimary }, typeType === 'Office' && styles.activeTypeBtnText]}>
-                    🏢 Office
+                  <Text style={[styles.typeBtnText, { color: theme.textPrimary }, typeType === 'Work' && styles.activeTypeBtnText]}>
+                    🏢 Work
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.typeBtn,
+                    {
+                      backgroundColor: isDarkMode ? '#334155' : AllColors.screenBg,
+                      borderColor: isDarkMode ? '#475569' : AllColors.lightGrey,
+                    },
+                    typeType === 'Other' && styles.activeTypeBtn,
+                  ]}
+                  onPress={() => setTypeType('Other')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.typeBtnText, { color: theme.textPrimary }, typeType === 'Other' && styles.activeTypeBtnText]}>
+                    🏷️ {typeType === 'Other' && customType.trim() ? customType.trim() : 'Other'}
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Custom Address Type Title / Value Input */}
+              {typeType === 'Other' && (
+                <TextInput
+                  value={customType}
+                  onChangeText={setCustomType}
+                  placeholder="Enter Title / Address Type (e.g. Hostel, Gym, Hotel)"
+                  placeholderTextColor={placeholderColor}
+                  maxLength={30}
+                  style={[inputStyle, { marginBottom: 12 }]}
+                />
+              )}
 
               {/* Use Live Location */}
               <TouchableOpacity
@@ -867,7 +900,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: STATUSBAR_HEIGHT + 10,
+    paddingBottom: 12,
     backgroundColor: AllColors.white,
     elevation: 3,
     shadowColor: AllColors.shadow,
@@ -1056,7 +1090,9 @@ const styles = StyleSheet.create({
   },
   typeContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     marginBottom: 16,
+    gap: 8,
   },
   typeBtn: {
     borderWidth: 1,
@@ -1064,7 +1100,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    marginRight: 10,
+    marginRight: 6,
+    marginBottom: 6,
     backgroundColor: AllColors.screenBg,
   },
   typeBtnText: {

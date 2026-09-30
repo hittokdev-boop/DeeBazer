@@ -13,14 +13,18 @@ import {
   StatusBar,
 } from "react-native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { BASE_URL, getToken, getuserId, getMobile } from "../../../Api/Api";
 import SuccessModal from "../../../Common/SuccessScreen";
 import AllColors from "../../../Constants/Color";
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
 
 export default function SaveAddress() {
   const navigation = useNavigation();
+  const route = useRoute();
+  const editData = route?.params?.addressData || route?.params?.item || null;
+  const isEdit = Boolean(route?.params?.isEdit || editData);
   const { theme, isDarkMode } = useTheme();
 
   const [stateName, setStateName] = useState('');
@@ -33,12 +37,43 @@ export default function SaveAddress() {
   const [houseNo, setHouseNo] = useState('');
   const [roadName, setRoadName] = useState('');
   const [typeType, setTypeType] = useState('Home');
+  const [customType, setCustomType] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    loadUserData();
-  }, []);
+    if (editData) {
+      if (editData.name) setName(String(editData.name));
+      const m = editData.mobile || editData.phone || editData.mobile_no;
+      if (m) setMobile(String(m).replace(/[^0-9]/g, '').slice(0, 10));
+      if (editData.house_no || editData.house || editData.building) {
+        setHouseNo(String(editData.house_no || editData.house || editData.building));
+      }
+      if (editData.road_name || editData.road || editData.area || editData.street) {
+        setRoadName(String(editData.road_name || editData.road || editData.area || editData.street));
+      }
+      if (editData.landmark) setLandmark(String(editData.landmark));
+      if (editData.city) setCity(String(editData.city));
+      if (editData.state) setStateName(String(editData.state));
+      if (editData.pin || editData.pincode || editData.zip_code || editData.zip) {
+        setpinCode(String(editData.pin || editData.pincode || editData.zip_code || editData.zip));
+      }
+      if (editData.address || editData.full_address) {
+        setAddress(String(editData.address || editData.full_address));
+      }
+      const t = editData.type || editData.address_type || 'Home';
+      if (t === 'Home' || t === 'home') {
+        setTypeType('Home');
+      } else if (t === 'Work' || t === 'Office' || t === 'work' || t === 'office') {
+        setTypeType('Work');
+      } else {
+        setTypeType('Other');
+        setCustomType(t);
+      }
+    } else {
+      loadUserData();
+    }
+  }, [editData]);
 
   const loadUserData = async () => {
     try {
@@ -93,41 +128,164 @@ export default function SaveAddress() {
         .filter(Boolean)
         .join(', ');
 
-      const response = await fetch(`${BASE_URL}save-address`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          "Authorization": token ? `Bearer ${token}` : '',
-        },
-        body: JSON.stringify({
-          user_id: ID,
-          name: name.trim(),
-          mobile: mobile.trim(),
-          pin: zipCode.trim(),
-          state: stateName.trim(),
-          city: city.trim(),
-          house_no: houseNo.trim(),
-          road_name: roadName.trim(),
-          landmark: landmark.trim(),
-          address: address.trim() || fullAddress,
-          type: typeType,
-          status: "1"
-        }),
-      });
+      const finalType = typeType === 'Other' ? (customType.trim() || 'Other') : typeType;
+      const addressId = editData?.id || editData?.address_id;
 
-      const text = await response.text();
-      console.log(text, 'jkdj')
-      console.log(token)
-      let data = {};
-      try {
-        data = JSON.parse(text);
-      } catch (e) { }
+      let success = false;
+      let errorMsg = isEdit ? "Unable to update address." : "Unable to save address.";
 
-      if (response.ok && (data.status === 200 || data.status === '200' || data.status === true || data.success || data.id)) {
+      if (isEdit && addressId) {
+        // 1. Try update-address endpoint (JSON)
+        try {
+          const updateResponse = await fetch(`${BASE_URL}update-address`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "Authorization": token ? `Bearer ${token}` : '',
+            },
+            body: JSON.stringify({
+              address_id: addressId,
+              id: addressId,
+              user_id: ID,
+              name: name.trim(),
+              mobile: mobile.trim(),
+              pin: zipCode.trim(),
+              state: stateName.trim(),
+              city: city.trim(),
+              house_no: houseNo.trim(),
+              road_name: roadName.trim(),
+              landmark: landmark.trim(),
+              address: address.trim() || fullAddress,
+              type: finalType,
+              status: "1"
+            }),
+          });
+
+          const updateText = await updateResponse.text();
+          let updateData = {};
+          try { updateData = JSON.parse(updateText); } catch (e) { }
+
+          if (updateResponse.ok && (updateData.status === 200 || updateData.status === '200' || updateData.status === true || updateData.success)) {
+            success = true;
+          } else if (updateData.message) {
+            errorMsg = updateData.message;
+          }
+        } catch (e) {
+          console.log("Update address JSON error:", e);
+        }
+
+        // 2. Try FormData if JSON failed
+        if (!success) {
+          try {
+            const formData = new FormData();
+            formData.append('address_id', String(addressId));
+            formData.append('id', String(addressId));
+            if (ID) formData.append('user_id', String(ID));
+            formData.append('name', name.trim());
+            formData.append('mobile', mobile.trim());
+            formData.append('pin', zipCode.trim());
+            formData.append('state', stateName.trim());
+            formData.append('city', city.trim());
+            formData.append('house_no', houseNo.trim());
+            formData.append('road_name', roadName.trim());
+            formData.append('landmark', landmark.trim());
+            formData.append('address', address.trim() || fullAddress);
+            formData.append('type', finalType);
+            formData.append('status', '1');
+
+            const fdResponse = await fetch(`${BASE_URL}update-address`, {
+              method: "POST",
+              headers: {
+                Authorization: token ? `Bearer ${token}` : '',
+              },
+              body: formData,
+            });
+            const fdText = await fdResponse.text();
+            let fdData = {};
+            try { fdData = JSON.parse(fdText); } catch (e) { }
+            if (fdResponse.ok && (fdData.status === 200 || fdData.status === '200' || fdData.status === true || fdData.success)) {
+              success = true;
+            }
+          } catch (e) { }
+        }
+
+        // 3. Fallback to save-address with address_id if update-address endpoint not found
+        if (!success) {
+          try {
+            const fallbackResponse = await fetch(`${BASE_URL}save-address`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": token ? `Bearer ${token}` : '',
+              },
+              body: JSON.stringify({
+                address_id: addressId,
+                id: addressId,
+                user_id: ID,
+                name: name.trim(),
+                mobile: mobile.trim(),
+                pin: zipCode.trim(),
+                state: stateName.trim(),
+                city: city.trim(),
+                house_no: houseNo.trim(),
+                road_name: roadName.trim(),
+                landmark: landmark.trim(),
+                address: address.trim() || fullAddress,
+                type: finalType,
+                status: "1"
+              }),
+            });
+            const fbText = await fallbackResponse.text();
+            let fbData = {};
+            try { fbData = JSON.parse(fbText); } catch (e) { }
+            if (fallbackResponse.ok && (fbData.status === 200 || fbData.status === '200' || fbData.status === true || fbData.success)) {
+              success = true;
+            }
+          } catch (e) { }
+        }
+      } else {
+        const response = await fetch(`${BASE_URL}save-address`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": token ? `Bearer ${token}` : '',
+          },
+          body: JSON.stringify({
+            user_id: ID,
+            name: name.trim(),
+            mobile: mobile.trim(),
+            pin: zipCode.trim(),
+            state: stateName.trim(),
+            city: city.trim(),
+            house_no: houseNo.trim(),
+            road_name: roadName.trim(),
+            landmark: landmark.trim(),
+            address: address.trim() || fullAddress,
+            type: finalType,
+            status: "1"
+          }),
+        });
+
+        const text = await response.text();
+        let data = {};
+        try {
+          data = JSON.parse(text);
+        } catch (e) { }
+
+        if (response.ok && (data.status === 200 || data.status === '200' || data.status === true || data.success || data.id)) {
+          success = true;
+        } else {
+          errorMsg = data.message || "Unable to save address.";
+        }
+      }
+
+      if (success) {
         setIsSuccess(true);
       } else {
-        Alert.alert("Error", data.message || "Unable to save address.");
+        Alert.alert("Error", errorMsg);
       }
     } catch (error) {
       console.log("Save Address Error:", error);
@@ -139,7 +297,7 @@ export default function SaveAddress() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} translucent={true} />
 
       {/* Header */}
       <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
@@ -149,7 +307,7 @@ export default function SaveAddress() {
           activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>Save Address</Text>
+        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>{isEdit ? 'Edit Address' : 'Save Address'}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -157,8 +315,8 @@ export default function SaveAddress() {
         <View style={styles.formContainer}>
           {/* HEADER */}
           <View style={styles.topSection}>
-            <Text style={[styles.title, { color: theme.textPrimary }]}>Save Address</Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Add your delivery address details</Text>
+            <Text style={[styles.title, { color: theme.textPrimary }]}>{isEdit ? 'Edit Address' : 'Save Address'}</Text>
+            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{isEdit ? 'Update your delivery address details' : 'Add your delivery address details'}</Text>
           </View>
 
           {/* Name */}
@@ -303,18 +461,46 @@ export default function SaveAddress() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => setTypeType('Office')}
+                onPress={() => setTypeType('Work')}
                 style={[
                   styles.typeBadge,
                   { backgroundColor: isDarkMode ? '#1E293B' : AllColors.borderLight, borderColor: isDarkMode ? '#334155' : 'transparent', borderWidth: isDarkMode ? 1 : 0 },
-                  typeType === 'Office' && styles.typeBadgeActive,
+                  typeType === 'Work' && styles.typeBadgeActive,
                 ]}
               >
-                <Text style={[styles.typeBadgeText, { color: isDarkMode ? '#CBD5E1' : AllColors.black }, typeType === 'Office' && styles.typeBadgeTextActive]}>
-                  🏢 Office
+                <Text style={[styles.typeBadgeText, { color: isDarkMode ? '#CBD5E1' : AllColors.black }, typeType === 'Work' && styles.typeBadgeTextActive]}>
+                  🏢 Work
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setTypeType('Other')}
+                style={[
+                  styles.typeBadge,
+                  { backgroundColor: isDarkMode ? '#1E293B' : AllColors.borderLight, borderColor: isDarkMode ? '#334155' : 'transparent', borderWidth: isDarkMode ? 1 : 0 },
+                  typeType === 'Other' && styles.typeBadgeActive,
+                ]}
+              >
+                <Text style={[styles.typeBadgeText, { color: isDarkMode ? '#CBD5E1' : AllColors.black }, typeType === 'Other' && styles.typeBadgeTextActive]}>
+                  🏷️ {typeType === 'Other' && customType.trim() ? customType.trim() : 'Other'}
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {/* Custom Address Type Title / Value Input */}
+            {typeType === 'Other' && (
+              <View style={[styles.inputWrapper, { marginTop: 10, backgroundColor: isDarkMode ? '#1E293B' : AllColors.white, borderColor: isDarkMode ? '#334155' : AllColors.lightGrey }]}>
+                <Ionicons name="pricetag-outline" size={20} color={isDarkMode ? '#94A3B8' : '#777'} />
+                <TextInput
+                  value={customType}
+                  onChangeText={setCustomType}
+                  placeholder="Enter Title / Address Type (e.g. Hostel, Gym, Hotel)"
+                  placeholderTextColor={isDarkMode ? '#94A3B8' : '#999'}
+                  maxLength={30}
+                  style={[styles.input, { color: theme.textPrimary }]}
+                />
+              </View>
+            )}
           </View>
 
           {/* SAVE BUTTON */}
@@ -329,7 +515,7 @@ export default function SaveAddress() {
             ) : (
               <>
                 <Ionicons name="save-outline" size={20} color="#FFF" />
-                <Text style={styles.saveText}>Save Address</Text>
+                <Text style={styles.saveText}>{isEdit ? 'Update Address' : 'Save Address'}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -337,8 +523,8 @@ export default function SaveAddress() {
 
         <SuccessModal
           visible={isSuccess}
-          title="Address Saved"
-          message="Your address has been saved successfully."
+          title={isEdit ? "Address Updated" : "Address Saved"}
+          message={isEdit ? "Your address has been updated successfully." : "Your address has been saved successfully."}
           onClose={() => {
             setIsSuccess(false);
             navigation.goBack();
@@ -415,6 +601,7 @@ const styles = StyleSheet.create({
   },
   typeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
   typeBadge: {
@@ -434,7 +621,8 @@ const styles = StyleSheet.create({
     color: AllColors.white,
   },
   header: {
-    height: 56,
+    height: 56 + STATUSBAR_HEIGHT,
+    paddingTop: STATUSBAR_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

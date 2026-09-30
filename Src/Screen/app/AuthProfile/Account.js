@@ -12,6 +12,7 @@ import {
   TextInput,
   Image,
   DeviceEventEmitter,
+  StatusBar,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +22,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import CustomLoader from '../../../Common/Loader';
 import { BASE_URL, getToken, getMobile, removemobile, removeToken, removeuserId, getPassword, removePassword } from '../../../Api/Api';
 import CustomAlert from '../../../Common/Alert';
@@ -311,7 +313,8 @@ export default function Account() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+    <SafeAreaView edges={[]} style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar backgroundColor="transparent" barStyle="light-content" translucent={true} />
       {/* HEADER */}
       <View style={[styles.header, { backgroundColor: theme.headerBg }]}>
         <Text style={[styles.headerText, { color: theme.headerText }]}>My Account</Text>
@@ -670,7 +673,8 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: AllColors.primary,
-    paddingVertical: 12,
+    paddingTop: STATUSBAR_HEIGHT + 10,
+    paddingBottom: 12,
     paddingHorizontal: 16,
   },
   headerText: {
@@ -685,7 +689,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 24,
     paddingHorizontal: 20,
     paddingBottom: 24,
-    paddingTop: 10,
+    paddingTop: STATUSBAR_HEIGHT + 12,
     marginBottom: 10,
   },
   avatarCircle: {

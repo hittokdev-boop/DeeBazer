@@ -84,6 +84,8 @@ const AppStack = () => {
       <Stack.Screen name='TextView' component={TextView} />
       <Stack.Screen name='editProfile' component={EditProfileScreen} />
       <Stack.Screen name='SaveAddress' component={SaveAddress} />
+      <Stack.Screen name='EditAddress' component={SaveAddress} />
+      <Stack.Screen name='UpdateAddress' component={SaveAddress} />
       <Stack.Screen name='ProductDetails' component={ProductDetails} />
       <Stack.Screen name='MapScreen' component={MapScreen} />
       <Stack.Screen name='AllAddress' component={AllAddress} />

@@ -159,3 +159,271 @@ export const removePassword = async () => {
     console.log("password remove error", e);
   }
 };
+
+// ================= CART APIS =================
+
+/**
+ * Add or update item in cart
+ * POST /api/cart-to-add
+ * Headers: Authorization: Bearer {token}
+ * Body: { product_sku_id, qty }
+ */
+export const addToCartApi = async (productSkuId, qty = 1, extra = {}) => {
+  try {
+    const token = await getToken();
+    const userId = await getuserId();
+    const formData = new FormData();
+    formData.append("product_sku_id", productSkuId);
+    formData.append("qty", qty);
+    if (userId) formData.append("user_id", userId);
+
+    const response = await fetch(`${BASE_URL}cart-to-add`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      body: formData,
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.log("addToCartApi error:", error);
+    throw error;
+  }
+};
+
+/**
+ * Remove item from cart
+ * POST /api/cart-remove
+ * Headers: Authorization: Bearer {token}
+ * Body: { product_sku_id }
+ */
+export const removeFromCartApi = async (productSkuId) => {
+  try {
+    const token = await getToken();
+    const userId = await getuserId();
+    const formData = new FormData();
+    formData.append("product_sku_id", productSkuId);
+    if (userId) formData.append("user_id", userId);
+
+    const response = await fetch(`${BASE_URL}cart-remove`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      body: formData,
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.log("removeFromCartApi error:", error);
+    throw error;
+  }
+};
+
+/**
+ * View cart items, extra totals, and address data
+ * POST /api/cart-view
+ * Headers: Authorization: Bearer {token}
+ * Body: { user_id, address_id }
+ */
+export const getCartViewApi = async (addressId = null) => {
+  try {
+    const token = await getToken();
+    const userId = await getuserId();
+    const formData = new FormData();
+    if (userId) formData.append("user_id", userId);
+    if (addressId) formData.append("address_id", addressId);
+
+    const response = await fetch(`${BASE_URL}cart-view`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      },
+      body: formData,
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.log("getCartViewApi error:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get SKU List
+ * POST /api/sku
+ * Headers: Authorization: Bearer {token}
+ * Body: { category_id, sub_category_id, child_category_id, product_id, sku_id, per_page, page }
+ */
+export const getSkuListApi = async ({
+  categoryId = null,
+  subCategoryId = null,
+  childCategoryId = null,
+  productId = null,
+  skuId = null,
+  perPage = 12,
+  page = 1,
+} = {}) => {
+  try {
+    const token = await getToken();
+    const formData = new FormData();
+    if (categoryId && categoryId !== 'all') formData.append('category_id', categoryId);
+    if (subCategoryId && subCategoryId !== 'all' && subCategoryId !== 'null') formData.append('sub_category_id', subCategoryId);
+    if (childCategoryId && childCategoryId !== 'all' && childCategoryId !== 'null') formData.append('child_category_id', childCategoryId);
+    if (productId) formData.append('product_id', productId);
+    if (skuId) formData.append('sku_id', skuId);
+    formData.append('per_page', perPage);
+    formData.append('page', page);
+
+    const headers = {
+      Accept: 'application/json',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${BASE_URL}sku`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.log('getSkuListApi error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get SKU Details
+ * POST /api/sku-details
+ * Headers: Authorization: Bearer {token}
+ * Body: { sku_id, seller_id }
+ */
+export const getSkuDetailsApi = async (skuId, sellerId) => {
+  try {
+    const token = await getToken();
+    const formData = new FormData();
+    formData.append("sku_id", String(skuId));
+    if (sellerId !== undefined && sellerId !== null && sellerId !== '') {
+      formData.append("seller_id", String(sellerId));
+    }
+
+    const headers = {
+      Accept: "application/json",
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${BASE_URL}sku-details`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.log("getSkuDetailsApi error:", error);
+    throw error;
+  }
+};
+
+/**
+ * Create Order
+ * POST /api/orders
+ * Headers: Authorization: Bearer {token}
+ * Body: { address_id, payment_method }
+ */
+export const createOrderApi = async (addressId, paymentMethod = 'cod') => {
+  try {
+    const token = await getToken();
+    const formData = new FormData();
+    formData.append("address_id", addressId);
+    formData.append("payment_method", paymentMethod);
+
+    const headers = {
+      Accept: "application/json",
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${BASE_URL}orders`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.log("createOrderApi error:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get Order List
+ * POST /api/order-list
+ * Headers: Authorization: Bearer {token}
+ */
+export const getOrderListApi = async () => {
+  try {
+    const token = await getToken();
+    const headers = {
+      Accept: "application/json",
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${BASE_URL}order-list`, {
+      method: "POST",
+      headers,
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.log("getOrderListApi error:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get Order Details
+ * POST /api/order-details
+ * Headers: Authorization: Bearer {token}
+ * Body: { order_id }
+ */
+export const getOrderDetailsApi = async (orderId) => {
+  try {
+    const token = await getToken();
+    const formData = new FormData();
+    formData.append("order_id", orderId);
+
+    const headers = {
+      Accept: "application/json",
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(`${BASE_URL}order-details`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.log("getOrderDetailsApi error:", error);
+    throw error;
+  }
+};
+
+

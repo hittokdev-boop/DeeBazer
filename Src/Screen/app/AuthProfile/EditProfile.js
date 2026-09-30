@@ -20,6 +20,7 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { BASE_URL, getToken, setMobile as setStoredMobile } from '../../../Api/Api';
 import AllColors from '../../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
 
 const DEFAULT_AVATAR =
@@ -142,7 +143,7 @@ export default function EditProfileScreen() {
         formData.append('mobile', mobile.trim());
       }
       if (alternativePhone.trim()) {
-        formData.append('alternativePhone', alternativePhone.trim());
+        formData.append('alternative_phone', alternativePhone.trim());
       }
       // Append image file if picked
       if (selectedImageFile && selectedImageFile.uri) {
@@ -232,7 +233,9 @@ export default function EditProfileScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar
+        backgroundColor="transparent"
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        translucent={true}
       />
 
       {/* Header */}
@@ -517,7 +520,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    height: 56,
+    height: 56 + STATUSBAR_HEIGHT,
+    paddingTop: STATUSBAR_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

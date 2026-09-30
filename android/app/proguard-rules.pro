@@ -16,3 +16,27 @@
     @com.facebook.react.uimanager.annotations.ReactProp <fields>;
     @com.facebook.react.uimanager.annotations.ReactPropGroup <fields>;
 }
+
+# Webkit & JS interfaces
+-keepattributes JavascriptInterface
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+# Razorpay
+-keepattributes *Annotation*
+-dontwarn com.razorpay.**
+-keep class com.razorpay.** { *; }
+-optimizations !class/merging/vertical*,!class/merging/horizontal*
+-keepattributes InnerClasses
+
+# React Native Reanimated & Worklets
+-keep class com.swmansion.reanimated.** { *; }
+-keep class com.swmansion.gesturehandler.** { *; }
+
+# Lottie
+-keep class com.airbnb.lottie.** { *; }
+
+# Firebase
+-dontwarn com.google.firebase.**
+-keep class com.google.firebase.** { *; }

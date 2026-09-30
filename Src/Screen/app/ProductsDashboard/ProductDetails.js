@@ -22,6 +22,7 @@ import AntDesign from 'react-native-vector-icons/AntDesign';
 import Feather from 'react-native-vector-icons/Feather';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
 import { useTheme } from '../../../Context/ThemeContext';
 import DifferentSellerModal from '../../../Common/DifferentSellerModal';
@@ -30,6 +31,8 @@ import {
   saveActiveCartSeller,
   getActiveCartSeller,
   clearActiveCartSeller,
+  getCartSkuId,
+  isCartItemMatching,
 } from '../../../Common/sellerUtils';
 
 const { width } = Dimensions.get('window');
@@ -53,27 +56,58 @@ export default function ProductDetails({ route }) {
     targetProduct: null,
   });
 
-  const { id } = route.params || {};
+  const { id, product_sku_id, sku_id, seller_id, sellerId, vendor_id, item } = route.params || {};
   const navigation = useNavigation();
 
+  const [skuData, setSkuData] = useState(null);
+  const [productInfo, setProductInfo] = useState(null);
+  const [variants, setVariants] = useState([]);
+  const [selectedSkuId, setSelectedSkuId] = useState(
+    sku_id ?? product_sku_id ?? item?.product_sku_id ?? item?.sku_id ?? item?.sku?.id
+  );
+  const [selectedSellerId, setSelectedSellerId] = useState(
+    seller_id ??
+    sellerId ??
+    vendor_id ??
+    item?.seller_id ??
+    item?.sellerId ??
+    item?.vendor_id ??
+    item?.seller?.id ??
+    item?.user_id ??
+    null
+  );
+
   const getProductImages = () => {
-    if (!product) return [];
-    if (Array.isArray(product.image)) {
-      const list = product.image.filter((img) => typeof img === 'string' && img.trim().length > 0);
-      if (list.length > 0) return list;
+    const list = [];
+    if (skuData?.image && typeof skuData.image === 'string' && skuData.image.trim()) {
+      list.push(skuData.image);
     }
-    if (typeof product.image === 'string' && product.image.trim()) {
-      return [product.image];
+    if (product?.image) {
+      if (Array.isArray(product.image)) {
+        product.image.forEach((img) => {
+          if (typeof img === 'string' && img.trim().length > 0 && !list.includes(img)) {
+            list.push(img);
+          }
+        });
+      } else if (typeof product.image === 'string' && product.image.trim() && !list.includes(product.image)) {
+        list.push(product.image);
+      }
     }
-    if (Array.isArray(product.images)) {
-      const list = product.images.filter((img) => typeof img === 'string' && img.trim().length > 0);
-      if (list.length > 0) return list;
+    if (Array.isArray(product?.images)) {
+      product.images.forEach((img) => {
+        if (typeof img === 'string' && img.trim().length > 0 && !list.includes(img)) {
+          list.push(img);
+        }
+      });
     }
-    if (Array.isArray(product.gallery)) {
-      const list = product.gallery.filter((img) => typeof img === 'string' && img.trim().length > 0);
-      if (list.length > 0) return list;
+    if (Array.isArray(product?.gallery)) {
+      product.gallery.forEach((img) => {
+        if (typeof img === 'string' && img.trim().length > 0 && !list.includes(img)) {
+          list.push(img);
+        }
+      });
     }
-    return [];
+    return list;
   };
 
   const handleBack = () => {
@@ -97,7 +131,7 @@ export default function ProductDetails({ route }) {
 
       const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
       return () => subscription.remove();
-    }, [id, navigation])
+    }, [id, product_sku_id, sku_id, selectedSkuId, navigation])
   );
 
   const shareProduct = async () => {
@@ -118,45 +152,179 @@ export default function ProductDetails({ route }) {
     }
   };
 
-  const getPrductDetails = async () => {
-    console.log('knfckldmncvkl')
-    const productId = id || route.params?.id;
-    if (!productId) {
+  const handleSelectVariant = (variant) => {
+    if (!variant?.product_sku_id) return;
+    if (String(variant.product_sku_id) === String(selectedSkuId)) return;
+    setSelectedSkuId(variant.product_sku_id);
+    const varSellerId =
+      variant?.seller_id ??
+      variant?.sellerId ??
+      variant?.vendor_id ??
+      selectedSellerId;
+    if (varSellerId) {
+      setSelectedSellerId(varSellerId);
+    }
+    getPrductDetails(variant.product_sku_id, varSellerId);
+  };
+
+  const getPrductDetails = async (overrideSkuId, overrideSellerId) => {
+    const currentSkuId =
+      overrideSkuId ??
+      selectedSkuId ??
+      sku_id ??
+      product_sku_id ??
+      route.params?.sku_id ??
+      route.params?.product_sku_id;
+    const currentProductId =
+      route.params?.item?.product_id ??
+      route.params?.id ??
+      route.params?.item?.id;
+
+    if (!currentSkuId && !currentProductId) {
       setLoading(false);
       return;
     }
+
+    const currentSellerId =
+      overrideSellerId ??
+      selectedSellerId ??
+      route.params?.seller_id ??
+      route.params?.sellerId ??
+      route.params?.vendor_id ??
+      route.params?.item?.seller_id ??
+      route.params?.item?.sellerId ??
+      route.params?.item?.vendor_id ??
+      route.params?.item?.seller?.id ??
+      route.params?.item?.user_id ??
+      product?.seller_id ??
+      product?.vendor_id ??
+      productInfo?.seller_id ??
+      skuData?.seller_id;
+
     setLoading(true);
+    const token = await getToken();
     const userId = await getuserId();
-    const formData = new FormData();
-    formData.append('product_id', productId);
-    if (userId) {
-      formData.append('user_id', userId);
+    const headers = {
+      Accept: 'application/json',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
     }
 
     try {
-      const response = await fetch(`${BASE_URL}product-details`, {
-        method: 'POST',
-        body: formData,
-      });
+      let result = null;
+      if (currentSkuId) {
+        const formData = new FormData();
+        formData.append('sku_id', String(currentSkuId));
+        if (currentSellerId !== undefined && currentSellerId !== null && currentSellerId !== '') {
+          formData.append('seller_id', String(currentSellerId));
+        }
+        if (userId) {
+          formData.append('user_id', String(userId));
+        }
 
-      const data = await response.json();
-      // console.log('knfckldmncvkl', data)
-      if (data?.data) {
-        setProduct(data.data);
-        if (data.data.image) {
-          if (Array.isArray(data.data.image) && data.data.image.length > 0) {
-            setProductImage(data.data.image[0]);
-          } else if (typeof data.data.image === 'string') {
-            setProductImage(data.data.image);
+        console.log('Fetching sku-details with body:', {
+          sku_id: currentSkuId,
+          seller_id: currentSellerId,
+        });
+
+        const response = await fetch(`${BASE_URL}sku-details`, {
+          method: 'POST',
+          headers,
+          body: formData,
+        });
+
+        result = await response.json();
+      }
+      if (result?.status === 200 && result?.data) {
+        const d = result.data;
+        const p = d.product || {};
+        const s = d.sku || {};
+        const v = Array.isArray(d.variants) ? d.variants : [];
+
+        const incomingSellerId =
+          s.seller_id ??
+          p.seller_id ??
+          d.seller_id ??
+          currentSellerId;
+        if (incomingSellerId) {
+          setSelectedSellerId(incomingSellerId);
+        }
+
+        setProductInfo(p);
+        setSkuData(s);
+        setVariants(v);
+        setSelectedSkuId(s.product_sku_id ?? currentSkuId);
+
+        const merged = {
+          ...p,
+          ...s,
+          id: p.id ?? s.product_id ?? currentSkuId,
+          product_id: p.id ?? s.product_id,
+          product_sku_id: s.product_sku_id ?? currentSkuId,
+          seller_id: incomingSellerId,
+          sku_code: s.sku_code,
+          name: p.name ? (s.name && s.name !== p.name ? `${p.name} - ${s.name}` : p.name) : (s.name || 'Product Details'),
+          product_name: p.name,
+          sku_name: s.name,
+          actual_price: s.actual_price ?? p.actual_price,
+          discount_price: s.discount_price ?? p.discount_price,
+          price: s.discount_price ?? s.actual_price ?? p.discount_price ?? p.actual_price,
+          discount_percent: s.discount_percent ?? p.discount_percent,
+          in_stock: s.in_stock ?? true,
+          stock_quantity: s.available_qty ?? p.stock_quantity,
+          available_qty: s.available_qty,
+          weight: s.weight,
+          dimensions: s.dimensions,
+          image: s.image || p.image,
+          short_desc: p.short_desc || s.short_desc,
+          desc: p.desc || s.desc,
+          category_id: p.category_id,
+          category_name: p.category_name,
+          sub_category_id: p.sub_category_id,
+          sub_category_name: p.sub_category_name,
+          child_category_id: p.child_category_id,
+          child_category_name: p.child_category_name,
+          reviews: p.reviews,
+        };
+
+        setProduct(merged);
+
+        if (s.image) {
+          setProductImage(s.image);
+        } else if (p.image) {
+          if (Array.isArray(p.image) && p.image.length > 0) {
+            setProductImage(p.image[0]);
+          } else if (typeof p.image === 'string') {
+            setProductImage(p.image);
           }
         }
-        if (data.data.isCartProduct !== undefined) {
-          setIsAddedToCart(!!data.data.isCartProduct);
+      } else {
+        // Fallback for resiliency
+        const fallbackFormData = new FormData();
+        fallbackFormData.append('product_id', String(currentProductId ?? currentSkuId));
+        if (currentSellerId) fallbackFormData.append('seller_id', String(currentSellerId));
+        if (userId) fallbackFormData.append('user_id', String(userId));
+
+        const fbRes = await fetch(`${BASE_URL}product-details`, {
+          method: 'POST',
+          headers,
+          body: fallbackFormData,
+        });
+        const fbData = await fbRes.json();
+        if (fbData?.data) {
+          setProduct(fbData.data);
+          if (fbData.data.image) {
+            if (Array.isArray(fbData.data.image) && fbData.data.image.length > 0) {
+              setProductImage(fbData.data.image[0]);
+            } else if (typeof fbData.data.image === 'string') {
+              setProductImage(fbData.data.image);
+            }
+          }
         }
-        setIsWishlisted(!!data.data.isWishlistProduct);
       }
     } catch (error) {
-      console.log('Error fetching product details:', error);
+      console.log('Error fetching sku-details:', error);
     } finally {
       setLoading(false);
     }
@@ -191,12 +359,16 @@ export default function ProductDetails({ route }) {
         await saveActiveCartSeller(validItems[0]);
       }
 
-      const inCart = validItems.some(
-        (item) => String(item?.product_id ?? item?.id ?? item?.product?.id) === String(id)
-      );
-      if (inCart) {
-        setIsAddedToCart(true);
-      }
+      const currentSkuId = selectedSkuId ?? getCartSkuId(product);
+      const currentCartItem = {
+        ...product,
+        product_sku_id: currentSkuId,
+        seller_id: selectedSellerId ?? product?.seller_id,
+        seller_sku_id: skuData?.seller_sku_id ?? product?.seller_sku_id,
+      };
+      setIsAddedToCart(Boolean(
+        currentSkuId && validItems.some((item) => isCartItemMatching(item, currentCartItem))
+      ));
     } catch (error) {
       console.log('Cart status check error:', error);
     }
@@ -222,8 +394,9 @@ export default function ProductDetails({ route }) {
 
       const data = await response.json();
       const items = data?.data || data?.products || data?.wishlist || [];
+      const productId = product?.product_id ?? product?.id ?? id;
       const hasProduct = items.some(
-        (entry) => String(entry?.product_id ?? entry?.id ?? entry?.product?.id) === String(id)
+        (entry) => String(entry?.product_id ?? entry?.id ?? entry?.product?.id) === String(productId)
       );
       setIsWishlisted(hasProduct);
     } catch (error) {
@@ -240,10 +413,11 @@ export default function ProductDetails({ route }) {
       return;
     }
 
+    const productId = product?.product_id ?? product?.id ?? id;
     const endpoint = isWishlisted ? 'wishlist-remove' : 'wishlist-add';
     const formData = new FormData();
     formData.append('user_id', userId);
-    formData.append('product_id', id);
+    formData.append('product_id', productId);
 
     try {
       const response = await fetch(`${BASE_URL}${endpoint}`, {
@@ -296,6 +470,7 @@ export default function ProductDetails({ route }) {
           },
           body: formData,
         });
+
         const cData = await cRes.json();
         currentCart = (cData?.data && Array.isArray(cData.data)) ? cData.data : (cData?.cart || []);
         setCartList(currentCart);
@@ -320,9 +495,20 @@ export default function ProductDetails({ route }) {
       }
     }
 
+    const skuId = selectedSkuId ?? product_sku_id ?? sku_id ?? getCartSkuId(product);
+    if (!skuId) {
+      Alert.alert('Unable to add item', 'This item does not have a valid SKU.');
+      return false;
+    }
     const formData = new FormData();
-    formData.append('user_id', userId);
-    formData.append('product_id', id);
+    formData.append('product_sku_id', String(skuId));
+    const sellerId = selectedSellerId ?? product?.seller_id ?? product?.vendor_id;
+    const sellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
+    if (sellerId) formData.append('seller_id', String(sellerId));
+    if (sellerSkuId) formData.append('seller_sku_id', String(sellerSkuId));
+    if (userId) {
+      formData.append('user_id', userId);
+    }
     formData.append('qty', 1);
 
     try {
@@ -556,7 +742,9 @@ export default function ProductDetails({ route }) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.bg }]}>
         <StatusBar
+          backgroundColor="transparent"
           barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          translucent={true}
         />
         <ActivityIndicator size="large" color={AllColors.primary} />
         <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading Product...</Text>
@@ -568,7 +756,9 @@ export default function ProductDetails({ route }) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.bg }]}>
         <StatusBar
+          backgroundColor="transparent"
           barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          translucent={true}
         />
         <Ionicons name="alert-circle-outline" size={60} color={AllColors.primary} />
         <Text
@@ -608,7 +798,9 @@ export default function ProductDetails({ route }) {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <StatusBar
+        backgroundColor="transparent"
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+        translucent={true}
       />
 
       <ScrollView
@@ -838,6 +1030,108 @@ export default function ProductDetails({ route }) {
               {product?.short_desc}
             </Text>
           ) : null}
+
+          {/* Variants Section */}
+          {variants && variants.length > 0 && (
+            <View style={styles.variantsSection}>
+              <Text style={[styles.variantsHeading, { color: theme.textPrimary }]}>
+                Select Variant ({variants.length})
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.variantsScroll}
+              >
+                {variants.map((v) => {
+                  const isSelected = String(v.product_sku_id) === String(selectedSkuId);
+                  return (
+                    <TouchableOpacity
+                      key={v.product_sku_id}
+                      style={[
+                        styles.variantCard,
+                        {
+                          backgroundColor: isSelected
+                            ? (isDarkMode ? '#1E293B' : '#FEF2F2')
+                            : (isDarkMode ? '#0F172A' : '#F8FAFC'),
+                          borderColor: isSelected ? AllColors.primary : theme.borderColor,
+                          borderWidth: isSelected ? 2 : 1,
+                        },
+                      ]}
+                      onPress={() => handleSelectVariant(v)}
+                      activeOpacity={0.7}
+                    >
+                      {v.image ? (
+                        <Image source={{ uri: v.image }} style={styles.variantThumb} />
+                      ) : null}
+                      <View style={styles.variantInfo}>
+                        <Text
+                          style={[
+                            styles.variantName,
+                            { color: isSelected ? AllColors.primary : theme.textPrimary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {v.name || v.sku_code}
+                        </Text>
+                        <Text style={[styles.variantPrice, { color: theme.textSecondary }]}>
+                          ₹{v.discount_price ?? v.actual_price}
+                        </Text>
+                        {v.discount_percent ? (
+                          <Text style={styles.variantDiscount}>{v.discount_percent}% off</Text>
+                        ) : null}
+                        {v.in_stock === false && (
+                          <Text style={styles.variantOutOfStock}>Out of stock</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* SKU Specifications */}
+          {(skuData?.sku_code || skuData?.weight || skuData?.dimensions) && (
+            <View style={styles.specsSection}>
+              <Text style={[styles.specsTitle, { color: theme.textPrimary }]}>
+                SKU Specifications
+              </Text>
+              <View
+                style={[
+                  styles.specsTable,
+                  {
+                    backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC',
+                    borderColor: theme.borderColor,
+                  },
+                ]}
+              >
+                {skuData?.sku_code ? (
+                  <View style={styles.specRow}>
+                    <Text style={[styles.specLabel, { color: theme.textSecondary }]}>SKU Code</Text>
+                    <Text style={[styles.specValue, { color: theme.textPrimary }]}>
+                      {skuData.sku_code}
+                    </Text>
+                  </View>
+                ) : null}
+                {skuData?.weight ? (
+                  <View style={styles.specRow}>
+                    <Text style={[styles.specLabel, { color: theme.textSecondary }]}>Weight</Text>
+                    <Text style={[styles.specValue, { color: theme.textPrimary }]}>
+                      {skuData.weight} kg
+                    </Text>
+                  </View>
+                ) : null}
+                {skuData?.dimensions ? (
+                  <View style={[styles.specRow, { borderBottomWidth: 0 }]}>
+                    <Text style={[styles.specLabel, { color: theme.textSecondary }]}>Dimensions</Text>
+                    <Text style={[styles.specValue, { color: theme.textPrimary }]}>
+                      {skuData.dimensions}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          )}
 
           {/* Description Section */}
           <View style={styles.descSection}>
@@ -1079,11 +1373,11 @@ const styles = StyleSheet.create({
 
   /* Image Header Card */
   imageHeaderCard: {
-    height: 350,
+    height: 350 + STATUSBAR_HEIGHT,
     backgroundColor: AllColors.white,
     borderBottomLeftRadius: 26,
     borderBottomRightRadius: 26,
-    paddingTop: Platform.OS === 'ios' ? 44 : 12,
+    paddingTop: Platform.OS === 'ios' ? 44 : STATUSBAR_HEIGHT + 10,
     paddingHorizontal: 16,
     elevation: 4,
     shadowColor: AllColors.shadow,
@@ -1437,5 +1731,84 @@ const styles = StyleSheet.create({
   },
   btnIconMarginRight: {
     marginRight: 8,
+  },
+  variantsSection: {
+    marginTop: 18,
+    marginBottom: 4,
+  },
+  variantsHeading: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  variantsScroll: {
+    paddingVertical: 4,
+  },
+  variantCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderRadius: 12,
+    marginRight: 10,
+    minWidth: 130,
+    maxWidth: 170,
+  },
+  variantThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    marginRight: 8,
+  },
+  variantInfo: {
+    flex: 1,
+  },
+  variantName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  variantPrice: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  variantDiscount: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  variantOutOfStock: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  specsSection: {
+    marginTop: 18,
+  },
+  specsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  specsTable: {
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  specRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#CBD5E1',
+  },
+  specLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  specValue: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

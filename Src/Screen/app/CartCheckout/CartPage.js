@@ -14,6 +14,7 @@ import {
   Linking,
   Platform,
   RefreshControl,
+  StatusBar,
 } from 'react-native';
 import { Rating } from '@kolking/react-native-rating';
 import AllColors from '../../../Constants/Color';
@@ -29,10 +30,13 @@ import LottieView from 'lottie-react-native';
 
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../../../Context/ThemeContext';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import CustomAlert from '../../../Common/Alert';
 import {
   saveActiveCartSeller,
   clearActiveCartSeller,
+  getCartSkuId,
+  isCartItemMatching,
 } from '../../../Common/sellerUtils';
 const CartPage = () => {
   const { theme, isDarkMode } = useTheme();
@@ -102,11 +106,40 @@ const CartPage = () => {
   const updateCartQty = async (product, qty) => {
     const ID = await getuserId();
     const token = await getToken();
+    const skuId = getCartSkuId(product);
+    if (!skuId) {
+      Alert.alert('Error', 'This cart item is missing its SKU.');
+      return;
+    }
+    const sellerId = product?.seller_id ?? product?.sellerId ?? product?.vendor_id;
+    const sellerSkuId = product?.seller_sku_id;
     try {
-      const formData = new FormData();
+      // Backend's cart-to-add treats qty as an increment (existing + qty).
+      // To set the exact quantity on the cart page, first remove then add exact qty.
+      const removeFormData = new FormData();
+      removeFormData.append("product_sku_id", skuId);
+      if (sellerId) removeFormData.append("seller_id", String(sellerId));
+      if (sellerSkuId) removeFormData.append("seller_sku_id", String(sellerSkuId));
+      if (ID) {
+        removeFormData.append("user_id", ID);
+      }
 
-      formData.append("user_id", ID);
-      formData.append("product_id", product.product_id);
+      await fetch(`${BASE_URL}cart-remove`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
+        body: removeFormData,
+      });
+
+      const formData = new FormData();
+      formData.append("product_sku_id", skuId);
+      if (sellerId) formData.append("seller_id", String(sellerId));
+      if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
+      if (ID) {
+        formData.append("user_id", ID);
+      }
       formData.append("qty", qty);
 
       const response = await fetch(`${BASE_URL}cart-to-add`, {
@@ -120,25 +153,59 @@ const CartPage = () => {
 
       const result = await response.json();
 
-      console.log("Cart Update:", body);
+      console.log("Cart Update:", result);
 
       if (result.status !== 200) {
         Alert.alert("Error", result.message || "Unable to update cart");
+        CartView();
       }
     } catch (error) {
       console.log("Cart Update Error:", error);
+      CartView();
     }
   };
+  const computeExtraDataFromCart = (items) => {
+    try {
+      const discountedSum = items.reduce(
+        (sum, it) => sum + Number(it.discount_total ?? it.discount_price ?? 0),
+        0
+      );
+
+      const actualSum = items.reduce(
+        (sum, it) => sum + Number(it.actual_total ?? (Number(it.actual_price || 0) * Number(it.qty || 1))),
+        0
+      );
+
+      const discount = actualSum - discountedSum;
+      const delivery_charge = Number(extraData?.delivery_charge) || 0;
+      const total_amount = discountedSum + delivery_charge;
+
+      return {
+        sub_total: Number(actualSum.toFixed(2)),
+        discount: Number(discount.toFixed(2)),
+        delivery_charge,
+        total_amount: Number(total_amount.toFixed(2)),
+      };
+    } catch (e) {
+      return extraData || {};
+    }
+  };
+
   const increaseQty = async (product) => {
-    const newQty = Number(product.qty) + 1;
+    console.log(product, 'jhkjh')
+    const currentQty = Number(product.qty) || 1;
+    const newQty = currentQty + 1;
+    const targetSkuId = getCartSkuId(product);
+    if (!targetSkuId) return;
 
     setCartItems((prev) => {
       const updated = prev.map((item) => {
-        if (item.product_id !== product.product_id) return item;
+        const isMatch = isCartItemMatching(item, product);
+        if (!isMatch) return item;
 
         const prevQty = Number(item.qty) || 1;
         const perUnitFromDiscount =
-          item.unit_price || (Number(item.discount_price) / prevQty) || Number(item.actual_price);
+          item.unit_price || (Number(item.discount_price) / prevQty) || Number(item.actual_price) || 0;
         const unitPrice = Number(perUnitFromDiscount) || Number(item.actual_price || 0);
         const actualTotal = Number(item.actual_price || 0) * newQty;
         const discountTotal = Number((unitPrice * newQty).toFixed(2));
@@ -162,20 +229,24 @@ const CartPage = () => {
   };
 
   const decreaseQty = async (product) => {
-    if (Number(product.qty) === 1) {
-      removeItem(product.product_id);
+    const currentQty = Number(product.qty) || 1;
+    if (currentQty <= 1) {
+      await removeItem(product);
       return;
     }
 
-    const newQty = Number(product.qty) - 1;
+    const newQty = currentQty - 1;
+    const targetSkuId = getCartSkuId(product);
+    if (!targetSkuId) return;
 
     setCartItems((prev) => {
       const updated = prev.map((item) => {
-        if (item.product_id !== product.product_id) return item;
+        const isMatch = isCartItemMatching(item, product);
+        if (!isMatch) return item;
 
         const prevQty = Number(item.qty) || 1;
         const perUnitFromDiscount =
-          item.unit_price || (Number(item.discount_price) / prevQty) || Number(item.actual_price);
+          item.unit_price || (Number(item.discount_price) / prevQty) || Number(item.actual_price) || 0;
         const unitPrice = Number(perUnitFromDiscount) || Number(item.actual_price || 0);
         const actualTotal = Number(item.actual_price || 0) * newQty;
         const discountTotal = Number((unitPrice * newQty).toFixed(2));
@@ -197,14 +268,29 @@ const CartPage = () => {
 
     await updateCartQty(product, newQty);
   };
-  const removeItem = async (productId) => {
+
+  const removeItem = async (itemOrId) => {
     const userid = await getuserId();
     const token = await getToken();
+    const isObject = typeof itemOrId === 'object' && itemOrId !== null;
+    const skuId = isObject
+      ? getCartSkuId(itemOrId)
+      : String(itemOrId);
+    const sellerId = isObject ? (itemOrId.seller_id ?? itemOrId.sellerId ?? itemOrId.vendor_id) : null;
+    const sellerSkuId = isObject ? itemOrId.seller_sku_id : null;
+    if (!skuId) {
+      Alert.alert('Error', 'This cart item is missing its SKU.');
+      return;
+    }
 
     try {
       const formData = new FormData();
-      formData.append("user_id", userid);
-      formData.append("product_id", productId);
+      formData.append("product_sku_id", skuId);
+      if (sellerId) formData.append("seller_id", String(sellerId));
+      if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
+      if (userid) {
+        formData.append("user_id", userid);
+      }
 
       const response = await fetch(`${BASE_URL}cart-remove`, {
         method: "POST",
@@ -217,14 +303,18 @@ const CartPage = () => {
 
       const result = await response.json();
 
-      // console.log("Remove Cart Response:", result);
-
       if (response.ok && result.status === 200) {
         setCartItems((prev) => {
-          const updated = prev.filter((item) => item.product_id !== productId);
+          const updated = prev.filter((item) => {
+            return isObject
+              ? !isCartItemMatching(item, itemOrId)
+              : getCartSkuId(item) !== skuId;
+          });
           if (updated.length === 0) {
             clearActiveCartSeller();
           }
+          const nextSummary = computeExtraDataFromCart(updated);
+          setExtraData(nextSummary);
           return updated;
         });
       } else {
@@ -255,7 +345,7 @@ const CartPage = () => {
 
       const result = await response.json();
       if (result.status === 200) {
-        await removeItem(item.product_id);
+        await removeItem(item);
 
         // ToastAndroid.show(
         //   "Product moved to Wishlist",
@@ -324,32 +414,6 @@ const CartPage = () => {
     setCouponCode('DEEBAZER50');
   };
 
-  const computeExtraDataFromCart = (items) => {
-    try {
-      const discountedSum = items.reduce(
-        (sum, it) => sum + Number(it.discount_total ?? it.discount_price ?? 0),
-        0
-      );
-
-      const actualSum = items.reduce(
-        (sum, it) => sum + Number(it.actual_total ?? (Number(it.actual_price || 0) * Number(it.qty || 1))),
-        0
-      );
-
-      const discount = actualSum - discountedSum;
-      const delivery_charge = Number(extraData?.delivery_charge) || 0;
-      const total_amount = discountedSum + delivery_charge;
-
-      return {
-        sub_total: Number(actualSum.toFixed(2)),
-        discount: Number(discount.toFixed(2)),
-        delivery_charge,
-        total_amount: Number(total_amount.toFixed(2)),
-      };
-    } catch (e) {
-      return extraData || {};
-    }
-  };
   const onBuyNowPressed = () => {
     const currentAddressId = addressId || addressData?.id;
     if (!currentAddressId) {
@@ -412,23 +476,45 @@ const CartPage = () => {
         }
       }
 
-      const body = {
-        address_id: currentAddressId ? (isNaN(currentAddressId) ? currentAddressId : Number(currentAddressId)) : undefined,
-        payment_method: String(selectedMethod),
-      };
-      // console.log("Order Request Body:", body);
-      const response = await fetch(`${BASE_URL}orders`, {
+      const formData = new FormData();
+      if (currentAddressId) {
+        formData.append("address_id", String(currentAddressId));
+      }
+      formData.append("payment_method", String(selectedMethod));
+
+      let response = await fetch(`${BASE_URL}orders`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
-        body: JSON.stringify(body),
+        body: formData,
       });
 
-      const result = await response.json();
+      let result = await response.json();
       console.log("Create Order Result:", result);
+
+      // Fallback to JSON if FormData not accepted
+      if (!response.ok && (!result || result.status !== 200)) {
+        const jsonBody = {
+          address_id: currentAddressId ? (isNaN(currentAddressId) ? currentAddressId : Number(currentAddressId)) : undefined,
+          payment_method: String(selectedMethod),
+        };
+        const jsonRes = await fetch(`${BASE_URL}orders`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+          body: JSON.stringify(jsonBody),
+        });
+        const jsonResult = await jsonRes.json();
+        if (jsonRes.ok || jsonResult.status === 200) {
+          response = jsonRes;
+          result = jsonResult;
+        }
+      }
 
       setIsPaymentModalVisible(false);
       setIsPlacingOrder(false);
@@ -455,8 +541,9 @@ const CartPage = () => {
           Alert.alert("Success", result.message || "Order created successfully");
         }
 
-        const createdOrderId = result.order_id || result.data?.id || result.id || result.order?.id || result.order?.order_id || result.data?.order_id;
-        const orderNumber = result.order_number || result.order?.order_number || result.data?.order_number;
+        const firstOrderId = Array.isArray(result.order_ids) && result.order_ids.length > 0 ? result.order_ids[0] : null;
+        const createdOrderId = firstOrderId || result.order_id || result.data?.id || result.id || result.order?.id || result.order?.order_id || result.data?.order_id;
+        const orderNumber = result.order_number || firstOrderId || result.order?.order_number || result.data?.order_number;
 
         navigation.navigate("OrderDetails", {
           order_id: createdOrderId,
@@ -543,7 +630,7 @@ const CartPage = () => {
       setIsModal(false);
     }, [])
   );
-  const CartView = async () => {
+  const CartView = async (selectedAddrId = null) => {
     const userid = await getuserId();
     if (!userid) {
       setRefreshing(false);
@@ -551,8 +638,13 @@ const CartPage = () => {
       return;
     }
 
+    const currentAddressId = selectedAddrId || addressId || addressData?.id;
+
     const formData = new FormData();
     formData.append('user_id', userid);
+    if (currentAddressId) {
+      formData.append('address_id', currentAddressId);
+    }
 
     try {
       const token = await getToken();
@@ -779,7 +871,7 @@ const CartPage = () => {
 
   if (loading && !refreshing) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      <SafeAreaView edges={[]} style={[styles.container, { backgroundColor: theme.bg }]}>
         <View style={[styles.header, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
           <TouchableOpacity style={[styles.iconBtn, { backgroundColor: isDarkMode ? '#334155' : '#F5F5F5' }]} onPress={() => navigation.goBack()}>
             <AntDesign name="arrowleft" size={22} color={theme.textPrimary} />
@@ -798,7 +890,7 @@ const CartPage = () => {
 
   if (!isuser) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      <SafeAreaView edges={[]} style={[styles.container, { backgroundColor: theme.bg }]}>
         <View style={[loginStyles.container, { backgroundColor: theme.bg }]}>
           <View style={[loginStyles.iconBox, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}>
             <AntDesign
@@ -842,7 +934,7 @@ const CartPage = () => {
   }
   if (isuser && (!cartItems || cartItems.length === 0)) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      <SafeAreaView edges={[]} style={[styles.container, { backgroundColor: theme.bg }]}>
         <ScrollView
           contentContainerStyle={styles.scrollFlexGrow}
           refreshControl={
@@ -885,7 +977,8 @@ const CartPage = () => {
 
   return (
 
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+    <SafeAreaView edges={[]} style={[styles.container, { backgroundColor: theme.bg }]}>
+      <StatusBar backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} translucent={true} />
 
       {/* ================= Header ================= */}
 
@@ -909,7 +1002,7 @@ const CartPage = () => {
         {/* ================= Product Card ================= */}
         <FlatList
           data={cartItems}
-          keyExtractor={(item) => item.product_id.toString()}
+          keyExtractor={(item, index) => String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${getCartSkuId(item) || index}` : `${getCartSkuId(item) || index}`))}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 170 }}
           initialNumToRender={5}
@@ -938,6 +1031,10 @@ const CartPage = () => {
                   onPress={() =>
                     navigation.navigate('ProductDetails', {
                       id: item.product_id || item.id,
+                      product_sku_id: getCartSkuId(item),
+                      sku_id: getCartSkuId(item),
+                      seller_id: item.seller_id || item.sellerId || item.vendor_id || item.seller?.id || item.user_id,
+                      item,
                     })
                   }
                 >
@@ -1189,6 +1286,7 @@ const CartPage = () => {
                     setAddressData(item);
                     setAddresId(item?.id || '');
                     setIsModal(false);
+                    CartView(item?.id);
                   }}
                 >
                   <View style={styles.addressTop}>
@@ -1976,7 +2074,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   header: {
-    height: 56,
+    height: 56 + STATUSBAR_HEIGHT,
+    paddingTop: STATUSBAR_HEIGHT,
     backgroundColor: AllColors.white,
     flexDirection: "row",
     alignItems: "center",

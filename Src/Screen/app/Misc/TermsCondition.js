@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'r
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
+import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 
 const TermsCondition = () => {
   const navigation = useNavigation();
@@ -69,7 +70,7 @@ const styles = StyleSheet.create({
     padding: 15,
     borderBottomWidth: 1,
     borderBottomColor: AllColors.divider,
-    marginTop: 30, // For status bar spacing
+    paddingTop: STATUSBAR_HEIGHT + 10,
   },
   backButton: {
     padding: 5,
