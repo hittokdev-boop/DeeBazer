@@ -103,7 +103,7 @@ const CartPage = () => {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
-  const updateCartQty = async (product, qty) => {
+  const updateCartQty = async (product, mode = 'add') => {
     const ID = await getuserId();
     const token = await getToken();
     const skuId = getCartSkuId(product);
@@ -114,33 +114,11 @@ const CartPage = () => {
     const sellerId = product?.seller_id ?? product?.sellerId ?? product?.vendor_id;
     const sellerSkuId = product?.seller_sku_id;
     try {
-      // Backend's cart-to-add treats qty as an increment (existing + qty).
-      // To set the exact quantity on the cart page, first remove then add exact qty.
-      const removeFormData = new FormData();
-      removeFormData.append("product_sku_id", skuId);
-      if (sellerId) removeFormData.append("seller_id", String(sellerId));
-      if (sellerSkuId) removeFormData.append("seller_sku_id", String(sellerSkuId));
-      if (ID) {
-        removeFormData.append("user_id", ID);
-      }
-
-      await fetch(`${BASE_URL}cart-remove`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: removeFormData,
-      });
-
       const formData = new FormData();
-      formData.append("product_sku_id", skuId);
-      if (sellerId) formData.append("seller_id", String(sellerId));
+      formData.append("product_sku_id", String(skuId));
+      formData.append("qty", 1);
+      formData.append("mode", mode);
       if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
-      if (ID) {
-        formData.append("user_id", ID);
-      }
-      formData.append("qty", qty);
 
       const response = await fetch(`${BASE_URL}cart-to-add`, {
         method: "POST",
@@ -225,7 +203,7 @@ const CartPage = () => {
       return updated;
     });
 
-    await updateCartQty(product, newQty);
+    await updateCartQty(product, 'add');
   };
 
   const decreaseQty = async (product) => {
@@ -266,7 +244,7 @@ const CartPage = () => {
       return updated;
     });
 
-    await updateCartQty(product, newQty);
+    await updateCartQty(product, 'sub');
   };
 
   const removeItem = async (itemOrId) => {
@@ -285,11 +263,9 @@ const CartPage = () => {
 
     try {
       const formData = new FormData();
-      formData.append("product_sku_id", skuId);
-      if (sellerId) formData.append("seller_id", String(sellerId));
-      if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
-      if (userid) {
-        formData.append("user_id", userid);
+      formData.append("product_sku_id", String(skuId));
+      if (sellerSkuId) {
+        formData.append("seller_sku_id", String(sellerSkuId));
       }
 
       const response = await fetch(`${BASE_URL}cart-remove`, {
