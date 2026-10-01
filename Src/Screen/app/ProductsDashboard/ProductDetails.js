@@ -502,14 +502,10 @@ export default function ProductDetails({ route }) {
     }
     const formData = new FormData();
     formData.append('product_sku_id', String(skuId));
-    const sellerId = selectedSellerId ?? product?.seller_id ?? product?.vendor_id;
-    const sellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
-    if (sellerId) formData.append('seller_id', String(sellerId));
-    if (sellerSkuId) formData.append('seller_sku_id', String(sellerSkuId));
-    if (userId) {
-      formData.append('user_id', userId);
-    }
     formData.append('qty', 1);
+    formData.append('mode', 'add');
+    const sellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
+    if (sellerSkuId) formData.append('seller_sku_id', String(sellerSkuId));
 
     try {
       const response = await fetch(`${BASE_URL}cart-to-add`, {
