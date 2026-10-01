@@ -230,12 +230,12 @@ export default function Wishlist() {
     }
 
     const skuId = item?.product_sku_id ?? item?.sku_id ?? id;
+    const sellerSkuId = item?.seller_sku_id;
     const formData = new FormData();
-    formData.append('product_sku_id', skuId);
-    if (userId) {
-      formData.append('user_id', userId);
-    }
+    formData.append('product_sku_id', String(skuId));
     formData.append('qty', 1);
+    formData.append('mode', 'add');
+    if (sellerSkuId) formData.append('seller_sku_id', String(sellerSkuId));
 
     try {
       const response = await fetch(`${BASE_URL}cart-to-add`, {
