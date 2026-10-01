@@ -168,14 +168,16 @@ export const removePassword = async () => {
  * Headers: Authorization: Bearer {token}
  * Body: { product_sku_id, qty }
  */
-export const addToCartApi = async (productSkuId, qty = 1, extra = {}) => {
+export const addToCartApi = async (productSkuId, qty = 1, extra = {}, mode = 'add') => {
   try {
     const token = await getToken();
     const userId = await getuserId();
     const formData = new FormData();
     formData.append("product_sku_id", productSkuId);
     formData.append("qty", qty);
+    formData.append("mode", mode);
     if (userId) formData.append("user_id", userId);
+    if (extra?.seller_sku_id) formData.append("seller_sku_id", String(extra.seller_sku_id));
 
     const response = await fetch(`${BASE_URL}cart-to-add`, {
       method: "POST",
@@ -197,14 +199,15 @@ export const addToCartApi = async (productSkuId, qty = 1, extra = {}) => {
  * Remove item from cart
  * POST /api/cart-remove
  * Headers: Authorization: Bearer {token}
- * Body: { product_sku_id }
+ * Body: { product_sku_id, seller_sku_id }
  */
-export const removeFromCartApi = async (productSkuId) => {
+export const removeFromCartApi = async (productSkuId, sellerSkuId = null) => {
   try {
     const token = await getToken();
     const userId = await getuserId();
     const formData = new FormData();
-    formData.append("product_sku_id", productSkuId);
+    formData.append("product_sku_id", String(productSkuId));
+    if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
     if (userId) formData.append("user_id", userId);
 
     const response = await fetch(`${BASE_URL}cart-remove`, {
