@@ -915,11 +915,19 @@
 // **Headers:**
 // - `Authorization: Bearer {token}`
 
-// **Request Body:**
-// ```json
+// POST: {{base_url}}api/cart-to-add
+// Authorization : bearer_token
+
+// BODY :
+// product_sku_id:2
+// qty:1
+// seller_sku_id:2
+// mode:sub -- add,sub,set
+
+// response :
 // {
-//   "product_sku_id": 2,
-//   "qty": 50
+//     "status": 200,
+//     "message": "Cart updated successfully."
 // }
 // ```
 
@@ -1011,17 +1019,18 @@
 // ### Remove from Cart
 // Remove product SKU from user cart.
 
-// **Endpoint:** `POST /api/cart-remove`
+// *POST : {{base_url}}api/cart-remove
+// Authorization : bearer_token
 
-// **Headers:**
-// - `Authorization: Bearer {token}`
+// BODY :
+// product_sku_id:3
+// seller_sku_id:3
 
-// **Request Body:**
-// ```json
+// Response :
 // {
-//   "product_sku_id": 2
+//     "status": 200,
+//     "message": "Cart removed successfully."
 // }
-// ```
 
 // **Response (200):**
 // ```json
