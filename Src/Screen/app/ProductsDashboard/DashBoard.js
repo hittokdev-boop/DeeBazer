@@ -1177,12 +1177,15 @@ export default function DashBoard() {
     const isObj = typeof itemOrId === 'object' && itemOrId !== null;
     const skuId = isObj ? getCartSkuId(itemOrId) : String(itemOrId);
     const sellerId = isObj ? (itemOrId.seller_id ?? itemOrId.sellerId ?? itemOrId.vendor_id) : null;
-    const sellerSkuId = isObj ? itemOrId.seller_sku_id : null;
 
     let foundInCart = null;
     if (cartItems && cartItems.length > 0) {
       foundInCart = cartItems.find(ci => isCartItemMatchingCard(ci, itemOrId));
     }
+
+    const sellerSkuId = isObj
+      ? (itemOrId.seller_sku_id ?? itemOrId.sellerSkuId ?? foundInCart?.seller_sku_id)
+      : (foundInCart?.seller_sku_id ?? null);
 
     const currentQty = foundInCart ? Number(foundInCart.qty) : getQtyForItem(itemOrId);
 
@@ -1215,16 +1218,11 @@ export default function DashBoard() {
     setCartItems(remainingItems);
     await saveLocalCartDetails(remainingItems);
 
-    // Calculate total backend quantity remaining for this product_sku_id across other sellers
-    const totalRemainingForSku = remainingItems
-      .filter(ci => getCartSkuId(ci) === String(primaryId))
-      .reduce((sum, ci) => sum + (Number(ci.qty) || 1), 0);
-
     try {
       const removeFormData = new FormData();
       removeFormData.append("product_sku_id", String(primaryId));
-      if (userId) {
-        removeFormData.append("user_id", String(userId));
+      if (sellerSkuId) {
+        removeFormData.append("seller_sku_id", String(sellerSkuId));
       }
       await fetch(`${BASE_URL}cart-remove`, {
         method: "POST",
@@ -1234,24 +1232,6 @@ export default function DashBoard() {
         },
         body: removeFormData,
       });
-
-      if (totalRemainingForSku > 0) {
-        const formData = new FormData();
-        formData.append("product_sku_id", String(primaryId));
-        if (userId) {
-          formData.append("user_id", String(userId));
-        }
-        formData.append("qty", totalRemainingForSku);
-
-        await fetch(`${BASE_URL}cart-to-add`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-          },
-          body: formData,
-        });
-      }
 
       if (remainingItems.length === 0) {
         await clearActiveCartSeller();
@@ -1292,12 +1272,9 @@ export default function DashBoard() {
 
     const formData = new FormData();
     formData.append("product_sku_id", String(primaryId));
-    if (sellerId) formData.append("seller_id", String(sellerId));
-    if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
-    if (userId) {
-      formData.append("user_id", String(userId));
-    }
     formData.append("qty", 1);
+    formData.append("mode", "add");
+    if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
 
     try {
       const response = await fetch(`${BASE_URL}cart-to-add`, {
@@ -1335,10 +1312,10 @@ export default function DashBoard() {
     const primaryId = skuId;
     if (!primaryId) return;
 
-    if (currentQty <= 1) {
-      await removeCart(itemOrId);
-      return;
-    }
+    // if (currentQty <= 1) {
+    //   await removeCart(itemOrId);
+    //   return;
+    // }
 
     const nextQty = currentQty - 1;
 
@@ -1358,44 +1335,30 @@ export default function DashBoard() {
     setCartItems(updatedItems);
     await saveLocalCartDetails(updatedItems);
 
-    const totalBackendQtyForSku = updatedItems
-      .filter(ci => getCartSkuId(ci) === String(primaryId))
-      .reduce((sum, ci) => sum + (Number(ci.qty) || 1), 0);
+    const formData = new FormData();
+    formData.append("product_sku_id", String(primaryId));
+    formData.append("qty", 1);
+    formData.append("mode", "sub");
+    if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
 
     try {
-      const removeFormData = new FormData();
-      removeFormData.append("product_sku_id", String(primaryId));
-      if (userId) {
-        removeFormData.append("user_id", String(userId));
-      }
-      await fetch(`${BASE_URL}cart-remove`, {
+      const response = await fetch(`${BASE_URL}cart-to-add`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
         },
-        body: removeFormData,
+        body: formData,
       });
 
-      if (totalBackendQtyForSku > 0) {
-        const formData = new FormData();
-        formData.append("product_sku_id", String(primaryId));
-        if (userId) {
-          formData.append("user_id", String(userId));
-        }
-        formData.append("qty", totalBackendQtyForSku);
+      const data = await response.json();
+      const isSuccess = response.ok && (data?.status == 200 || data?.success || data?.status === '200');
 
-        await fetch(`${BASE_URL}cart-to-add`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-          },
-          body: formData,
-        });
+      if (!isSuccess) {
+        getCartItems();
+      } else {
+        getCartItems();
       }
-
-      getCartItems();
     } catch (error) {
       console.log("Decrease qty error:", error);
       getCartItems();
@@ -1528,18 +1491,16 @@ export default function DashBoard() {
     const skuId = targetItem ? getCartSkuId(targetItem) : String(productId ?? '').trim();
     if (!skuId) return;
 
+    const sellerSkuId = targetItem?.seller_sku_id;
+
     const formData = new FormData();
     formData.append("product_sku_id", String(skuId));
-    if (userId) {
-      formData.append("user_id", String(userId));
-    }
     formData.append("qty", qty);
+    if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
 
     const removeFormData = new FormData();
     removeFormData.append("product_sku_id", String(skuId));
-    if (userId) {
-      removeFormData.append("user_id", String(userId));
-    }
+    if (sellerSkuId) removeFormData.append("seller_sku_id", String(sellerSkuId));
     await fetch(`${BASE_URL}cart-remove`, {
       method: "POST",
       headers: {
@@ -2189,12 +2150,16 @@ export default function DashBoard() {
     try {
       const formData = new FormData();
       formData.append('product_sku_id', String(targetSku));
-      if (sellerId) formData.append('seller_id', String(sellerId));
-      if (sellerSkuId) formData.append('seller_sku_id', String(sellerSkuId));
-      if (userId) {
-        formData.append('user_id', String(userId));
-      }
       formData.append('qty', 1);
+      formData.append('mode', 'add');
+      if (sellerSkuId) formData.append('seller_sku_id', String(sellerSkuId));
+
+      console.log('🛒 [cart-to-add REQUEST BODY]:', {
+        product_sku_id: String(targetSku),
+        qty: 1,
+        mode: 'add',
+        seller_sku_id: sellerSkuId ? String(sellerSkuId) : null,
+      });
 
       const response = await fetch(`${BASE_URL}cart-to-add`, {
         method: 'POST',
@@ -2206,7 +2171,7 @@ export default function DashBoard() {
       });
 
       const data = await response.json();
-      console.log('cart-to-add data', data);
+      console.log('🛒 [cart-to-add RESPONSE]:', data);
 
       const isSuccess = response.ok && (data?.status == 200 || data?.success || data?.status === '200');
 
