@@ -1046,63 +1046,86 @@
 // ---
 // ## Wishlist
 
-// ### Add to Wishlist
-// Add a product to wishlist.
+// POST : {{base_url}}api/wishlist-add
+// Authorization : bearer_token
 
-// **Endpoint:** `POST /api/wishlist-add`
+// BODY :
+// product_sku_id:2
+// seller_sku_id:10
 
-// **Request Body:**
-// ```json
+// Response :
 // {
-//   "user_id": 1,
-//   "product_id": 1
-// }
-// ```
+//     "status": 200,
+//     "message": "Added to Wishlist Successfully"
+// }[6:24 PM]POST : {{base_url}}api/wishlist-view
+// Authorization : bearer_token
 
-// **Response:**
-// ```json
+// Response :
 // {
-//   "status": 200,
-//   "message": "Add to Wishlist Successfully"
-// }
-// ```
+//     "status": 200,
+//     "message": "Wishlist View",
+//     "data": [
+//         {
+//             "id": 1,
+//             "product_sku_id": 2,
+//             "seller_sku_id": 2,
+//             "name": "Marbe gray",
+//             "slug": "samsung-s24-marbe-gray",
+//             "sku": "SKU-EY9GFPRM",
+//             "actual_price": 74999,
+//             "discount_price": 49999,
+//             "short_desc": "Android mobile",
+//             "category_id": 1,
+//             "category_name": "Electronics",
+//             "image": "https://deebazar.com/admin/images/uploads/skus/2/U6otPNTU9HOUIJrJXE4L_1790752135.jpg",
+//             "in_stock": true,
+//             "stock_quantity": 8,
+//             "rating": 0,
+//             "reviews": 0,
+//             "seller_id": 2,
+//             "seller_name": "Demo Seller",
+//             "created_at": "2026-09-30T07:08:55.000000Z",
+//             "updated_at": "2026-09-30T07:09:07.000000Z",
+//             "isCartProduct": false,
+//             "isWishlistProduct": true
+//         },
+//         {
+//             "id": 4,
+//             "product_sku_id": 2,
+//             "seller_sku_id": 10,
+//             "name": "Marbe gray",
+//             "slug": "samsung-s24-marbe-gray",
+//             "sku": "SKU-EY9GFPRM",
+//             "actual_price": 75999,
+//             "discount_price": 50999,
+//             "short_desc": "Android mobile",
+//             "category_id": 1,
+//             "category_name": "Electronics",
+//             "image": "https://deebazar.com/admin/images/uploads/skus/2/U6otPNTU9HOUIJrJXE4L_1790752135.jpg",
+//             "in_stock": true,
+//             "stock_quantity": 5,
+//             "rating": 0,
+//             "reviews": 0,
+//             "seller_id": 1,
+//             "seller_name": "Hittok",
+//             "created_at": "2026-09-30T07:08:55.000000Z",
+//             "updated_at": "2026-09-30T07:09:07.000000Z",
+//             "isCartProduct": false,
+//             "isWishlistProduct": true
+//         }
+//     ]
+// }[6:26 PM]POST : {{base_url}}api/wishlist-remove
+// Authorization : bearer_token
 
-// **Response (Already in wishlist):**
-// ```json
+// BODY :
+// product_sku_id:2
+// seller_sku_id:10
+
+// Response :
 // {
-//   "status": 200,
-//   "message": "Product already in wishlist"
+//     "status": 200,
+//     "message": "Wishlist Removed Successfully"
 // }
-// ```
-
-// ### Remove from Wishlist
-// Remove a product from wishlist.
-
-// **Endpoint:** `POST /api/wishlist-remove`
-
-// **Request Body:**
-// ```json
-// {
-//   "user_id": 1,
-//   "product_id": 1
-// }
-// ```
-
-// **Response:**
-// ```json
-// {
-//   "status": 200,
-//   "message": "Wishlist Remove Successfully"
-// }
-// ```
-
-// **Error Response (Item not found):**
-// ```json
-// {
-//   "status": 404,
-//   "message": "Wishlist item not found"
-// }
-// ```
 // ---
 
 // ## Address Management APIs

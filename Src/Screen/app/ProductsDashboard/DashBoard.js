@@ -1447,16 +1447,12 @@ export default function DashBoard() {
     }
 
     try {
-      const formData = new FormData();
-      formData.append('user_id', String(userId));
-
       const response = await fetch(`${BASE_URL}wishlist-view`, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
-        body: formData,
       });
 
       const data = await response.json();
@@ -1562,16 +1558,9 @@ export default function DashBoard() {
     );
 
     const formData = new FormData();
-    formData.append('user_id', String(userId));
     formData.append('product_sku_id', String(skuId));
-    if (sellerId) {
-      formData.append('seller_id', String(sellerId));
-    }
     if (sellerSkuId) {
       formData.append('seller_sku_id', String(sellerSkuId));
-    }
-    if (item?.product_id) {
-      formData.append('product_id', String(item.product_id));
     }
 
     try {
@@ -1579,7 +1568,7 @@ export default function DashBoard() {
         method: 'POST',
         headers: {
           Accept: 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
         },
         body: formData,
       });

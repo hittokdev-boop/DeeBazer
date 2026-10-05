@@ -50,41 +50,95 @@ export const saveStoredReview = async (reviewKey, reviewData) => {
   }
 };
 
+export const getRatingColor = (rating) => {
+  const num = Number(rating);
+  if (!num || isNaN(num) || num <= 0) return '#94A3B8';
+  if (num <= 2) return '#EF4444'; // Red: 1-2 Stars
+  if (num === 3) return '#F97316'; // Orange: 3 Stars
+  return '#10B981'; // Green: 4-5 Stars
+};
+
+export const getRatingColorConfig = (rating, isDarkMode = false) => {
+  const num = Number(rating);
+  if (!num || isNaN(num) || num <= 0) {
+    return {
+      color: AllColors.primary,
+      bg: isDarkMode ? 'rgba(247, 22, 112, 0.12)' : AllColors.softPinkBg,
+      borderColor: isDarkMode ? 'rgba(247, 22, 112, 0.3)' : '#FCE7F3',
+      label: 'Rate Order',
+      starColor: '#94A3B8',
+      tier: 'unrated',
+    };
+  }
+  if (num <= 2) {
+    // Red: 1-2 Stars
+    return {
+      color: isDarkMode ? '#F87171' : '#DC2626',
+      bg: isDarkMode ? 'rgba(239, 68, 68, 0.18)' : '#FEE2E2',
+      borderColor: isDarkMode ? 'rgba(248, 113, 113, 0.35)' : '#FECACA',
+      label: num === 1 ? 'Very Poor' : 'Poor',
+      starColor: isDarkMode ? '#F87171' : '#EF4444',
+      tier: 'red',
+    };
+  }
+  if (num === 3) {
+    // Orange: 3 Stars
+    return {
+      color: isDarkMode ? '#FB923C' : '#EA580C',
+      bg: isDarkMode ? 'rgba(249, 115, 22, 0.18)' : '#FFEDD5',
+      borderColor: isDarkMode ? 'rgba(251, 146, 60, 0.35)' : '#FED7AA',
+      label: 'Average',
+      starColor: isDarkMode ? '#FB923C' : '#F97316',
+      tier: 'orange',
+    };
+  }
+  // Green: 4-5 Stars
+  return {
+    color: isDarkMode ? '#34D399' : '#15803D',
+    bg: isDarkMode ? 'rgba(16, 185, 129, 0.18)' : '#DCFCE7',
+    borderColor: isDarkMode ? 'rgba(52, 211, 153, 0.35)' : '#BBF7D0',
+    label: num === 4 ? 'Good' : 'Excellent',
+    starColor: isDarkMode ? '#34D399' : '#10B981',
+    tier: 'green',
+  };
+};
+
 export default function ProductReviewModal({
   visible,
   onClose,
   product,
   orderId,
   existingReview,
+  initialRating = 0,
   onReviewSubmitted,
 }) {
   const { theme, isDarkMode } = useTheme();
 
-  const [rating, setRating] = useState(5);
+  const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [photos, setPhotos] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (visible) {
-      if (existingReview) {
-        setRating(Number(existingReview.rating) || 5);
+      if (existingReview && existingReview.rating) {
+        setRating(Number(existingReview.rating) || 0);
         setComment(existingReview.comment || '');
         setPhotos(Array.isArray(existingReview.photos) ? existingReview.photos : []);
       } else {
-        setRating(5);
+        setRating(Number(initialRating) || 0);
         setComment('');
         setPhotos([]);
       }
     }
-  }, [visible, existingReview]);
+  }, [visible, existingReview, initialRating]);
 
   const ratingDescriptions = {
-    1: { text: 'Very Poor', icon: 'sad-outline', color: '#EF4444' },
-    2: { text: 'Poor', icon: 'sad-outline', color: '#F97316' },
-    3: { text: 'Average', icon: 'ellipse-outline', color: '#EAB308' },
-    4: { text: 'Good', icon: 'happy-outline', color: '#10B981' },
-    5: { text: 'Excellent!', icon: 'sparkles', color: '#059669' },
+    1: { text: 'Very Poor', icon: 'sad-outline', color: '#EF4444', bg: '#FEE2E2', darkBg: 'rgba(239, 68, 68, 0.22)' },
+    2: { text: 'Poor', icon: 'sad-outline', color: '#EF4444', bg: '#FEE2E2', darkBg: 'rgba(239, 68, 68, 0.22)' },
+    3: { text: 'Average', icon: 'ellipse-outline', color: '#F97316', bg: '#FFEDD5', darkBg: 'rgba(249, 115, 22, 0.22)' },
+    4: { text: 'Good', icon: 'happy-outline', color: '#10B981', bg: '#DCFCE7', darkBg: 'rgba(16, 185, 129, 0.22)' },
+    5: { text: 'Excellent!', icon: 'sparkles', color: '#059669', bg: '#DCFCE7', darkBg: 'rgba(16, 185, 129, 0.22)' },
   };
 
   const quickTags = [
@@ -244,7 +298,7 @@ export default function ProductReviewModal({
 
   const productName = product?.name || product?.product_name || product?.title || 'Delivered Product';
   const productImage = product?.img || product?.image || product?.product_image || product?.thumbnail;
-  const currentDesc = ratingDescriptions[rating] || ratingDescriptions[5];
+  const currentDesc = ratingDescriptions[rating] || null;
 
   return (
     <Modal
@@ -266,8 +320,8 @@ export default function ProductReviewModal({
           {/* Header */}
           <View style={styles.headerRow}>
             <View style={styles.headerTitleBox}>
-              <View style={[styles.headerIconCircle, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.2)' : AllColors.softPinkBg }]}>
-                <Ionicons name="star" size={18} color={AllColors.primary} />
+              <View style={[styles.headerIconCircle, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}>
+                <Ionicons name="star-outline" size={18} color={theme.textPrimary} />
               </View>
               <View>
                 <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>
@@ -337,7 +391,8 @@ export default function ProductReviewModal({
 
               <View style={styles.starsRow}>
                 {[1, 2, 3, 4, 5].map((starVal) => {
-                  const isActive = starVal <= rating;
+                  const isActive = rating > 0 && starVal <= rating;
+                  const activeColor = getRatingColor(rating);
                   return (
                     <TouchableOpacity
                       key={starVal}
@@ -348,18 +403,55 @@ export default function ProductReviewModal({
                       <Ionicons
                         name={isActive ? 'star' : 'star-outline'}
                         size={38}
-                        color={isActive ? '#F59E0B' : (isDarkMode ? '#64748B' : '#CBD5E1')}
+                        color={isActive ? activeColor : (isDarkMode ? '#FFFFFF' : '#000000')}
                       />
                     </TouchableOpacity>
                   );
                 })}
               </View>
 
-              <View style={[styles.ratingFeedbackBadge, { backgroundColor: isDarkMode ? '#334155' : '#FEF3C7' }]}>
-                <Text style={[styles.ratingFeedbackText, { color: currentDesc.color }]}>
-                  {rating} Star{rating > 1 ? 's' : ''} • {currentDesc.text}
-                </Text>
-              </View>
+              {rating > 0 && currentDesc ? (
+                <View
+                  style={[
+                    styles.ratingFeedbackBadge,
+                    {
+                      backgroundColor: isDarkMode ? currentDesc.darkBg : currentDesc.bg,
+                      borderColor: currentDesc.color,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={currentDesc.icon}
+                    size={16}
+                    color={currentDesc.color}
+                    style={styles.feedbackBadgeIcon}
+                  />
+                  <Text style={[styles.ratingFeedbackText, { color: currentDesc.color }]}>
+                    {rating} Star{rating > 1 ? 's' : ''} • {currentDesc.text}
+                  </Text>
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.ratingFeedbackBadge,
+                    {
+                      backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
+                      borderColor: isDarkMode ? '#64748B' : '#000000',
+                      borderWidth: 1.5,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="star-outline"
+                    size={15}
+                    color={isDarkMode ? '#FFFFFF' : '#000000'}
+                    style={styles.feedbackBadgeIcon}
+                  />
+                  <Text style={[styles.ratingFeedbackText, { color: isDarkMode ? '#FFFFFF' : '#000000' }]}>
+                    Tap a star to rate
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Photos Section */}
@@ -660,10 +752,16 @@ const styles = StyleSheet.create({
   },
   ratingFeedbackBadge: {
     alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 20,
     marginTop: 4,
+    borderWidth: 1,
+  },
+  feedbackBadgeIcon: {
+    marginRight: 6,
   },
   ratingFeedbackText: {
     fontSize: 13,

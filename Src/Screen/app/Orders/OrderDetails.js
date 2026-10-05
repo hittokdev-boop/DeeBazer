@@ -26,8 +26,11 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
-import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
-import ProductReviewModal, { getStoredReviews } from './ProductReviewModal';
+import ProductReviewModal, {
+  getStoredReviews,
+  getRatingColor,
+  getRatingColorConfig,
+} from './ProductReviewModal';
 
 export default function OrderDetails() {
   const navigation = useNavigation();
@@ -79,6 +82,7 @@ export default function OrderDetails() {
   const [reviewModalVisible, setReviewModalVisible] = useState(false);
   const [selectedReviewProduct, setSelectedReviewProduct] = useState(null);
   const [selectedExistingReview, setSelectedExistingReview] = useState(null);
+  const [selectedInitialRating, setSelectedInitialRating] = useState(0);
 
   useEffect(() => {
     getStoredReviews().then((revs) => {
@@ -88,9 +92,10 @@ export default function OrderDetails() {
     });
   }, []);
 
-  const handleOpenReviewModal = (prod, existing) => {
+  const handleOpenReviewModal = (prod, existing, initialStar = 0) => {
     setSelectedReviewProduct(prod);
     setSelectedExistingReview(existing);
+    setSelectedInitialRating(existing?.rating ? Number(existing.rating) : (initialStar || 0));
     setReviewModalVisible(true);
   };
 
@@ -1500,46 +1505,79 @@ export default function OrderDetails() {
                         {(() => {
                           const prodId = prod.id || prod.product_id || prod.product?.id || 'general';
                           const key = `${displayOrderId}_${prodId}`;
-                          const itemReview = storedReviews[key] || null;
+                          const itemReview =
+                            (storedReviews && storedReviews[key]) ||
+                            (storedReviews &&
+                              typeof storedReviews === 'object' &&
+                              Object.values(storedReviews).find(
+                                (r) =>
+                                  r &&
+                                  typeof r === 'object' &&
+                                  r.order_id &&
+                                  String(r.order_id) === String(displayOrderId) &&
+                                  String(r.product_id) === String(prodId)
+                              )) ||
+                            null;
+                          const isItemReviewed = Boolean(itemReview && itemReview.rating);
+                          const rNum = isItemReviewed ? Number(itemReview.rating) : 0;
+                          const ratingConfig = getRatingColorConfig(rNum, isDarkMode);
 
-                          if (itemReview) {
+                          if (isItemReviewed) {
                             return (
                               <TouchableOpacity
                                 style={[
                                   styles.itemReviewedBadge,
                                   {
-                                    backgroundColor: isDarkMode ? 'rgba(16, 185, 129, 0.15)' : '#DCFCE7',
-                                    borderColor: isDarkMode ? 'rgba(52, 211, 153, 0.3)' : '#BBF7D0',
+                                    backgroundColor: ratingConfig.bg,
+                                    borderColor: ratingConfig.borderColor,
                                   },
                                 ]}
-                                onPress={() => handleOpenReviewModal(prod, itemReview)}
+                                onPress={() => handleOpenReviewModal(prod, itemReview, rNum)}
                                 activeOpacity={0.8}
                               >
-                                <Ionicons name="star" size={13} color="#15803D" />
-                                <Text style={[styles.itemReviewedBadgeText, { color: isDarkMode ? '#34D399' : '#15803D' }]}>
-                                  Rated {itemReview.rating}★ (Tap to view/edit)
+                                <Ionicons name="star" size={13} color={ratingConfig.starColor} />
+                                <Text style={[styles.itemReviewedBadgeText, { color: ratingConfig.color }]}>
+                                  Rated {rNum}★ • {ratingConfig.label} (Tap to edit)
                                 </Text>
                               </TouchableOpacity>
                             );
                           }
 
                           return (
-                            <TouchableOpacity
-                              style={[
-                                styles.itemRateBtn,
-                                {
-                                  backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.12)' : AllColors.softPinkBg,
-                                  borderColor: AllColors.primary,
-                                },
-                              ]}
-                              onPress={() => handleOpenReviewModal(prod, null)}
-                              activeOpacity={0.8}
-                            >
-                              <Ionicons name="star-outline" size={13} color={AllColors.primary} />
-                              <Text style={[styles.itemRateBtnText, { color: AllColors.primary }]}>
-                                Rate & Review Product
-                              </Text>
-                            </TouchableOpacity>
+                            <View style={styles.itemRateQuickRow}>
+                              <TouchableOpacity
+                                style={[
+                                  styles.itemRateBtn,
+                                  {
+                                    backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
+                                    borderColor: isDarkMode ? '#64748B' : '#000000',
+                                  },
+                                ]}
+                                onPress={() => handleOpenReviewModal(prod, null, 0)}
+                                activeOpacity={0.8}
+                              >
+                                <Ionicons name="star-outline" size={13} color={isDarkMode ? '#FFFFFF' : '#000000'} />
+                                <Text style={[styles.itemRateBtnText, { color: isDarkMode ? '#FFFFFF' : '#000000' }]}>
+                                  Rate:
+                                </Text>
+                              </TouchableOpacity>
+                              <View style={styles.itemStarsQuickBox}>
+                                {[1, 2, 3, 4, 5].map((starNum) => (
+                                  <TouchableOpacity
+                                    key={starNum}
+                                    onPress={() => handleOpenReviewModal(prod, null, starNum)}
+                                    style={styles.itemMiniStarTouch}
+                                    activeOpacity={0.7}
+                                  >
+                                    <Ionicons
+                                      name="star-outline"
+                                      size={18}
+                                      color={isDarkMode ? '#FFFFFF' : '#000000'}
+                                    />
+                                  </TouchableOpacity>
+                                ))}
+                              </View>
+                            </View>
                           );
                         })()}
                       </View>
@@ -1565,98 +1603,196 @@ export default function OrderDetails() {
           )}
         </View>
 
-        {/* Delivered Order Review Card */}
-        {isDelivered && (
-          <View
-            style={[
-              styles.card,
-              {
-                backgroundColor: theme.cardBg,
-                borderColor: theme.borderColor,
-              },
-            ]}
-          >
-            <View style={styles.cardHeaderRow}>
-              <View style={styles.cardTitleWithIcon}>
-                <Ionicons
-                  name="star-half-outline"
-                  size={20}
-                  color="#F59E0B"
-                />
-                <Text
+        {/* Delivered Order Review Card with Red, Orange, Green */}
+        {isDelivered && (() => {
+          const targetProd = (itemsList && itemsList[0]) || {
+            id: currentOrder.product_id || currentOrder.id || 'order',
+            name: currentOrder.name || currentOrder.product_name || `Order #${displayOrderId}`,
+            img: currentOrder.img || currentOrder.image,
+          };
+          const pId = targetProd.id || targetProd.product_id || 'general';
+          const key = `${displayOrderId}_${pId}`;
+          const existingOrderReview =
+            (storedReviews && storedReviews[key]) ||
+            (storedReviews &&
+              typeof storedReviews === 'object' &&
+              Object.values(storedReviews).find(
+                (r) =>
+                  r &&
+                  typeof r === 'object' &&
+                  r.order_id &&
+                  String(r.order_id) === String(displayOrderId)
+              )) ||
+            null;
+          const isReviewed = Boolean(existingOrderReview && existingOrderReview.rating);
+          const orderRatingNum = isReviewed ? Number(existingOrderReview.rating) : 0;
+          const ratingConfig = getRatingColorConfig(orderRatingNum, isDarkMode);
+
+          return (
+            <View
+              style={[
+                styles.card,
+                {
+                  backgroundColor: theme.cardBg,
+                  borderColor: isReviewed ? ratingConfig.borderColor : theme.borderColor,
+                },
+              ]}
+            >
+              <View style={styles.cardHeaderRow}>
+                <View style={styles.cardTitleWithIcon}>
+                  <Ionicons
+                    name={isReviewed ? 'star' : 'star-outline'}
+                    size={20}
+                    color={isReviewed ? ratingConfig.starColor : (isDarkMode ? '#FFFFFF' : '#000000')}
+                  />
+                  <Text
+                    style={[
+                      styles.sectionTitle,
+                      { color: theme.textPrimary, marginLeft: 8 },
+                    ]}
+                  >
+                    Ratings & Reviews
+                  </Text>
+                </View>
+                <View
                   style={[
-                    styles.sectionTitle,
-                    { color: theme.textPrimary, marginLeft: 8 },
+                    styles.miniStatusBadge,
+                    {
+                      backgroundColor: isReviewed
+                        ? ratingConfig.bg
+                        : (isDarkMode ? '#1E293B' : '#FFFFFF'),
+                      borderColor: isReviewed
+                        ? ratingConfig.borderColor
+                        : (isDarkMode ? '#64748B' : '#000000'),
+                      borderWidth: 1,
+                    },
                   ]}
                 >
-                  Ratings & Reviews
-                </Text>
+                  <Text
+                    style={[
+                      styles.miniStatusText,
+                      {
+                        color: isReviewed
+                          ? ratingConfig.color
+                          : (isDarkMode ? '#FFFFFF' : '#000000'),
+                      },
+                    ]}
+                  >
+                    {isReviewed ? `${existingOrderReview.rating}★ ${ratingConfig.label}` : 'Not Rated Yet'}
+                  </Text>
+                </View>
               </View>
+
+              <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+
+              {/* Interactive Rating Box: Black border & white when not reviewed; Red/Orange/Green when reviewed */}
               <View
                 style={[
-                  styles.miniStatusBadge,
+                  styles.interactiveRatingBox,
                   {
-                    backgroundColor: isDarkMode
-                      ? 'rgba(16, 185, 129, 0.18)'
-                      : '#DCFCE7',
+                    backgroundColor: isReviewed
+                      ? ratingConfig.bg
+                      : (isDarkMode ? '#1E293B' : '#FFFFFF'),
+                    borderColor: isReviewed
+                      ? ratingConfig.borderColor
+                      : (isDarkMode ? '#64748B' : '#000000'),
+                    borderWidth: 1.5,
                   },
                 ]}
               >
                 <Text
                   style={[
-                    styles.miniStatusText,
-                    {
-                      color: isDarkMode ? '#34D399' : '#15803D',
-                    },
+                    styles.interactiveRatingTitle,
+                    { color: isReviewed ? ratingConfig.color : (isDarkMode ? '#FFFFFF' : '#000000') },
                   ]}
                 >
-                  Verified Delivery
+                  {isReviewed
+                    ? `Your Rating: ${existingOrderReview.rating} Stars (${ratingConfig.label})`
+                    : 'Rate your delivery experience (Tap a star):'}
                 </Text>
+
+                <View style={styles.interactiveStarsRow}>
+                  {[1, 2, 3, 4, 5].map((starVal) => {
+                    const isFilled = isReviewed && starVal <= orderRatingNum;
+
+                    return (
+                      <TouchableOpacity
+                        key={starVal}
+                        onPress={() => handleOpenReviewModal(targetProd, existingOrderReview, starVal)}
+                        style={styles.interactiveStarBtn}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name={isFilled ? 'star' : 'star-outline'}
+                          size={32}
+                          color={
+                            isReviewed
+                              ? (isFilled ? ratingConfig.starColor : (isDarkMode ? '#475569' : '#CBD5E1'))
+                              : (isDarkMode ? '#FFFFFF' : '#000000')
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.interactiveStarLabel,
+                            {
+                              color: isReviewed
+                                ? (isFilled ? ratingConfig.color : (isDarkMode ? '#64748B' : '#94A3B8'))
+                                : (isDarkMode ? '#FFFFFF' : '#000000'),
+                            },
+                          ]}
+                        >
+                          {starVal}★
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Show legend with colors only after user has rated */}
+                {isReviewed && (
+                  <View style={styles.ratingLegendRow}>
+                    <View style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
+                      <Text style={[styles.legendText, { color: theme.textSecondary }]}>1-2: Poor</Text>
+                    </View>
+                    <View style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: '#F97316' }]} />
+                      <Text style={[styles.legendText, { color: theme.textSecondary }]}>3: Average</Text>
+                    </View>
+                    <View style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
+                      <Text style={[styles.legendText, { color: theme.textSecondary }]}>4-5: Good</Text>
+                    </View>
+                  </View>
+                )}
               </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  {
+                    backgroundColor: isReviewed ? ratingConfig.color : (isDarkMode ? '#334155' : '#000000'),
+                    marginTop: 10,
+                  },
+                ]}
+                onPress={() => handleOpenReviewModal(targetProd, existingOrderReview, orderRatingNum || 0)}
+                activeOpacity={0.88}
+              >
+                <Ionicons
+                  name={isReviewed ? 'star' : 'star-outline'}
+                  size={18}
+                  color={AllColors.white}
+                  style={styles.btnIconLeft}
+                />
+                <Text style={styles.primaryBtnText}>
+                  {isReviewed
+                    ? 'View / Edit Detailed Review & Photos'
+                    : 'Write a Review'}
+                </Text>
+              </TouchableOpacity>
             </View>
-
-            <View style={[styles.divider, { backgroundColor: theme.divider }]} />
-
-            <Text
-              style={[
-                styles.policySummaryText,
-                { color: theme.textSecondary, marginBottom: 12 },
-              ]}
-            >
-              How was your experience? Rate product quality, upload real photos, and write your feedback to help fellow shoppers!
-            </Text>
-
-            <TouchableOpacity
-              style={[
-                styles.primaryBtn,
-                { backgroundColor: AllColors.primary, marginTop: 4 },
-              ]}
-              onPress={() => {
-                const targetProd = (itemsList && itemsList[0]) || {
-                  id: currentOrder.product_id || currentOrder.id || 'order',
-                  name: currentOrder.name || currentOrder.product_name || `Order #${displayOrderId}`,
-                  img: currentOrder.img || currentOrder.image,
-                };
-                const pId = targetProd.id || targetProd.product_id || 'general';
-                const key = `${displayOrderId}_${pId}`;
-                handleOpenReviewModal(targetProd, storedReviews[key] || null);
-              }}
-              activeOpacity={0.88}
-            >
-              <Ionicons
-                name="star"
-                size={18}
-                color={AllColors.white}
-                style={styles.btnIconLeft}
-              />
-              <Text style={styles.primaryBtnText}>
-                {Object.keys(storedReviews).some((k) => k.startsWith(`${displayOrderId}_`))
-                  ? 'View / Update Your Review'
-                  : 'Write a Review with Photos'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          );
+        })()}
 
         {/* Price Breakdown Card */}
         <View
@@ -2064,6 +2200,7 @@ export default function OrderDetails() {
         product={selectedReviewProduct}
         orderId={displayOrderId}
         existingReview={selectedExistingReview}
+        initialRating={selectedInitialRating}
         onReviewSubmitted={handleReviewSubmitted}
       />
     </SafeAreaView>
@@ -2690,5 +2827,73 @@ const styles = StyleSheet.create({
   itemReviewedBadgeText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  itemRateQuickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  itemStarsQuickBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  itemMiniStarTouch: {
+    padding: 2,
+  },
+  interactiveRatingBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    marginVertical: 10,
+    alignItems: 'center',
+  },
+  interactiveRatingTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  interactiveStarsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+    marginVertical: 4,
+  },
+  interactiveStarBtn: {
+    alignItems: 'center',
+    padding: 4,
+  },
+  interactiveStarLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  ratingLegendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(148, 163, 184, 0.2)',
+    width: '100%',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

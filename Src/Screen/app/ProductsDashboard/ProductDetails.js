@@ -384,20 +384,26 @@ export default function ProductDetails({ route }) {
     }
 
     try {
-      const formData = new FormData();
-      formData.append('user_id', userId);
-
       const response = await fetch(`${BASE_URL}wishlist-view`, {
         method: 'POST',
-        body: formData,
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       const data = await response.json();
       const items = data?.data || data?.products || data?.wishlist || [];
-      const productId = product?.product_id ?? product?.id ?? id;
-      const hasProduct = items.some(
-        (entry) => String(entry?.product_id ?? entry?.id ?? entry?.product?.id) === String(productId)
-      );
+      const currentSkuId = selectedSkuId ?? product_sku_id ?? sku_id ?? getCartSkuId(product);
+      const currentSellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
+
+      const hasProduct = items.some((entry) => {
+        if (currentSellerSkuId && entry?.seller_sku_id) {
+          return String(entry.seller_sku_id) === String(currentSellerSkuId);
+        }
+        const entrySku = entry?.product_sku_id ?? entry?.sku_id ?? entry?.id;
+        return String(entrySku) === String(currentSkuId);
+      });
       setIsWishlisted(hasProduct);
     } catch (error) {
       console.log('Wishlist status error:', error);
@@ -413,15 +419,22 @@ export default function ProductDetails({ route }) {
       return;
     }
 
-    const productId = product?.product_id ?? product?.id ?? id;
+    const currentSkuId = selectedSkuId ?? product_sku_id ?? sku_id ?? getCartSkuId(product);
+    const currentSellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
     const endpoint = isWishlisted ? 'wishlist-remove' : 'wishlist-add';
     const formData = new FormData();
-    formData.append('user_id', userId);
-    formData.append('product_id', productId);
+    formData.append('product_sku_id', String(currentSkuId));
+    if (currentSellerSkuId) {
+      formData.append('seller_sku_id', String(currentSellerSkuId));
+    }
 
     try {
       const response = await fetch(`${BASE_URL}${endpoint}`, {
         method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: formData,
       });
 

@@ -429,4 +429,82 @@ export const getOrderDetailsApi = async (orderId) => {
   }
 };
 
+/**
+ * Add product to wishlist
+ * POST /api/wishlist-add
+ * Body: { product_sku_id, seller_sku_id }
+ */
+export const addToWishlistApi = async (productSkuId, sellerSkuId = null) => {
+  try {
+    const token = await getToken();
+    const formData = new FormData();
+    formData.append("product_sku_id", String(productSkuId));
+    if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
+
+    const response = await fetch(`${BASE_URL}wishlist-add`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.log("addToWishlistApi error:", error);
+    throw error;
+  }
+};
+
+/**
+ * Remove product from wishlist
+ * POST /api/wishlist-remove
+ * Body: { product_sku_id, seller_sku_id }
+ */
+export const removeFromWishlistApi = async (productSkuId, sellerSkuId = null) => {
+  try {
+    const token = await getToken();
+    const formData = new FormData();
+    formData.append("product_sku_id", String(productSkuId));
+    if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
+
+    const response = await fetch(`${BASE_URL}wishlist-remove`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.log("removeFromWishlistApi error:", error);
+    throw error;
+  }
+};
+
+/**
+ * View wishlist items
+ * POST /api/wishlist-view
+ * Headers: Authorization: Bearer {token}
+ */
+export const viewWishlistApi = async () => {
+  try {
+    const token = await getToken();
+    const response = await fetch(`${BASE_URL}wishlist-view`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    return await response.json();
+  } catch (error) {
+    console.log("viewWishlistApi error:", error);
+    throw error;
+  }
+};
 

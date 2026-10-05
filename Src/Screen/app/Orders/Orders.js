@@ -22,7 +22,11 @@ import { BASE_URL, getToken, getuserId, setuserId } from '../../../Api/Api';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
-import ProductReviewModal, { getStoredReviews } from './ProductReviewModal';
+import ProductReviewModal, {
+  getStoredReviews,
+  getRatingColor,
+  getRatingColorConfig,
+} from './ProductReviewModal';
 
 const TABS = ['All', 'Processing', 'Delivered', 'Cancelled'];
 
@@ -41,6 +45,7 @@ export default function Orders() {
   const [selectedReviewProduct, setSelectedReviewProduct] = useState(null);
   const [selectedReviewOrderId, setSelectedReviewOrderId] = useState(null);
   const [selectedExistingReview, setSelectedExistingReview] = useState(null);
+  const [selectedInitialRating, setSelectedInitialRating] = useState(0);
 
   const extractOrdersArray = (result) => {
     if (!result) return [];
@@ -470,82 +475,126 @@ export default function Orders() {
                   </Text>
                 </View>
 
+                {/* Delivered Order Rating Row with Red (1-2), Orange (3), Green (4-5) */}
+                {(() => {
+                  const sLower = String(statusVal || '').toLowerCase();
+                  const isDelivered =
+                    sLower.includes('delivered') ||
+                    sLower.includes('completed') ||
+                    sLower.includes('done') ||
+                    sLower.includes('success');
+
+                  if (!isDelivered) return null;
+
+                  const firstProd = (itemsList && itemsList[0]) || {
+                    id: item.product_id || item.id || 'order',
+                    name: item.name || item.product_name || `Order #${orderId}`,
+                    img: item.img || item.image,
+                  };
+                  const pId = firstProd.id || firstProd.product_id || 'general';
+                  const reviewKey = `${orderId}_${pId}`;
+                  const existingRev =
+                    (storedReviews && storedReviews[reviewKey]) ||
+                    (storedReviews &&
+                      typeof storedReviews === 'object' &&
+                      Object.values(storedReviews).find(
+                        (r) => r && typeof r === 'object' && r.order_id && String(r.order_id) === String(orderId)
+                      )) ||
+                    null;
+                  const isReviewed = Boolean(existingRev && existingRev.rating);
+                  const currentRating = isReviewed ? Number(existingRev.rating) : 0;
+                  const ratingConfig = getRatingColorConfig(currentRating, isDarkMode);
+
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.deliveredRatingBanner,
+                        {
+                          backgroundColor: isReviewed
+                            ? ratingConfig.bg
+                            : (isDarkMode ? '#1E293B' : '#FFFFFF'),
+                          borderColor: isReviewed
+                            ? ratingConfig.borderColor
+                            : (isDarkMode ? '#64748B' : '#000000'),
+                          borderWidth: 1.5,
+                        },
+                      ]}
+                      onPress={() => {
+                        setSelectedReviewProduct(firstProd);
+                        setSelectedReviewOrderId(orderId);
+                        setSelectedExistingReview(existingRev);
+                        setSelectedInitialRating(currentRating || 0);
+                        setReviewModalVisible(true);
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <View style={styles.deliveredRatingLeft}>
+                        <Ionicons
+                          name={isReviewed ? 'star' : 'star-outline'}
+                          size={15}
+                          color={isReviewed ? ratingConfig.starColor : (isDarkMode ? '#FFFFFF' : '#000000')}
+                        />
+                        <Text
+                          style={[
+                            styles.deliveredRatingPrompt,
+                            {
+                              color: isReviewed
+                                ? ratingConfig.color
+                                : (isDarkMode ? '#FFFFFF' : '#000000'),
+                            },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {isReviewed
+                            ? `Rated ${existingRev.rating}★ • ${ratingConfig.label}`
+                            : 'Rate Delivered Order:'}
+                        </Text>
+                      </View>
+
+                      {/* 5 Stars: Black border / outline when unreviewed, Red/Orange/Green when reviewed */}
+                      <View style={styles.ratingStarsMiniRow}>
+                        {[1, 2, 3, 4, 5].map((starNum) => {
+                          const isFilled = isReviewed && starNum <= currentRating;
+
+                          return (
+                            <TouchableOpacity
+                              key={starNum}
+                              style={styles.miniStarTouch}
+                              onPress={() => {
+                                setSelectedReviewProduct(firstProd);
+                                setSelectedReviewOrderId(orderId);
+                                setSelectedExistingReview(existingRev);
+                                setSelectedInitialRating(starNum);
+                                setReviewModalVisible(true);
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <Ionicons
+                                name={isFilled ? 'star' : 'star-outline'}
+                                size={19}
+                                color={
+                                  isReviewed
+                                    ? (isFilled ? ratingConfig.starColor : (isDarkMode ? '#475569' : '#CBD5E1'))
+                                    : (isDarkMode ? '#FFFFFF' : '#000000')
+                                }
+                              />
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })()}
+
                 <View style={[styles.cardDivider, { backgroundColor: isDarkMode ? '#334155' : AllColors.divider }]} />
 
                 <View style={styles.cardFooterRow}>
-                  <View>
+                  <View style={styles.totalPriceContainer}>
                     <Text style={[styles.totalPriceLabel, { color: theme.textSecondary }]}>Total Amount</Text>
                     <Text style={[styles.totalPriceValue, { color: theme.textPrimary }]}>₹{amount}</Text>
                   </View>
 
                   <View style={styles.customerActionRow}>
-                    {/* Quick Review Button for Delivered Orders */}
-                    {(() => {
-                      const sLower = String(statusVal || '').toLowerCase();
-                      const isDelivered =
-                        sLower.includes('delivered') ||
-                        sLower.includes('completed') ||
-                        sLower.includes('done') ||
-                        sLower.includes('success');
-
-                      if (!isDelivered) return null;
-
-                      const firstProd = (itemsList && itemsList[0]) || {
-                        id: item.product_id || item.id || 'order',
-                        name: item.name || item.product_name || `Order #${orderId}`,
-                        img: item.img || item.image,
-                      };
-                      const pId = firstProd.id || firstProd.product_id || 'general';
-                      const reviewKey = `${orderId}_${pId}`;
-                      const existingRev =
-                        storedReviews[reviewKey] ||
-                        Object.values(storedReviews).find((r) => String(r.order_id) === String(orderId)) ||
-                        null;
-                      const isReviewed = Boolean(existingRev);
-
-                      return (
-                        <TouchableOpacity
-                          style={[
-                            styles.reviewQuickBtn,
-                            {
-                              backgroundColor: isReviewed
-                                ? (isDarkMode ? 'rgba(16, 185, 129, 0.15)' : '#DCFCE7')
-                                : (isDarkMode ? 'rgba(247, 22, 112, 0.12)' : AllColors.softPinkBg),
-                              borderColor: isReviewed
-                                ? (isDarkMode ? 'rgba(52, 211, 153, 0.3)' : '#BBF7D0')
-                                : AllColors.primary,
-                            },
-                          ]}
-                          onPress={() => {
-                            setSelectedReviewProduct(firstProd);
-                            setSelectedReviewOrderId(orderId);
-                            setSelectedExistingReview(existingRev);
-                            setReviewModalVisible(true);
-                          }}
-                          activeOpacity={0.8}
-                        >
-                          <Ionicons
-                            name={isReviewed ? 'star' : 'star-outline'}
-                            size={12}
-                            color={isReviewed ? (isDarkMode ? '#34D399' : '#15803D') : AllColors.primary}
-                            style={styles.iconMarginRight}
-                          />
-                          <Text
-                            style={[
-                              styles.reviewQuickBtnText,
-                              {
-                                color: isReviewed
-                                  ? (isDarkMode ? '#34D399' : '#15803D')
-                                  : AllColors.primary,
-                              },
-                            ]}
-                          >
-                            {isReviewed ? `${existingRev.rating}★` : 'Review'}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })()}
-
                     <TouchableOpacity
                       style={[styles.helpBtn, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}
                       onPress={() => navigation.navigate('HelpCenter')}
@@ -565,9 +614,9 @@ export default function Orders() {
                         })
                       }
                       activeOpacity={0.85}>
-                      <Feather name="refresh-cw" size={13} color={AllColors.white} style={styles.iconMarginRight} />
+                      <Feather name="file-text" size={13} color={AllColors.white} style={styles.iconMarginRight} />
                       <Text style={styles.reorderBtnText}>Details</Text>
-                      <Feather name="chevron-right" size={16} color={AllColors.white} style={styles.iconMarginLeft} />
+                      <Feather name="chevron-right" size={15} color={AllColors.white} style={styles.iconMarginLeft} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -584,6 +633,7 @@ export default function Orders() {
         product={selectedReviewProduct}
         orderId={selectedReviewOrderId}
         existingReview={selectedExistingReview}
+        initialRating={selectedInitialRating}
         onReviewSubmitted={(newRev) => {
           const key = `${newRev.order_id}_${newRev.product_id}`;
           setStoredReviews((prev) => ({ ...prev, [key]: newRev }));
@@ -681,6 +731,7 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     borderWidth: 1,
     borderColor: AllColors.divider,
+    overflow: 'hidden',
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -774,6 +825,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
+  },
+  totalPriceContainer: {
+    flexShrink: 0,
   },
   totalPriceLabel: {
     fontSize: 11,
@@ -789,6 +844,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 0,
   },
   helpBtn: {
     flexDirection: 'row',
@@ -896,5 +952,36 @@ const styles = StyleSheet.create({
   reviewQuickBtnText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  deliveredRatingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  deliveredRatingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+    gap: 6,
+  },
+  deliveredRatingPrompt: {
+    fontSize: 12,
+    fontWeight: '700',
+    flex: 1,
+  },
+  ratingStarsMiniRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  miniStarTouch: {
+    padding: 3,
   },
 });

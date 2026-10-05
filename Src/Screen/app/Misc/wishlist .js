@@ -47,12 +47,12 @@ export default function Wishlist() {
     }
 
     try {
-      const formData = new FormData();
-      formData.append('user_id', userId);
-
       const response = await fetch(`${BASE_URL}wishlist-view`, {
         method: 'POST',
-        body: formData,
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       const data = await response.json();
@@ -169,16 +169,26 @@ export default function Wishlist() {
       }
     }
   }
-  const removeWishlistItem = async (product_id) => {
-    const userId = await getuserId();
+  const removeWishlistItem = async (item) => {
+    const token = await getToken();
+    const isObj = typeof item === 'object' && item !== null;
+    const skuId = isObj ? (item?.product_sku_id ?? item?.sku_id ?? item?.id) : item;
+    const sellerSkuId = isObj ? item?.seller_sku_id : null;
+    const itemId = isObj ? item?.id : null;
 
     try {
       const formData = new FormData();
-      formData.append("user_id", userId);
-      formData.append("product_id", product_id);
+      formData.append("product_sku_id", String(skuId));
+      if (sellerSkuId) {
+        formData.append("seller_sku_id", String(sellerSkuId));
+      }
 
       const response = await fetch(`${BASE_URL}wishlist-remove`, {
         method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: formData,
       });
 
@@ -186,7 +196,11 @@ export default function Wishlist() {
 
       if (response.ok && (data.status === 200 || data.success)) {
         setWishlistItems((prev) =>
-          prev.filter((item) => item.id !== product_id)
+          prev.filter((i) => {
+            if (itemId && i.id) return i.id !== itemId;
+            if (sellerSkuId && i.seller_sku_id) return String(i.seller_sku_id) !== String(sellerSkuId);
+            return String(i.product_sku_id ?? i.id) !== String(skuId);
+          })
         );
       } else {
         Alert.alert("Error", data.message || "Failed to remove product");
@@ -349,7 +363,7 @@ export default function Wishlist() {
                 <View style={styles.rightActions}>
                   <TouchableOpacity
                     style={[styles.removeBtn, { backgroundColor: isDarkMode ? '#334155' : undefined }]}
-                    onPress={() => removeWishlistItem(item.id)}
+                    onPress={() => removeWishlistItem(item)}
                   >
                     <Text style={[styles.removeText, { color: isDarkMode ? '#CBD5E1' : undefined }]}>Remove</Text>
                   </TouchableOpacity>

@@ -128,7 +128,6 @@ const CartPage = () => {
         },
         body: formData,
       });
-
       const result = await response.json();
 
       console.log("Cart Update:", result);
@@ -304,23 +303,27 @@ const CartPage = () => {
   const moveToWishlist = async (item) => {
     try {
       const token = await getToken();
-      const userId = await getuserId();
+      const skuId = getCartSkuId(item);
+      const sellerSkuId = item?.seller_sku_id;
 
       // Add to Wishlist
       const formData = new FormData();
-      formData.append("user_id", userId);
-      formData.append("product_id", item.product_id);
+      formData.append("product_sku_id", String(skuId));
+      if (sellerSkuId) {
+        formData.append("seller_sku_id", String(sellerSkuId));
+      }
 
       const response = await fetch(`${BASE_URL}wishlist-add`, {
         method: "POST",
         headers: {
+          Accept: "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: formData,
       });
 
       const result = await response.json();
-      if (result.status === 200) {
+      if (result.status === 200 || result.success) {
         await removeItem(item);
 
         // ToastAndroid.show(
