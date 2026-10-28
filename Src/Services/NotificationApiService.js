@@ -1,6 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceEventEmitter } from 'react-native';
-import { BASE_URL, getToken } from '../Api/Api';
+import {
+  getNotificationsApi,
+  getUnreadNotificationCountApi,
+  markNotificationReadApi,
+  markAllNotificationsReadApi,
+  getToken,
+} from '../Api/Api';
 
 export const NOTIFICATION_UNREAD_KEY = 'NOTIFICATION_UNREAD_COUNT';
 export const NOTIFICATION_CACHE_KEY = 'SELLER_NOTIFICATION_CACHE';
@@ -16,17 +22,10 @@ export const fetchSellerNotifications = async (page = 1) => {
       return { success: false, data: [], message: 'Unauthenticated' };
     }
 
-    const response = await fetch(`${BASE_URL}notifications?page=${page}`, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const res = await getNotificationsApi(page);
+    const json = res.data;
 
-    const json = await response.json();
-
-    if (response.ok && (json.status === 200 || json.status === '200' || json.data)) {
+    if (res.ok && (json?.status === 200 || json?.status === '200' || json?.data)) {
       const items = json?.data?.data || (Array.isArray(json?.data) ? json.data : []);
 
       // Cache the first page for offline / instant render
@@ -69,17 +68,10 @@ export const fetchUnreadNotificationCount = async () => {
     const token = await getToken();
     if (!token) return 0;
 
-    const response = await fetch(`${BASE_URL}notifications/unread-count`, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const res = await getUnreadNotificationCountApi();
+    const json = res.data;
 
-    const json = await response.json();
-
-    if (response.ok && (json.status === 200 || json.status === '200')) {
+    if (res.ok && (json?.status === 200 || json?.status === '200')) {
       const count = Number(json.unread_count ?? json.count ?? 0);
       await AsyncStorage.setItem(NOTIFICATION_UNREAD_KEY, String(count));
       DeviceEventEmitter.emit('NOTIFICATION_COUNT_UPDATED', count);
@@ -94,7 +86,6 @@ export const fetchUnreadNotificationCount = async () => {
 /**
  * Mark a single notification as read
  * Endpoint: POST /api/notifications/read
- * Body: { id: notificationId }
  */
 export const markNotificationAsRead = async (id) => {
   if (!id) return { success: false, message: 'Invalid ID' };
@@ -103,38 +94,15 @@ export const markNotificationAsRead = async (id) => {
     const token = await getToken();
     if (!token) return { success: false, message: 'Unauthenticated' };
 
-    const formData = new FormData();
-    formData.append('id', String(id));
+    const res = await markNotificationReadApi(id);
+    const json = res.data;
 
-    const response = await fetch(`${BASE_URL}notifications/read`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    });
-
-    const json = await response.json();
-
-    if (response.ok && (json.status === 200 || json.status === '200')) {
-      // Re-fetch count in background
+    if (res.ok && (json?.status === 200 || json?.status === '200')) {
       fetchUnreadNotificationCount().catch(() => { });
       return { success: true, message: json?.message || 'Marked as read' };
     } else {
-      // Try JSON payload fallback
-      const jsonRes = await fetch(`${BASE_URL}notifications/read`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ id }),
-      });
-      const parsed = await jsonRes.json();
       fetchUnreadNotificationCount().catch(() => { });
-      return { success: jsonRes.ok, message: parsed?.message };
+      return { success: res.ok, message: json?.message };
     }
   } catch (error) {
     return { success: false, error: error?.message || error };
@@ -150,21 +118,10 @@ export const markAllNotificationsAsRead = async () => {
     const token = await getToken();
     if (!token) return { success: false, message: 'Unauthenticated' };
 
-    const response = await fetch(`${BASE_URL}notifications/read-all`, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const res = await markAllNotificationsReadApi();
+    const json = res.data;
 
-    let json = {};
-    try {
-      json = await response.json();
-    } catch (e) { }
-
-    if (response.ok && (json.status === 200 || json.status === '200' || response.status === 200)) {
+    if (res.ok && (json?.status === 200 || json?.status === '200' || res.status === 200)) {
       await AsyncStorage.setItem(NOTIFICATION_UNREAD_KEY, '0');
       DeviceEventEmitter.emit('NOTIFICATION_COUNT_UPDATED', 0);
       return { success: true, message: json?.message || 'All notifications marked as read' };

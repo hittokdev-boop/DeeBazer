@@ -142,7 +142,7 @@
 //   "redirect_to": "/"
 // }
 // ```
-// 
+//
 // ### Get Current User
 // Get authenticated user details.
 
@@ -287,7 +287,7 @@
 //     "mobile": "9876543210",
 //     "otp": "1234",
 //      reasons:'I no longer want to use the app'
- // }The otp should be the OTP received by the user through SMS.
+// }The otp should be the OTP received by the user through SMS.
 // Success Response
 
 // {
@@ -485,203 +485,785 @@
 // ---
 
 // ## Product SKU APIs
-
-// ### Get Product SKU List
-// Get product SKU list with optional filters and pagination.
-
-// **Endpoint:** `POST /api/sku`
-
-// **Headers:**
+//
+// # Product SKU List API Documentation
+//
+// ## 1. Overview
+// The `api/sku` endpoint retrieves a paginated list of Product SKUs filtered by category, sub-category, child-category, product, specific SKU, or target gender.
+//
+// - **Method**: `POST`
+// - **URL**: `{{base_url}}api/sku`
+// - **Content-Type**: `multipart/form-data` or `application/x-www-form-urlencoded`
+//
+// ---
+//
+// ## 2. Request Headers
+//
+// | Header | Type | Required | Description |
+// | :--- | :--- | :--- | :--- |
+// | `Authorization` | String | Optional / Recommended | `Bearer <access_token>` |
+// | `Accept` | String | Required | `application/json` |
+//
+// ---
+//
+// ## 3. Request Body Parameters (FormData)
+//
+// | Parameter | Type | Required | Description | Example |
+// | :--- | :--- | :--- | :--- | :--- |
+// | `category_id` | Integer / String | Optional | Filter by top-level category ID | `1` |
+// | `sub_category_id` | Integer / String | Optional | Filter by sub-category ID | `2` |
+// | `child_category_id`| Integer / String | Optional | Filter by child-category ID | `3` |
+// | `product_id` | Integer / String | Optional | Filter SKUs belonging to a specific Product | `13` |
+// | `sku_id` | Integer / String | Optional | Specific SKU ID | `8` |
+// | `gender` | String | Optional | Filter by target gender (`women`, `men`, `kids`, `unisex`) | `women` |
+// | `per_page` | Integer | Optional | Number of items per page (default: `10`) | `10` |
+// | `page` | Integer | Optional | Page index (default: `1`) | `1` |
+//
+// ---
+//
+// ## 4. Response Structure
+//
+// ### 4.1 Top-Level Fields
+//
+// | Field | Type | Description |
+// | :--- | :--- | :--- |
+// | `status` | Integer | HTTP Status Code (e.g. `200`) |
+// | `message` | String | Response status message (e.g. `"Product SKU List"`) |
+// | `title_category` | String | Name of the filtered category (or empty string) |
+// | `title_sub_category` | String | Name of the filtered sub-category (or empty string) |
+// | `title_child_category` | String | Name of the filtered child-category (or empty string) |
+// | `data` | Array&lt;Object&gt; | List of SKU objects matching criteria |
+// | `total` | Integer | Total count of available matching items |
+// | `current_page` | Integer | Current page number |
+// | `last_page` | Integer | Last page number |
+// | `per_page` | Integer | Number of items per page |
+//
+// ### 4.2 SKU Item Fields (`data[i]`)
+//
+// | Field | Type | Description |
+// | :--- | :--- | :--- |
+// | `seller_sku_id` | Integer | Identifier in seller's SKU catalog |
+// | `seller_id` | Integer | Seller / Vendor ID |
+// | `seller_name` | String | Seller name / store name |
+// | `product_sku_id` | Integer | Unique Product SKU variant ID |
+// | `product_id` | Integer | Parent Product ID |
+// | `gender` | String | Target gender (`"women"`, `"men"`, etc.) |
+// | `name` | String | SKU variant name (e.g. `"Collared Top Red M"`) |
+// | `image` | String | URL to the primary image for this SKU |
+// | `attributes` | Array&lt;Object&gt; | List of variant attributes (Color, Size, etc.) |
+// | `attributes[].attribute_id` | Integer | Attribute type ID (e.g. `1`) |
+// | `attributes[].attribute` | String | Attribute name (e.g. `"Color"`, `"Size"`) |
+// | `attributes[].attribute_value_id` | Integer | Attribute value ID (e.g. `13`) |
+// | `attributes[].value` | String | Attribute value label (e.g. `"Red"`, `"XXL"`) |
+// | `actual_price` | Number | Original MRP price |
+// | `discount_price` | Number | Discounted selling price |
+// | `stock_quantity` | Integer | Current available stock quantity |
+// | `in_stock` | Boolean | Stock availability flag (`true` / `false`) |
+// | `short_desc` | String | Short summary description |
+// | `desc` | String | Full product/variant description |
+// | `category_id` | Integer | Category ID |
+// | `category_name` | String | Category name |
+// | `sub_category_id` | Integer / null | Sub-category ID |
+// | `sub_category_name` | String | Sub-category name |
+// | `child_category_id` | Integer / null | Child-category ID |
+// | `child_category_name` | String | Child-category name |
+// | `reviews` | Object / null | Customer reviews / rating info |
+//
+// ---
+//
+// ## 5. Example Request & Response
+//
+// ### Request:
+// ```http
+// POST {{base_url}}api/sku
+// Authorization: Bearer <token>
+// Content-Type: multipart/form-data
+//
+// per_page: 10
+// page: 1
+// gender: women
 // ```
-// Authorization: Bearer {token}
+//
+// ### Response:
+// ```json
+// {
+//   "status": 200,
+//   "message": "Product SKU List",
+//   "title_category": "Fashion",
+//   "title_sub_category": "",
+//   "title_child_category": "",
+//   "data": [
+//     {
+//       "seller_sku_id": 13,
+//       "seller_id": 1,
+//       "seller_name": "Hittok",
+//       "product_sku_id": 12,
+//       "product_id": 5,
+//       "gender": "women",
+//       "name": "Collared Top Red M",
+//       "image": "https://deebazar.com/admin/images/uploads/skus/12/5SC9EKZOyPebafOUUEx7_1791192667.png",
+//       "attributes": [
+//         {
+//           "attribute_id": 1,
+//           "attribute": "Color",
+//           "attribute_value_id": 1,
+//           "value": "Red"
+//         },
+//         {
+//           "attribute_id": 2,
+//           "attribute": "Size",
+//           "attribute_value_id": 13,
+//           "value": "XXL"
+//         }
+//       ],
+//       "actual_price": 499,
+//       "discount_price": 449,
+//       "stock_quantity": 15,
+//       "in_stock": true,
+//       "short_desc": "Collared Top",
+//       "desc": "This is collared top",
+//       "category_id": 2,
+//       "category_name": "Fashion",
+//       "sub_category_id": null,
+//       "sub_category_name": "",
+//       "child_category_id": null,
+//       "child_category_name": "",
+//       "reviews": null
+//     },
+//     {
+//       "seller_sku_id": 11,
+//       "seller_id": 1,
+//       "seller_name": "Hittok",
+//       "product_sku_id": 9,
+//       "product_id": 4,
+//       "gender": "women",
+//       "name": "Xl",
+//       "image": "https://deebazar.com/admin/images/uploads/skus/9/uvSnt3MRnjr5G2Y7BKF8_1791182638.jpg",
+//       "attributes": [],
+//       "actual_price": 699,
+//       "discount_price": 462,
+//       "stock_quantity": 2,
+//       "in_stock": true,
+//       "short_desc": "Dhdhnssnsn hdhsbsbs hsbssbs",
+//       "desc": "Hxxhsjsj uxwbwbe d",
+//       "category_id": 2,
+//       "category_name": "Fashion",
+//       "sub_category_id": null,
+//       "sub_category_name": "",
+//       "child_category_id": null,
+//       "child_category_name": "",
+//       "reviews": null
+//     }
+//   ],
+//   "total": 2,
+//   "current_page": 1,
+//   "last_page": 1,
+//   "per_page": 10
+// }
 // ```
-
-// **Request Body:**
+//
+// ---
+//
+// ## 6. Code Integration
+//
+// ```javascript
+// import { getSkuListApi } from './Src/Api/Api';
+//
+// // Example: Fetch women's SKUs
+// const response = await getSkuListApi({
+//   gender: 'women',
+//   perPage: 10,
+//   page: 1,
+// });
+//
+// if (response?.status === 200) {
+//   const skus = response.data;
+//   console.log('SKUs fetched:', skus);
+// }
 // ```
-// category_id: 1 (optional)
-// sub_category_id: 2 (optional)
-// child_category_id: 3 (optional)
-// product_id: 13 (optional)
-// sku_id: 8 (optional)
-// per_page: 12
+//
+// ---
+//
+// ## 7. Related Documentation
+// - [Product SKU Details API](file:///d:/A/New%20folder/DeeBazer/API_SKU_DETAILS_DOCUMENTATION.md)
+// - [Product SKU Search API](file:///d:/A/New%20folder/DeeBazer/API_SKU_SEARCH_DOCUMENTATION.md)
+//
+//
+//
+// ---
+//
+// # Product SKU Details API Documentation
+//
+// ## 1. Overview
+// The `api/sku-details` endpoint returns comprehensive details for a specific Product SKU variant, including parent product details, active SKU attributes, available option selectors (e.g., Color, Size), and sibling variants offered by the seller.
+//
+// - **Method**: `POST`
+// - **URL**: `{{base_url}}api/sku-details`
+// - **Content-Type**: `multipart/form-data` or `application/x-www-form-urlencoded`
+//
+// ---
+//
+// ## 2. Request Headers
+//
+// | Header | Type | Required | Description |
+// | :--- | :--- | :--- | :--- |
+// | `Authorization` | String | Required / Recommended | `Bearer <access_token>` |
+// | `Accept` | String | Required | `application/json` |
+//
+// ---
+//
+// ## 3. Request Body Parameters (FormData)
+//
+// | Parameter | Type | Required | Description | Example |
+// | :--- | :--- | :--- | :--- | :--- |
+// | `sku_id` | Integer / String | **Yes** | Product SKU ID / Variant ID | `13` |
+// | `seller_id` | Integer / String | Optional | Seller ID who offers this SKU | `2` |
+//
+// ---
+//
+// ## 4. Response Structure
+//
+// ### 4.1 Root Structure
+// ```json
+// {
+//   "status": 200,
+//   "message": "SKU Details",
+//   "data": {
+//     "product": { ... },
+//     "sku": { ... },
+//     "selectors": [ ... ],
+//     "options": [ ... ],
+//     "variants": [ ... ]
+//   }
+// }
+// ```
+//
+// ### 4.2 Data Fields Breakdown
+//
+// #### A. `data.product` (Parent Product Catalog Info)
+// | Field | Type | Description |
+// | :--- | :--- | :--- |
+// | `id` | Integer | Product ID |
+// | `name` | String | Master product name |
+// | `short_desc` | String | Brief product description |
+// | `desc` | String | Full product description |
+// | `category_id` | Integer | Category ID |
+// | `category_name` | String | Category name |
+// | `sub_category_id` | Integer / null | Sub-category ID |
+// | `sub_category_name` | String | Sub-category name |
+// | `child_category_id` | Integer / null | Child-category ID |
+// | `child_category_name` | String | Child-category name |
+// | `reviews` | Array / null | Customer ratings and reviews |
+//
+// #### B. `data.sku` (Active Selected Variant)
+// | Field | Type | Description |
+// | :--- | :--- | :--- |
+// | `seller_sku_id` | Integer | Seller's SKU map ID |
+// | `seller_id` | Integer | Seller ID |
+// | `seller_name` | String | Seller business name |
+// | `product_sku_id` | Integer | Unique Product SKU variant ID |
+// | `sku_code` | String | SKU code (e.g. `SKU-NZJSO9KF`) |
+// | `name` | String | SKU variant name |
+// | `weight` | Number / null | Item weight in kg |
+// | `dimensions` | String / null | Dimensions string (e.g. `"30x20x5"`) |
+// | `image` | String | Primary variant image URL |
+// | `attributes` | Array&lt;Object&gt; | Selected attribute values for this SKU |
+// | `attributes[].attribute_id` | Integer | Attribute ID (e.g. `1`) |
+// | `attributes[].attribute` | String | Attribute name (e.g. `"Color"`, `"Size"`) |
+// | `attributes[].attribute_value_id` | Integer | Value ID (e.g. `5`) |
+// | `attributes[].value` | String | Value name (e.g. `"White"`, `"XS"`) |
+// | `actual_price` | Number | Original MRP price |
+// | `discount_price` | Number | Discounted selling price |
+// | `discount_percent` | Number | Discount percentage (e.g. `10`) |
+// | `in_stock` | Boolean | In stock status (`true` / `false`) |
+// | `available_qty` | Integer | Stock count available |
+//
+// #### C. `data.selectors` (Interactive Attribute Selectors)
+// Allows direct selection of SKU variants grouped by attribute (e.g. Color, Size) with direct `product_sku_id`, image, and active/stock state.
+// | Field | Type | Description |
+// | :--- | :--- | :--- |
+// | `attribute_id` | Integer | Attribute category ID (e.g. `1`) |
+// | `attribute` | String | Attribute group name (e.g. `"Color"`, `"Size"`) |
+// | `selected_value_id` | Integer | ID of the currently selected attribute value (e.g. `5`) |
+// | `selected_value` | String | Label of the currently selected attribute value (e.g. `"White"`) |
+// | `values` | Array&lt;Object&gt; | List of available choices for this attribute |
+// | `values[].attribute_value_id` | Integer | Specific attribute value ID |
+// | `values[].value` | String | Display label (e.g. `"Black"`, `"White"`) |
+// | `values[].product_sku_id` | Integer | Product SKU ID linked to this variant choice |
+// | `values[].image` | String | Thumbnail swatch / variant image URL |
+// | `values[].in_stock` | Boolean | Stock availability for this option |
+// | `values[].is_selected` | Boolean | `true` if this option is currently active |
+//
+// #### D. `data.options` (Available Variant Option Selectors)
+// Allows building generic attribute option lists.
+// | Field | Type | Description |
+// | :--- | :--- | :--- |
+// | `attribute_id` | Integer | Attribute category ID (e.g. `1`) |
+// | `attribute` | String | Attribute group name (e.g. `"Color"`) |
+// | `values` | Array&lt;Object&gt; | Available values |
+// | `values[].attribute_value_id` | Integer | Specific value ID |
+// | `values[].value` | String | Value display label (e.g. `"Black"`, `"White"`) |
+//
+// #### E. `data.variants` (All Sibling SKU Variants)
+// List of all variants of this product provided by this seller.
+// | Field | Type | Description |
+// | :--- | :--- | :--- |
+// | `seller_sku_id` | Integer | Seller's SKU map ID |
+// | `seller_id` | Integer | Seller ID |
+// | `seller_name` | String | Seller name |
+// | `product_sku_id` | Integer | Sibling variant SKU ID |
+// | `sku_code` | String | SKU code |
+// | `name` | String | Sibling SKU title |
+// | `weight` | Number / null | Weight |
+// | `dimensions` | String / null | Dimensions |
+// | `image` | String | Sibling variant image |
+// | `attributes` | Array&lt;Object&gt; | Sibling attributes (Color, Size, etc.) |
+// | `actual_price` | Number | Original price |
+// | `discount_price` | Number | Selling price |
+// | `discount_percent` | Number | Discount percent |
+// | `in_stock` | Boolean | In stock status |
+// | `available_qty` | Integer | Available quantity |
+// | `is_selected` | Boolean | `true` if this variant is the currently active one |
+//
+// ---
+//
+// ## 5. Example Request & Response
+//
+// ### Request:
+// ```http
+// POST {{base_url}}api/sku-details
+// Authorization: Bearer <bearer_token>
+// Content-Type: multipart/form-data
+//
+// sku_id: 8
+// seller_id: 2
+// ```
+//
+// ### Response:
+// ```json
+// {
+//     "status": 200,
+//     "message": "SKU Details",
+//     "data": {
+//         "product": {
+//             "id": 3,
+//             "name": "Masoor Dal",
+//             "short_desc": "Masoor Dal",
+//             "desc": "This is Masoor Dal",
+//             "category_id": 1,
+//             "category_name": "Electronics",
+//             "sub_category_id": null,
+//             "sub_category_name": "",
+//             "child_category_id": null,
+//             "child_category_name": "",
+//             "reviews": null
+//         },
+//         "sku": {
+//             "seller_sku_id": 8,
+//             "seller_id": 2,
+//             "seller_name": "Demo Seller",
+//             "product_sku_id": 8,
+//             "sku_code": "SKU-ZC5V8WNG",
+//             "name": "Masoor Dal 1 KG",
+//             "weight": 2,
+//             "dimensions": null,
+//             "image": "https://deebazar.com/admin/images/uploads/skus/8/Q8kJG2yi2jtKm0Iq0069_1791271536.png",
+//             "attributes": [
+//                 {
+//                     "attribute_id": 11,
+//                     "attribute": "Weight",
+//                     "attribute_value_id": 52,
+//                     "value": "1 KG"
+//                 }
+//             ],
+//             "actual_price": 260,
+//             "discount_price": 245,
+//             "discount_percent": 6,
+//             "in_stock": true,
+//             "available_qty": 40
+//         },
+//         "selectors": [
+//             {
+//                 "attribute_id": 11,
+//                 "attribute": "Weight",
+//                 "selected_value_id": 52,
+//                 "selected_value": "1 KG",
+//                 "values": [
+//                     {
+//                         "attribute_value_id": 50,
+//                         "value": "250 Gm",
+//                         "product_sku_id": 6,
+//                         "image": "https://deebazar.com/admin/images/uploads/skus/6/0moTCoxi3xTlnXagIFyQ_1791271536.png",
+//                         "in_stock": true,
+//                         "is_selected": false
+//                     },
+//                     {
+//                         "attribute_value_id": 51,
+//                         "value": "500 Gm",
+//                         "product_sku_id": 7,
+//                         "image": "https://deebazar.com/admin/images/uploads/skus/7/bQPtbTIhbjArFdhh8sEy_1791271536.png",
+//                         "in_stock": true,
+//                         "is_selected": false
+//                     },
+//                     {
+//                         "attribute_value_id": 52,
+//                         "value": "1 KG",
+//                         "product_sku_id": 8,
+//                         "image": "https://deebazar.com/admin/images/uploads/skus/8/Q8kJG2yi2jtKm0Iq0069_1791271536.png",
+//                         "in_stock": true,
+//                         "is_selected": true
+//                     },
+//                     {
+//                         "attribute_value_id": 53,
+//                         "value": "2 KG",
+//                         "product_sku_id": 9,
+//                         "image": "https://deebazar.com/admin/images/uploads/skus/9/8ReIw1evkqVPMkj0hsYb_1791271536.png",
+//                         "in_stock": true,
+//                         "is_selected": false
+//                     }
+//                 ]
+//             }
+//         ],
+//         "options": [
+//             {
+//                 "attribute_id": 11,
+//                 "attribute": "Weight",
+//                 "values": [
+//                     {
+//                         "attribute_value_id": 50,
+//                         "value": "250 Gm"
+//                     },
+//                     {
+//                         "attribute_value_id": 51,
+//                         "value": "500 Gm"
+//                     },
+//                     {
+//                         "attribute_value_id": 52,
+//                         "value": "1 KG"
+//                     },
+//                     {
+//                         "attribute_value_id": 53,
+//                         "value": "2 KG"
+//                     }
+//                 ]
+//             }
+//         ],
+//         "variants": [
+//             {
+//                 "seller_sku_id": 6,
+//                 "seller_id": 2,
+//                 "seller_name": "Demo Seller",
+//                 "product_sku_id": 6,
+//                 "sku_code": "SKU-XRXXISNU",
+//                 "name": "Masoor Dal 250 Gm",
+//                 "weight": 0.5,
+//                 "dimensions": null,
+//                 "image": "https://deebazar.com/admin/images/uploads/skus/6/0moTCoxi3xTlnXagIFyQ_1791271536.png",
+//                 "attributes": [
+//                     {
+//                         "attribute_id": 11,
+//                         "attribute": "Weight",
+//                         "attribute_value_id": 50,
+//                         "value": "250 Gm"
+//                     }
+//                 ],
+//                 "actual_price": 70,
+//                 "discount_price": 65,
+//                 "discount_percent": 7,
+//                 "in_stock": true,
+//                 "available_qty": 100,
+//                 "is_selected": false
+//             },
+//             {
+//                 "seller_sku_id": 7,
+//                 "seller_id": 2,
+//                 "seller_name": "Demo Seller",
+//                 "product_sku_id": 7,
+//                 "sku_code": "SKU-SAD4EEX6",
+//                 "name": "Masoor Dal 500 Gm",
+//                 "weight": 1,
+//                 "dimensions": null,
+//                 "image": "https://deebazar.com/admin/images/uploads/skus/7/bQPtbTIhbjArFdhh8sEy_1791271536.png",
+//                 "attributes": [
+//                     {
+//                         "attribute_id": 11,
+//                         "attribute": "Weight",
+//                         "attribute_value_id": 51,
+//                         "value": "500 Gm"
+//                     }
+//                 ],
+//                 "actual_price": 135,
+//                 "discount_price": 125,
+//                 "discount_percent": 7,
+//                 "in_stock": true,
+//                 "available_qty": 80,
+//                 "is_selected": false
+//             },
+//             {
+//                 "seller_sku_id": 8,
+//                 "seller_id": 2,
+//                 "seller_name": "Demo Seller",
+//                 "product_sku_id": 8,
+//                 "sku_code": "SKU-ZC5V8WNG",
+//                 "name": "Masoor Dal 1 KG",
+//                 "weight": 2,
+//                 "dimensions": null,
+//                 "image": "https://deebazar.com/admin/images/uploads/skus/8/Q8kJG2yi2jtKm0Iq0069_1791271536.png",
+//                 "attributes": [
+//                     {
+//                         "attribute_id": 11,
+//                         "attribute": "Weight",
+//                         "attribute_value_id": 52,
+//                         "value": "1 KG"
+//                     }
+//                 ],
+//                 "actual_price": 260,
+//                 "discount_price": 245,
+//                 "discount_percent": 6,
+//                 "in_stock": true,
+//                 "available_qty": 40,
+//                 "is_selected": true
+//             },
+//             {
+//                 "seller_sku_id": 9,
+//                 "seller_id": 2,
+//                 "seller_name": "Demo Seller",
+//                 "product_sku_id": 9,
+//                 "sku_code": "SKU-NGDKCGG3",
+//                 "name": "Masoor Dal 2 KG",
+//                 "weight": 5,
+//                 "dimensions": null,
+//                 "image": "https://deebazar.com/admin/images/uploads/skus/9/8ReIw1evkqVPMkj0hsYb_1791271536.png",
+//                 "attributes": [
+//                     {
+//                         "attribute_id": 11,
+//                         "attribute": "Weight",
+//                         "attribute_value_id": 53,
+//                         "value": "2 KG"
+//                     }
+//                 ],
+//                 "actual_price": 640,
+//                 "discount_price": 640,
+//                 "discount_percent": 0,
+//                 "in_stock": true,
+//                 "available_qty": 20,
+//                 "is_selected": false
+//             }
+//         ]
+//     }
+// }
+// ```
+//
+// ---
+//
+// ## 6. Code Usage Example
+//
+// ```javascript
+// import { getSkuDetailsApi } from './Src/Api/Api';
+//
+// // Call with positional arguments:
+// const response = await getSkuDetailsApi(8, 2);
+//
+// // Or call with object parameters:
+// const response2 = await getSkuDetailsApi({
+//   skuId: 8,
+//   sellerId: 2,
+// });
+//
+// if (response?.status === 200 && response?.data) {
+//   const { product, sku, selectors, options, variants } = response.data;
+//   console.log('Product:', product.name);
+//   console.log('Active SKU Code:', sku.sku_code);
+//   console.log('Selectors (Weight/Attributes):', selectors);
+//   console.log('Available Options:', options);
+//   console.log('Variants List:', variants);
+// }
+// ```
+//
+//
+// ---
+//
+// # Product SKU Search API Documentation
+//
+// ## 1. Overview
+// The `api/sku-search` endpoint searches across the Product SKU catalog by keyword and returns a paginated list of matching SKU variant items, complete with seller and pricing information.
+//
+// - **Method**: `POST`
+// - **URL**: `{{base_url}}api/sku-search`
+// - **Content-Type**: `multipart/form-data`, `application/x-www-form-urlencoded`, or `application/json`
+//
+// ---
+//
+// ## 2. Request Headers
+//
+// | Header | Type | Required | Description |
+// | :--- | :--- | :--- | :--- |
+// | `Authorization` | String | Optional / Recommended | `Bearer <access_token>` |
+// | `Accept` | String | Required | `application/json` |
+//
+// ---
+//
+// ## 3. Request Body Parameters
+//
+// | Parameter | Type | Required | Description | Example |
+// | :--- | :--- | :--- | :--- | :--- |
+// | `keyword` | String | **Yes** | Keyword / search query text | `collared` |
+// | `per_page` | Integer | Optional | Number of items per page (default: `10` or `12`) | `5` |
+// | `page` | Integer | Optional | Page index (default: `1`) | `1` |
+// | `gender` | String | Optional | Target gender filter (`women`, `men`, etc.) | `women` |
+// | `category_id` | Integer / String | Optional | Filter by top-level category ID | `2` |
+//
+// ---
+//
+// ## 4. Response Structure
+//
+// ### 4.1 Top-Level Fields
+//
+// | Field | Type | Description |
+// | :--- | :--- | :--- |
+// | `status` | Integer | HTTP Status Code (e.g. `200`) |
+// | `message` | String | Response status message (`"Product SKU Search"`) |
+// | `data` | Array&lt;Object&gt; | List of matching SKU objects |
+// | `total` | Integer | Total count of matching items |
+// | `current_page` | Integer | Current page number |
+// | `last_page` | Integer | Last page number |
+// | `per_page` | Integer | Number of items per page |
+//
+// ### 4.2 SKU Item Fields (`data[i]`)
+//
+// | Field | Type | Description |
+// | :--- | :--- | :--- |
+// | `seller_sku_id` | Integer | Identifier in seller's SKU catalog |
+// | `seller_id` | Integer | Seller / Vendor ID |
+// | `seller_name` | String | Store / Vendor name |
+// | `product_sku_id` | Integer | Unique Product SKU variant ID |
+// | `product_id` | Integer | Parent Product ID |
+// | `name` | String | SKU variant name (e.g. `"Collared Top Red M"`) |
+// | `image` | String | URL to the primary image for this SKU |
+// | `attributes` | Array&lt;Object&gt; | Selected attributes (Color, Size, etc.) |
+// | `attributes[].attribute_id` | Integer | Attribute type ID (e.g. `1`) |
+// | `attributes[].attribute` | String | Attribute name (e.g. `"Color"`) |
+// | `attributes[].attribute_value_id` | Integer | Attribute value ID (e.g. `1`) |
+// | `attributes[].value` | String | Attribute value label (e.g. `"Red"`) |
+// | `actual_price` | Number | Original MRP price |
+// | `discount_price` | Number | Discounted selling price |
+// | `stock_quantity` | Integer | Current stock quantity |
+// | `in_stock` | Boolean | In-stock flag (`true` / `false`) |
+// | `short_desc` | String | Short summary description |
+// | `desc` | String | Detailed product/variant description |
+// | `category_id` | Integer | Category ID |
+// | `category_name` | String | Category name |
+// | `sub_category_id` | Integer / null | Sub-category ID |
+// | `sub_category_name` | String | Sub-category name |
+// | `child_category_id` | Integer / null | Child-category ID |
+// | `child_category_name` | String | Child-category name |
+// | `reviews` | Object / null | Customer ratings and review summary |
+//
+// ---
+//
+// ## 5. Example Request & Response
+//
+// ### Request:
+// ```http
+// POST {{base_url}}api/sku-search
+// Authorization: Bearer <token>
+// Accept: application/json
+// Content-Type: multipart/form-data
+//
+// keyword: collared
+// per_page: 5
 // page: 1
 // ```
-
-// **Response (200):**
+//
+// ### Response:
 // ```json
 // {
-//     "status": 200,
-//     "message": "Product SKU List",
-//     "title_category": "Fashion",
-//     "title_sub_category": "",
-//     "title_child_category": "",
-//     "data": [
-//         {
-//             "product_sku_id": 8,
-//             "product_id": 13,
-//             "name": "Hand",
-//             "image": "https://deebazar.com/admin/images/uploads/skus/8/Gt4pvgBMjFW1P930Wta6_1790663632.jpg",
-//             "short_desc": "Ssjdndbjxxndnznznzn",
-//             "desc": "Xnxxnnxxndndndncn",
-//             "category_id": 2,
-//             "category_name": "Fashion",
-//             "sub_category_id": null,
-//             "sub_category_name": "",
-//             "child_category_id": null,
-//             "child_category_name": "",
-//             "reviews": null
-//         },
-//         {
-//             "product_sku_id": 6,
-//             "product_id": 12,
-//             "name": "Bisleri 1l",
-//             "image": "https://deebazar.com/admin/images/uploads/products/12/1D7et1FHsrma7REMfeMBqKuzVl4y9TDDLjvqxWw0.jpg",
-//             "short_desc": "Water bottle",
-//             "desc": "Water bottle",
-//             "category_id": 5,
-//             "category_name": "Sports & Outdoors",
-//             "sub_category_id": null,
-//             "sub_category_name": "",
-//             "child_category_id": null,
-//             "child_category_name": "",
-//             "reviews": null
-//         },
-//         {
-//             "product_sku_id": 4,
-//             "product_id": 10,
-//             "name": "Red",
-//             "image": "https://deebazar.com/admin/images/uploads/skus/4/sWr3LmRJ2lgIPaaK4YPn_1790598706.jpg",
-//             "short_desc": "Dhdhshansb",
-//             "desc": "Gdhhdjdjddb dhdhdbdfbdbdb hdhshdh",
-//             "category_id": 2,
-//             "category_name": "Fashion",
-//             "sub_category_id": null,
-//             "sub_category_name": "",
-//             "child_category_id": null,
-//             "child_category_name": "",
-//             "reviews": null
-//         },
-//         {
-//             "product_sku_id": 3,
-//             "product_id": 2,
-//             "name": "Red / XL",
-//             "image": "https://deebazar.com/admin/images/uploads/skus/3/5UnI6PsMT1hb3NMMlo07_1790583244.png",
-//             "short_desc": null,
-//             "desc": "hdgegfjsdfbjdbcvfdjsbfdjbfvdjmgd,mgjbfjgbfkjgnfknb cfkf ,mn,fdn,mgfn,m.,gnbh/,fn,.gm.",
-//             "category_id": 1,
-//             "category_name": "Electronics",
-//             "sub_category_id": null,
-//             "sub_category_name": "",
-//             "child_category_id": null,
-//             "child_category_name": "",
-//             "reviews": null
-//         },
-//         {
-//             "product_sku_id": 1,
-//             "product_id": 1,
-//             "name": "TestSKU",
-//             "image": "https://deebazar.com/admin/images/uploads/skus/1/gBlfgTuQbJqz2CoitmFH_1790576872.png",
-//             "short_desc": "D",
-//             "desc": "ertf4efcghchjvhj,gfju mnvhugmhnjvhjyfcb gnghfv ghy",
-//             "category_id": 1,
-//             "category_name": "Electronics",
-//             "sub_category_id": null,
-//             "sub_category_name": "",
-//             "child_category_id": null,
-//             "child_category_name": "",
-//             "reviews": null
-//         }
-//     ],
-//     "total": 5,
-//     "current_page": 1,
-//     "last_page": 1,
-//     "per_page": 12
+//   "status": 200,
+//   "message": "Product SKU Search",
+//   "data": [
+//     {
+//       "seller_sku_id": 13,
+//       "seller_id": 1,
+//       "seller_name": "Hittok",
+//       "product_sku_id": 12,
+//       "product_id": 5,
+//       "name": "Collared Top Red M",
+//       "image": "https://deebazar.com/admin/images/uploads/skus/12/5SC9EKZOyPebafOUUEx7_1791192667.png",
+//       "attributes": [
+//         {
+//           "attribute_id": 1,
+//           "attribute": "Color",
+//           "attribute_value_id": 1,
+//           "value": "Red"
+//         },
+//         {
+//           "attribute_id": 2,
+//           "attribute": "Size",
+//           "attribute_value_id": 13,
+//           "value": "XXL"
+//         }
+//       ],
+//       "actual_price": 499,
+//       "discount_price": 449,
+//       "stock_quantity": 15,
+//       "in_stock": true,
+//       "short_desc": "Collared Top",
+//       "desc": "This is collared top",
+//       "category_id": 2,
+//       "category_name": "Fashion",
+//       "sub_category_id": null,
+//       "sub_category_name": "",
+//       "child_category_id": null,
+//       "child_category_name": "",
+//       "reviews": null
+//     }
+//   ],
+//   "total": 1,
+//   "current_page": 1,
+//   "last_page": 1,
+//   "per_page": 5
 // }
 // ```
-
+//
 // ---
-
-// ### Get SKU Details
-// Get detailed information about a specific product SKU and its variants.
-
-// **Endpoint:** `POST /api/sku-details`
-
-// **Headers:**
-// ```
-// Authorization: Bearer {token}
-// ```
-
-// **Request Body:**
-// ```
-// sku_id: 8
-// ```
-
-// **Response (200):**
-// ```json
-// {
-//     "status": 200,
-//     "message": "SKU Details",
-//     "data": {
-//         "product": {
-//             "id": 13,
-//             "name": "Devdas",
-//             "short_desc": "Ssjdndbjxxndnznznzn",
-//             "desc": "Xnxxnnxxndndndncn",
-//             "category_id": 2,
-//             "category_name": "Fashion",
-//             "sub_category_id": null,
-//             "sub_category_name": "",
-//             "child_category_id": null,
-//             "child_category_name": "",
-//             "reviews": null
-//         },
-//         "sku": {
-//             "product_sku_id": 8,
-//             "sku_code": "SKU-3M6DAKIZ",
-//             "name": "Hand",
-//             "weight": 2,
-//             "dimensions": "3x5x12",
-//             "image": "https://deebazar.com/admin/images/uploads/skus/8/Gt4pvgBMjFW1P930Wta6_1790663632.jpg",
-//             "actual_price": 100,
-//             "discount_price": 80,
-//             "discount_percent": 20,
-//             "in_stock": true,
-//             "available_qty": 2
-//         },
-//         "variants": [
-//             {
-//                 "product_sku_id": 8,
-//                 "sku_code": "SKU-3M6DAKIZ",
-//                 "name": "Hand",
-//                 "weight": 2,
-//                 "dimensions": "3x5x12",
-//                 "image": "https://deebazar.com/admin/images/uploads/skus/8/Gt4pvgBMjFW1P930Wta6_1790663632.jpg",
-//                 "actual_price": 100,
-//                 "discount_price": 80,
-//                 "discount_percent": 20,
-//                 "in_stock": true,
-//                 "available_qty": 2,
-//                 "is_selected": true
-//             },
-//             {
-//                 "product_sku_id": 9,
-//                 "sku_code": "SKU-QBCRHZ0M",
-//                 "name": "Leg",
-//                 "weight": 10,
-//                 "dimensions": "15x12x120",
-//                 "image": "https://deebazar.com/admin/images/uploads/skus/9/YPl2WCRwLMMjnOWVuM72_1790663701.jpg",
-//                 "actual_price": 250,
-//                 "discount_price": 180,
-//                 "discount_percent": 28,
-//                 "in_stock": true,
-//                 "available_qty": 2,
-//                 "is_selected": false
-//             }
-//         ]
-//     }
+//
+// ## 6. Code Integration
+//
+// ### 6.1 API Service (`Src/Api/Api.js`)
+// ```javascript
+// import { searchSkuApi } from './Src/Api/Api';
+//
+// // Example: Search SKUs by keyword
+// const result = await searchSkuApi({
+//   keyword: 'collared',
+//   perPage: 5,
+//   page: 1,
+// });
+//
+// if (result?.status === 200) {
+//   console.log('Search Results:', result.data);
 // }
 // ```
-
+//
+// ### 6.2 Dashboard Integration (`Src/Screen/app/ProductsDashboard/DashBoard.js`)
+// In the dashboard search bar:
+// ```javascript
+// const response = await searchSkuApi({
+//   keyword: cleanValue,
+//   perPage: 12,
+//   page: 1,
+// });
+//
+// if (response?.status === 200 && Array.isArray(response.data)) {
+//   const formattedResults = response.data.map((sku) => ({
+//     ...sku,
+//     product_sku_id: sku.product_sku_id ?? sku.sku_id ?? sku.id,
+//   }));
+//   setSearchProducts(formattedResults);
+// }
+// ```
+//
+//
 // ---
 
 // ### Search Products
@@ -946,74 +1528,275 @@
 // ---
 
 // ### View Cart
-// Get cart items and billing details for authenticated user.
+// Get multi-seller cart items, address data, fulfillment modes, courier delivery options, and billing summary for authenticated user.
 
 // **Endpoint:** `POST /api/cart-view`
 
 // **Headers:**
 // - `Authorization: Bearer {token}`
+// - `Content-Type: application/json`
 
-// **Request Body:**
+// **Request Flow (Hits):**
+
+// **1st hit (Initial Load / Address Selection):**
 // ```json
 // {
-//   "user_id": 82,
-//   "address_id": 42
+//   "address_id": 2
+// }
+// ```
+
+// **2nd hit (Mode Selection per Seller):**
+// ```json
+// {
+//   "address_id": 2,
+//   "selections": {
+//     "1": { "mode": "delivery" },
+//     "2": { "mode": "delivery" }
+//   }
+// }
+// ```
+
+// **3rd hit (Courier Partner Selection per Seller):**
+// ```json
+// {
+//   "address_id": 2,
+//   "selections": {
+//     "1": { "mode": "delivery", "option": "shiprocket" },
+//     "2": { "mode": "delivery", "option": "shiprocket" }
+//   }
 // }
 // ```
 
 // **Response (200):**
 // ```json
 // {
-//   "status": 200,
-//   "message": "Cart View",
-//   "extra_data": {
-//     "sub_total": 0,
-//     "discount": 0,
-//     "delivery_charge": 0,
-//     "total_amount": 0
-//   },
-//   "address_data": {
-//     "id": 6,
-//     "name": "Ananya",
-//     "mobile": "8240804149",
-//     "pin": "700150",
-//     "state": "West Bengal",
-//     "city": "Rajpur Sonarpur",
-//     "house_no": "Xbxb",
-//     "road_name": "Dhelua",
-//     "landmark": "Xhxbxbxbxj",
-//     "type": "Mandir"
-//   },
-//   "data": [
-//     {
-//       "product_sku_id": 2,
-//       "name": "Test SKU 2",
-//       "qty": "25",
-//       "actual_price": null,
-//       "discount_price": null,
-//       "actual_total": 0,
-//       "discount_total": 0,
-//       "short_desc": null,
-//       "image": "https://deebazar.com/admin/images/uploads/skus/2/t2Fm5Y8ELQRBBUslIDPM_1790582828.png"
-//     },
-//     {
-//       "product_sku_id": 8,
-//       "name": "Hand",
-//       "qty": "2",
-//       "actual_price": null,
-//       "discount_price": null,
-//       "actual_total": 0,
-//       "discount_total": 0,
-//       "short_desc": null,
-//       "image": "https://deebazar.com/admin/images/uploads/skus/8/Gt4pvgBMjFW1P930Wta6_1790663632.jpg"
-//     }
-//   ]
+//   "status": 200,
+//   "message": "Cart View",
+//   "extra_data": {
+//     "sub_total": 2664,
+//     "discount": 405,
+//     "delivery_charge": 111.44,
+//     "total_amount": 2775.44
+//   },
+//   "address_data": {
+//     "id": 2,
+//     "name": "Ananya",
+//     "mobile": "9190074081",
+//     "pin": "700150",
+//     "state": "West Bengal",
+//     "city": "Rajpur Sonarpur",
+//     "house_no": "A12/5",
+//     "road_name": "Dhelua",
+//     "landmark": "Euro Kids school",
+//     "type": "Work"
+//   },
+//   "data": [
+//     {
+//       "seller_id": 2,
+//       "seller_name": "Demo Seller",
+//       "items": [
+//         {
+//           "cart_id": 25,
+//           "product_sku_id": 12,
+//           "seller_sku_id": 12,
+//           "name": "Vivo phone Red 32GB 4GB 6.1\" 6000mAh Snapdragon 888 64MP Android 5G 250 Gm",
+//           "attributes": [
+//             {
+//               "attribute_id": 1,
+//               "attribute": "Color",
+//               "attribute_value_id": 1,
+//               "value": "Red"
+//             },
+//             {
+//               "attribute_id": 3,
+//               "attribute": "Storage",
+//               "attribute_value_id": 14,
+//               "value": "32GB"
+//             },
+//             {
+//               "attribute_id": 4,
+//               "attribute": "RAM",
+//               "attribute_value_id": 20,
+//               "value": "4GB"
+//             },
+//             {
+//               "attribute_id": 5,
+//               "attribute": "Screen Size",
+//               "attribute_value_id": 26,
+//               "value": "6.1\""
+//             },
+//             {
+//               "attribute_id": 6,
+//               "attribute": "Battery",
+//               "attribute_value_id": 33,
+//               "value": "6000mAh"
+//             },
+//             {
+//               "attribute_id": 7,
+//               "attribute": "Processor",
+//               "attribute_value_id": 34,
+//               "value": "Snapdragon 888"
+//             },
+//             {
+//               "attribute_id": 8,
+//               "attribute": "Camera",
+//               "attribute_value_id": 42,
+//               "value": "64MP"
+//             },
+//             {
+//               "attribute_id": 9,
+//               "attribute": "Operating System",
+//               "attribute_value_id": 44,
+//               "value": "Android"
+//             },
+//             {
+//               "attribute_id": 10,
+//               "attribute": "Connectivity",
+//               "attribute_value_id": 47,
+//               "value": "5G"
+//             },
+//             {
+//               "attribute_id": 11,
+//               "attribute": "Weight",
+//               "attribute_value_id": 50,
+//               "value": "250 Gm"
+//             }
+//           ],
+//           "variant_text": "Red / 32GB / 4GB / 6.1\" / 6000mAh / Snapdragon 888 / 64MP / Android / 5G / 250 Gm",
+//           "qty": 1,
+//           "actual_price": 70,
+//           "discount_price": 65,
+//           "actual_total": 70,
+//           "discount_total": 65,
+//           "short_desc": null,
+//           "image": "https://deebazar.com/admin/images/uploads/skus/12/JghmdpZz022t5rVHCNeV_1791454315.png",
+//           "available": true,
+//           "available_stock": 100
+//         }
+//       ],
+//       "seller_subtotal": 65,
+//       "modes": [
+//         "pickup",
+//         "delivery"
+//       ],
+//       "selected_mode": "delivery",
+//       "delivery_options": [
+//         {
+//           "code": "shiprocket",
+//           "name": "Shiprocket (Delhivery Air)",
+//           "charge": 55.72,
+//           "days": 2
+//         }
+//       ],
+//       "selected_option": "shiprocket",
+//       "delivery_charge": 55.72,
+//       "seller_total": 120.72,
+//       "delivery_error": null
+//     },
+//     {
+//       "seller_id": 1,
+//       "seller_name": "Hittok",
+//       "items": [
+//         {
+//           "cart_id": 26,
+//           "product_sku_id": 11,
+//           "seller_sku_id": 11,
+//           "name": "Vivo phone Blue 32GB 6GB 6.7\" 6000mAh A15 Bionic 50MP Android 500 Gm",
+//           "attributes": [
+//             {
+//               "attribute_id": 1,
+//               "attribute": "Color",
+//               "attribute_value_id": 2,
+//               "value": "Blue"
+//             },
+//             {
+//               "attribute_id": 3,
+//               "attribute": "Storage",
+//               "attribute_value_id": 14,
+//               "value": "32GB"
+//             },
+//             {
+//               "attribute_id": 4,
+//               "attribute": "RAM",
+//               "attribute_value_id": 21,
+//               "value": "6GB"
+//             },
+//             {
+//               "attribute_id": 5,
+//               "attribute": "Screen Size",
+//               "attribute_value_id": 28,
+//               "value": "6.7\""
+//             },
+//             {
+//               "attribute_id": 6,
+//               "attribute": "Battery",
+//               "attribute_value_id": 33,
+//               "value": "6000mAh"
+//             },
+//             {
+//               "attribute_id": 7,
+//               "attribute": "Processor",
+//               "attribute_value_id": 36,
+//               "value": "A15 Bionic"
+//             },
+//             {
+//               "attribute_id": 8,
+//               "attribute": "Camera",
+//               "attribute_value_id": 41,
+//               "value": "50MP"
+//             },
+//             {
+//               "attribute_id": 9,
+//               "attribute": "Operating System",
+//               "attribute_value_id": 44,
+//               "value": "Android"
+//             },
+//             {
+//               "attribute_id": 11,
+//               "attribute": "Weight",
+//               "attribute_value_id": 51,
+//               "value": "500 Gm"
+//             }
+//           ],
+//           "variant_text": "Blue / 32GB / 6GB / 6.7\" / 6000mAh / A15 Bionic / 50MP / Android / 500 Gm",
+//           "qty": 1,
+//           "actual_price": 2999,
+//           "discount_price": 2599,
+//           "actual_total": 2999,
+//           "discount_total": 2599,
+//           "short_desc": null,
+//           "image": "https://deebazar.com/admin/images/uploads/skus/11/qjKhEGDglaa5zw4ZJ5W0_1791446618.jpg",
+//           "available": true,
+//           "available_stock": 10
+//         }
+//       ],
+//       "seller_subtotal": 2599,
+//       "modes": [
+//         "pickup",
+//         "delivery"
+//       ],
+//       "selected_mode": "delivery",
+//       "delivery_options": [
+//         {
+//           "code": "shiprocket",
+//           "name": "Shiprocket (Delhivery Air)",
+//           "charge": 55.72,
+//           "days": 2
+//         }
+//       ],
+//       "selected_option": "shiprocket",
+//       "delivery_charge": 55.72,
+//       "seller_total": 2654.72,
+//       "delivery_error": null
+//     }
+//   ],
+//   "unavailable": []
 // }
 // ```
 
 // **Validation:**
-// - `user_id` (required, integer)
 // - `address_id` (optional, integer)
+// - `selections` (optional, object mapping seller_id string to `{ mode: "delivery" | "pickup", option?: string }`)
 
 // ---
 // ### Remove from Cart
@@ -1131,77 +1914,44 @@
 // ## Address Management APIs
 
 // ### Save Address
-// Save a new address for the user.
+// User Address:
 
-// **Endpoint:** `POST /api/save-addresssave-address`
-   
-// **Headers:**
-// ```
-// Authorization: Bearer {token}
-// ```
-
-// **Request Body:**
-// ```json
+// Save Address
 // {
-//    user_id: ID,
-//   "name": "John Doe",
-//   "mobile": "9876543210",
-//   "pin": "560001",
-//   "state": "Karnataka",
-//   "city": "Bangalore",
-//   "house_no": "123",
-//   "road_name": "Main Street",
-//   "landmark": "Near Park",
-//   "type": "Home"
-    // status:1
+//     "user_id": 1,
+//     "name": "Rahul Sharma",
+//     "mobile": "9876543210",
+//     "pin": "700001",
+//     "state": "West Bengal",
+//     "city": "Kolkata",
+//     "house_no": "12/B",
+//     "road_name": "Park Street",
+//     "landmark": "Near City Mall", // optional
+//     "latitude": 22.5726,
+//     "longitude": 88.3639,
+//     "type": "Home",
+//     "status": "active"
 // }
-// ```
 
-// **Response (200):**
-// ```json
+// Update Address
 // {
-//   "status": 200,
-//   "message": "Address saved successfully"
+//     "address_id": 5,
+//     "user_id": 1,
+//     "name": "Rahul Sharma",
+//     "mobile": "9876543210",
+//     "pin": "700001",
+//     "state": "West Bengal",
+//     "city": "Kolkata",
+//     "house_no": "12/B",
+//     "road_name": "Park Street",
+//     "landmark": "Near City Mall", // optional
+//     "latitude": 22.5726,
+//     "longitude": 88.3639,
+//     "type": "Home",
+//     "status": "active"
 // }
-// ```
 
-// ---
-
-// ### Update Address
-// Update an existing address.
-
-// **Endpoint:** `POST /api/update-address`
-
-// **Headers:**
-// ```
-// Authorization: Bearer {token}
-// ```
-
-// **Request Body:**
-// ```json
-// {
-//   "address_id": 1,
-//   "name": "John Doe",
-//   "mobile": "9876543210",
-//   "pin": "560001",
-//   "state": "Karnataka",
-//   "city": "Bangalore",
-//   "house_no": "123",
-//   "road_name": "Main Street",
-//   "landmark": "Near Park",
-//   "type": "Home"
-// }
-// ```
-
-// **Response (200):**
-// ```json
-// {
-//   "status": 200,
-//   "message": "Address updated successfully"
-// }
-// ```
-
-// ---
+// user_id is only needed if the request is not authenticated. If auth()->id() exists, it overrides the body value (the code merges user_id after $request->all()), so with a Bearer token you can omit user_id. But addressRules() still marks it required, and it passes because of the merge.
 
 // ### List Addresses
 // Get all addresses for the user.
@@ -1388,24 +2138,47 @@
 // **Endpoint:** `POST /api/orders`
 
 // **Headers:**
-// ```
-// Authorization: Bearer {token}
+// - `Authorization: Bearer {token}`
+// - `Content-Type: application/json`
+
+// **Request Body (Pickup):**
+// ```json
+// {
+//     "address_id": 2,
+//     "payment_method": "cod",
+//     "selections": {
+//         "1": { "mode": "pickup" }
+//     }
+// }
 // ```
 
-// **Request Body:**
+// **Request Body (Delivery):**
+// ```json
+// {
+//     "address_id": 2,
+//     "payment_method": "cod",
+//     "selections": {
+//         "1": { "mode": "delivery", "option": "seller" }
+//     }
+// }
 // ```
-// address_id: 5
-// payment_method: cod
-// ```
+
+// **Parameters:**
+// - `address_id` (required, integer): Saved address ID
+// - `payment_method` (required, string): "cod" | "cashfree"
+// - `selections` (required, object): Object mapping seller_id string (`"1"` -> seller id) to selection details:
+//   - Store Pickup: `{ "mode": "pickup" }`
+//   - Home Delivery: `{ "mode": "delivery", "option": "seller" }`
+// - `coupon_code` (optional, string): Discount coupon code
 
 // **Response (200):**
 // ```json
 // {
-//     "status": 200,
-//     "message": "Order created successfully",
-//     "order_ids": [
-//         841440
-//     ]
+//     "status": 200,
+//     "message": "Order created successfully",
+//     "order_ids": [
+//         841440
+//     ]
 // }
 // ```
 
@@ -1634,35 +2407,55 @@
 
 // **Endpoint:** `POST /api/orders`
 
-// **Headers:** `Authorization: Bearer {token}`
+// **Headers:**
+// - `Authorization: Bearer {token}`
+// - `Content-Type: application/json`
 
-// **Request Body:**
+// **Request Body (Pickup):**
 // ```json
 // {
-//   "address_id": 1,
-//   "payment_method": "cashfree",
-//   "coupon_code": "SAVE10"
+//     "address_id": 2,
+//     "payment_method": "cod",
+//     "selections": {
+//         "1": { "mode": "pickup" }
+//     }
+// }
+// ```
+
+// **Request Body (Delivery):**
+// ```json
+// {
+//     "address_id": 2,
+//     "payment_method": "cod",
+//     "selections": {
+//         "1": { "mode": "delivery", "option": "seller" }
+//     }
 // }
 // ```
 
 // **Request Parameters:**
-// - `address_id` (required): ID of the saved address to use for shipping
-// - `payment_method` (required): Payment method - "cashfree" for online payment, "cod" for cash on delivery
-// - `coupon_code` (optional): Discount coupon code to apply
+// - `address_id` (required, integer): ID of the saved address to use for shipping
+// - `payment_method` (required, string): Payment method - "cashfree" for online payment, "cod" for cash on delivery
+// - `selections` (required, object): Object mapping seller_id string (`"1"` -> seller id) to mode & option:
+//   - Pickup: `{ "mode": "pickup" }`
+//   - Delivery: `{ "mode": "delivery", "option": "seller" }`
+// - `coupon_code` (optional, string): Discount coupon code to apply
 
 // **Response:**
 // ```json
 // {
-//   "status": 200,
-//   "message": "Order created successfully",
-//   "order_id": 123,
-//   "payment_url": "https://payments.cashfree.com/..."
+//   "status": 200,
+//   "message": "Order created successfully",
+//   "order_id": 123,
+//   "order_ids": [841440],
+//   "payment_url": "https://payments.cashfree.com/..."
 // }
 // ```
 
 // **Note:** This endpoint:
 // - Automatically fetches the authenticated user's cart items
 // - Uses the provided address_id for shipping
+// - Uses selections for seller fulfillment mode (pickup or delivery) and delivery option
 // - Calculates totals including discounts and delivery charges
 // - For Cashfree payment, returns a payment_url for redirecting to payment gateway
 // - For COD, processes order directly without payment redirect
@@ -1726,7 +2519,7 @@
 //     "shipping_address": {...}
 //   }
 // }
-// ``` 
+// ```
 
 // ---
 

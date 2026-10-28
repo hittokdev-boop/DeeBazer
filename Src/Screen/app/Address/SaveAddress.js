@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   StyleSheet,
   TextInput,
@@ -13,19 +13,29 @@ import {
   StatusBar,
 } from "react-native";
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import Geolocation from '@react-native-community/geolocation';
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { BASE_URL, getToken, getuserId, getMobile } from "../../../Api/Api";
+import { getUserProfileApi, saveAddressApi, updateAddressApi, getToken, getuserId, getMobile } from "../../../Api/Api";
 import SuccessModal from "../../../Common/SuccessScreen";
 import AllColors from "../../../Constants/Color";
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
+import { getCoordinatesFromAddress, isValidCoordinate } from '../../../Common/geocodeUtils';
 
 export default function SaveAddress() {
   const navigation = useNavigation();
   const route = useRoute();
   const editData = route?.params?.addressData || route?.params?.item || null;
   const isEdit = Boolean(route?.params?.isEdit || editData);
+  const isFromCart = Boolean(route?.params?.fromCart || route?.params?.returnScreen === 'CartPage');
   const { theme, isDarkMode } = useTheme();
+
+  const [latitude, setLatitude] = useState(
+    route?.params?.latitude || route?.params?.lat || editData?.latitude || editData?.lat || null
+  );
+  const [longitude, setLongitude] = useState(
+    route?.params?.longitude || route?.params?.lng || route?.params?.long || editData?.longitude || editData?.lng || editData?.long || null
+  );
 
   const [stateName, setStateName] = useState('');
   const [city, setCity] = useState('');
@@ -39,10 +49,72 @@ export default function SaveAddress() {
   const [typeType, setTypeType] = useState('Home');
   const [customType, setCustomType] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
+  const [lastSavedId, setLastSavedId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const isInitialMount = useRef(true);
 
   useEffect(() => {
+    if (route?.params?.fromMap) {
+      if (route.params.latitude) setLatitude(route.params.latitude);
+      if (route.params.longitude) setLongitude(route.params.longitude);
+      setCity(String(route.params.city || ''));
+      setStateName(String(route.params.state || ''));
+      setpinCode(String(route.params.pin || ''));
+      setHouseNo(String(route.params.houseNo || ''));
+      setRoadName(String(route.params.roadName || ''));
+      setLandmark(String(route.params.landmark || ''));
+      setAddress(String(route.params.address || ''));
+      if (route.params.name) setName(String(route.params.name));
+      if (route.params.mobile) setMobile(String(route.params.mobile));
+      if (route.params.type) setTypeType(String(route.params.type));
+      if (route.params.customType) setCustomType(String(route.params.customType));
+      return;
+    }
+
+    if (route?.params?.latitude) setLatitude(route.params.latitude);
+    if (route?.params?.longitude) setLongitude(route.params.longitude);
+    if (route?.params?.city !== undefined) setCity(String(route.params.city || ''));
+    if (route?.params?.state !== undefined) setStateName(String(route.params.state || ''));
+    if (route?.params?.pin !== undefined) setpinCode(String(route.params.pin || ''));
+    if (route?.params?.houseNo !== undefined) setHouseNo(String(route.params.houseNo || ''));
+    if (route?.params?.roadName !== undefined) setRoadName(String(route.params.roadName || ''));
+    if (route?.params?.landmark !== undefined) setLandmark(String(route.params.landmark || ''));
+    if (route?.params?.address !== undefined) setAddress(String(route.params.address || ''));
+    if (route?.params?.name) setName(String(route.params.name));
+    if (route?.params?.mobile) setMobile(String(route.params.mobile));
+    if (route?.params?.type) setTypeType(String(route.params.type));
+    if (route?.params?.customType) setCustomType(String(route.params.customType));
+  }, [
+    route?.params?.fromMap,
+    route?.params?.latitude,
+    route?.params?.longitude,
+    route?.params?.city,
+    route?.params?.state,
+    route?.params?.pin,
+    route?.params?.houseNo,
+    route?.params?.roadName,
+    route?.params?.landmark,
+    route?.params?.address,
+    route?.params?.name,
+    route?.params?.mobile,
+    route?.params?.type,
+    route?.params?.customType,
+  ]);
+
+  useEffect(() => {
+    if (!isInitialMount.current) return;
+    isInitialMount.current = false;
+
+    if (route?.params?.fromMap) return;
+
     if (editData) {
+      if (editData.latitude || editData.lat) {
+        setLatitude(editData.latitude || editData.lat);
+      }
+      if (editData.longitude || editData.lng || editData.long) {
+        setLongitude(editData.longitude || editData.lng || editData.long);
+      }
       if (editData.name) setName(String(editData.name));
       const m = editData.mobile || editData.phone || editData.mobile_no;
       if (m) setMobile(String(m).replace(/[^0-9]/g, '').slice(0, 10));
@@ -73,7 +145,192 @@ export default function SaveAddress() {
     } else {
       loadUserData();
     }
-  }, [editData]);
+  }, [editData, route?.params?.fromMap]);
+
+  const reverseGeocode = async (lat, lng) => {
+    try {
+      const googlePromise = fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=AIzaSyA5Jo2sWSApjLojgYNdSgyICND-t3Gzb5M`
+      ).then(res => res.json()).catch(() => null);
+
+      const osmPromise = fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'DeeBazer-App',
+            'Accept-Language': 'en',
+          },
+        }
+      ).then(res => res.json()).catch(() => null);
+
+      const bdcPromise = fetch(
+        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`
+      ).then(res => res.json()).catch(() => null);
+
+      const [googleData, osmData, bdcData] = await Promise.all([googlePromise, osmPromise, bdcPromise]);
+
+      let foundCity = '';
+      let foundState = '';
+      let foundPin = '';
+      let foundRoad = '';
+      let foundHouse = '';
+      let foundLandmark = '';
+      let foundAddress = '';
+
+      if (googleData && googleData.status === 'OK' && googleData.results && googleData.results[0]) {
+        const topResult = googleData.results[0];
+        foundAddress = (topResult.formatted_address || '')
+          .replace(/, India$/i, '')
+          .replace(/unnamed road,?/gi, '')
+          .trim();
+
+        let subLoc1 = '';
+        let subLoc2 = '';
+        let routeStr = '';
+        let premiseStr = '';
+
+        topResult.address_components.forEach(comp => {
+          const types = comp.types || [];
+          if (types.includes('postal_code')) {
+            foundPin = comp.long_name;
+          } else if (types.includes('locality')) {
+            foundCity = comp.long_name;
+          } else if (types.includes('administrative_area_level_1')) {
+            foundState = comp.long_name;
+          } else if (types.includes('sublocality_level_1') || types.includes('sublocality')) {
+            subLoc1 = comp.long_name;
+          } else if (types.includes('sublocality_level_2') || types.includes('neighborhood')) {
+            subLoc2 = comp.long_name;
+          } else if (types.includes('route')) {
+            routeStr = comp.long_name;
+          } else if (types.includes('street_number') || types.includes('premise') || types.includes('subpremise')) {
+            premiseStr = comp.long_name;
+          }
+        });
+
+        foundHouse = premiseStr || '';
+        foundRoad = [premiseStr, routeStr].filter(Boolean).join(' ') || subLoc2 || '';
+        foundLandmark = subLoc2 || subLoc1 || '';
+      }
+
+      if (osmData && osmData.address) {
+        const addr = osmData.address;
+        if (!foundRoad) foundRoad = addr.road || addr.street || addr.suburb || addr.pedestrian || '';
+        if (!foundHouse) foundHouse = addr.house_number || addr.building || '';
+        if (!foundCity) foundCity = addr.city || addr.town || addr.village || addr.municipality || '';
+        if (!foundState) foundState = addr.state || '';
+        if (!foundPin) foundPin = addr.postcode ? String(addr.postcode).replace(/\D/g, '').slice(0, 6) : '';
+        if (!foundLandmark) foundLandmark = addr.neighbourhood || addr.suburb || '';
+      }
+
+      if (bdcData) {
+        if (!foundCity) foundCity = bdcData.city || bdcData.locality || '';
+        if (!foundState) foundState = bdcData.principalSubdivision || '';
+        if (!foundPin && bdcData.postcode) {
+          const cleaned = String(bdcData.postcode).replace(/\D/g, '');
+          if (cleaned.length === 6) foundPin = cleaned;
+        }
+        if (!foundRoad && bdcData.locality) foundRoad = bdcData.locality;
+      }
+
+      setCity(foundCity || '');
+      setStateName(foundState || '');
+      setpinCode(foundPin || '');
+      setRoadName(foundRoad || '');
+      setHouseNo(foundHouse || '');
+      setLandmark(foundLandmark || '');
+      if (foundAddress) setAddress(foundAddress);
+    } catch (e) {
+      console.log('Reverse geocode error in SaveAddress:', e);
+    }
+  };
+
+  const handleUseLiveLocation = async () => {
+    setLocationLoading(true);
+    try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+        ]);
+        const isGranted =
+          granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED ||
+          granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
+        if (!isGranted) {
+          Alert.alert("Permission Required", "Please allow location access to detect your live location.");
+          setLocationLoading(false);
+          return;
+        }
+      }
+
+      Geolocation.getCurrentPosition(
+        async position => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          setLatitude(lat);
+          setLongitude(lng);
+          await reverseGeocode(lat, lng);
+          setLocationLoading(false);
+        },
+        error => {
+          Geolocation.getCurrentPosition(
+            async position => {
+              const lat = position.coords.latitude;
+              const lng = position.coords.longitude;
+              setLatitude(lat);
+              setLongitude(lng);
+              await reverseGeocode(lat, lng);
+              setLocationLoading(false);
+            },
+            err => {
+              setLocationLoading(false);
+              Alert.alert("Location Error", "Could not detect your live location. Please ensure GPS is turned on.");
+            },
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 10000 }
+          );
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+      );
+    } catch (err) {
+      setLocationLoading(false);
+      Alert.alert("Error", "Failed to retrieve location.");
+    }
+  };
+
+  const handlePickOnMap = () => {
+    navigation.navigate('MapScreen', {
+      fromSaveAddress: true,
+      fromCart: isFromCart,
+      returnScreen: isFromCart ? 'CartPage' : undefined,
+      initialLat: latitude,
+      initialLng: longitude,
+      isEdit: isEdit,
+      addressData: editData,
+      currentName: name,
+      currentMobile: mobile,
+      currentHouseNo: houseNo,
+      currentRoadName: roadName,
+      currentLandmark: landmark,
+      currentCity: city,
+      currentState: stateName,
+      currentPin: zipCode,
+      currentType: typeType,
+      currentCustomType: customType,
+    });
+  };
+
+  const calculateAndSetCoords = async (h, r, l, c, s, p) => {
+    try {
+      const coords = await getCoordinatesFromAddress(h, r, l, c, s, p);
+      if (coords && coords.latitude && coords.longitude) {
+        setLatitude(coords.latitude);
+        setLongitude(coords.longitude);
+      }
+    } catch (e) {
+      console.log('Error calculating coords from address:', e);
+    }
+  };
+
 
   const loadUserData = async () => {
     try {
@@ -85,14 +342,8 @@ export default function SaveAddress() {
 
       const token = await getToken();
       if (token) {
-        const response = await fetch(`${BASE_URL}me`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-          },
-        });
-        const data = await response.json().catch(() => ({}));
+        const response = await getUserProfileApi();
+        const data = response.data || {};
         if (data && data.user) {
           if (data.user.name) setName(data.user.name);
           const uMobile = data.user.mobile || data.user.phone;
@@ -134,162 +385,131 @@ export default function SaveAddress() {
       let success = false;
       let errorMsg = isEdit ? "Unable to update address." : "Unable to save address.";
 
-      if (isEdit && addressId) {
-        // 1. Try update-address endpoint (JSON)
-        try {
-          const updateResponse = await fetch(`${BASE_URL}update-address`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-              "Authorization": token ? `Bearer ${token}` : '',
-            },
-            body: JSON.stringify({
-              address_id: addressId,
-              id: addressId,
-              user_id: ID,
-              name: name.trim(),
-              mobile: mobile.trim(),
-              pin: zipCode.trim(),
-              state: stateName.trim(),
-              city: city.trim(),
-              house_no: houseNo.trim(),
-              road_name: roadName.trim(),
-              landmark: landmark.trim(),
-              address: address.trim() || fullAddress,
-              type: finalType,
-              status: "1"
-            }),
-          });
+      let finalLat = latitude;
+      let finalLng = longitude;
 
-          const updateText = await updateResponse.text();
-          let updateData = {};
-          try { updateData = JSON.parse(updateText); } catch (e) { }
-
-          if (updateResponse.ok && (updateData.status === 200 || updateData.status === '200' || updateData.status === true || updateData.success)) {
-            success = true;
-          } else if (updateData.message) {
-            errorMsg = updateData.message;
-          }
-        } catch (e) {
-          console.log("Update address JSON error:", e);
-        }
-
-        // 2. Try FormData if JSON failed
-        if (!success) {
-          try {
-            const formData = new FormData();
-            formData.append('address_id', String(addressId));
-            formData.append('id', String(addressId));
-            if (ID) formData.append('user_id', String(ID));
-            formData.append('name', name.trim());
-            formData.append('mobile', mobile.trim());
-            formData.append('pin', zipCode.trim());
-            formData.append('state', stateName.trim());
-            formData.append('city', city.trim());
-            formData.append('house_no', houseNo.trim());
-            formData.append('road_name', roadName.trim());
-            formData.append('landmark', landmark.trim());
-            formData.append('address', address.trim() || fullAddress);
-            formData.append('type', finalType);
-            formData.append('status', '1');
-
-            const fdResponse = await fetch(`${BASE_URL}update-address`, {
-              method: "POST",
-              headers: {
-                Authorization: token ? `Bearer ${token}` : '',
-              },
-              body: formData,
-            });
-            const fdText = await fdResponse.text();
-            let fdData = {};
-            try { fdData = JSON.parse(fdText); } catch (e) { }
-            if (fdResponse.ok && (fdData.status === 200 || fdData.status === '200' || fdData.status === true || fdData.success)) {
-              success = true;
-            }
-          } catch (e) { }
-        }
-
-        // 3. Fallback to save-address with address_id if update-address endpoint not found
-        if (!success) {
-          try {
-            const fallbackResponse = await fetch(`${BASE_URL}save-address`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "Authorization": token ? `Bearer ${token}` : '',
-              },
-              body: JSON.stringify({
-                address_id: addressId,
-                id: addressId,
-                user_id: ID,
-                name: name.trim(),
-                mobile: mobile.trim(),
-                pin: zipCode.trim(),
-                state: stateName.trim(),
-                city: city.trim(),
-                house_no: houseNo.trim(),
-                road_name: roadName.trim(),
-                landmark: landmark.trim(),
-                address: address.trim() || fullAddress,
-                type: finalType,
-                status: "1"
-              }),
-            });
-            const fbText = await fallbackResponse.text();
-            let fbData = {};
-            try { fbData = JSON.parse(fbText); } catch (e) { }
-            if (fallbackResponse.ok && (fbData.status === 200 || fbData.status === '200' || fbData.status === true || fbData.success)) {
-              success = true;
-            }
-          } catch (e) { }
-        }
-      } else {
-        const response = await fetch(`${BASE_URL}save-address`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": token ? `Bearer ${token}` : '',
-          },
-          body: JSON.stringify({
-            user_id: ID,
-            name: name.trim(),
-            mobile: mobile.trim(),
-            pin: zipCode.trim(),
-            state: stateName.trim(),
-            city: city.trim(),
-            house_no: houseNo.trim(),
-            road_name: roadName.trim(),
-            landmark: landmark.trim(),
-            address: address.trim() || fullAddress,
-            type: finalType,
-            status: "1"
-          }),
-        });
-
-        const text = await response.text();
-        let data = {};
-        try {
-          data = JSON.parse(text);
-        } catch (e) { }
-
-        if (response.ok && (data.status === 200 || data.status === '200' || data.status === true || data.success || data.id)) {
-          success = true;
-        } else {
-          errorMsg = data.message || "Unable to save address.";
+      // Calculate coordinates dynamically by mapping the address if not already selected from map/live GPS
+      if (!isValidCoordinate(finalLat, finalLng)) {
+        const calculated = await getCoordinatesFromAddress(houseNo, roadName, landmark, city, stateName, zipCode);
+        if (calculated && isValidCoordinate(calculated.latitude, calculated.longitude)) {
+          finalLat = calculated.latitude;
+          finalLng = calculated.longitude;
+          setLatitude(finalLat);
+          setLongitude(finalLng);
         }
       }
 
+      const payload = {
+        user_id: ID ? (Number(ID) || ID) : undefined,
+        name: name.trim(),
+        mobile: mobile.trim(),
+        pin: zipCode.trim(),
+        state: stateName.trim(),
+        house_no: houseNo.trim(),
+        city: city.trim(),
+        road_name: roadName.trim(),
+        landmark: landmark.trim() || undefined,
+        address: address.trim() || fullAddress,
+        type: finalType,
+        status: "active"
+      };
+
+      if (isValidCoordinate(finalLat, finalLng)) {
+        payload.latitude = Number(Number(finalLat).toFixed(6));
+        payload.longitude = Number(Number(finalLng).toFixed(6));
+      }
+
+      const getApiErrorMessage = (res, fallback) => {
+        if (res?.message && typeof res.message === 'string') return res.message;
+        if (res?.data?.message && typeof res.data.message === 'string') return res.data.message;
+        if (res?.errors && typeof res.errors === 'object') {
+          const firstKey = Object.keys(res.errors)[0];
+          if (firstKey && Array.isArray(res.errors[firstKey]) && res.errors[firstKey][0]) {
+            return res.errors[firstKey][0];
+          }
+        }
+        if (res?.data?.errors && typeof res.data.errors === 'object') {
+          const firstKey = Object.keys(res.data.errors)[0];
+          if (firstKey && Array.isArray(res.data.errors[firstKey]) && res.data.errors[firstKey][0]) {
+            return res.data.errors[firstKey][0];
+          }
+        }
+        return res?.error || res?.data?.error || fallback;
+      };
+
+      let savedId = null;
+      if (isEdit && addressId) {
+        payload.address_id = Number(addressId) || addressId;
+        payload.id = Number(addressId) || addressId;
+        const updateRes = await updateAddressApi(payload);
+        const uStatus = updateRes?.status ?? updateRes?.data?.status;
+        const uSuccess = updateRes?.success ?? updateRes?.data?.success;
+        const uMsg = updateRes?.message || updateRes?.data?.message;
+        if (
+          uStatus === 200 ||
+          uStatus === '200' ||
+          uStatus === 201 ||
+          uStatus === '201' ||
+          uSuccess === true ||
+          uSuccess === 'true' ||
+          (typeof uMsg === 'string' && /success|updated/i.test(uMsg)) ||
+          (updateRes?.ok && !updateRes?.error && uStatus !== 400 && uStatus !== 422)
+        ) {
+          success = true;
+          savedId = Number(addressId) || addressId;
+        } else {
+          errorMsg = getApiErrorMessage(updateRes, "Unable to update address.");
+        }
+      } else {
+        const saveRes = await saveAddressApi(payload);
+        const sStatus = saveRes?.status ?? saveRes?.data?.status;
+        const sSuccess = saveRes?.success ?? saveRes?.data?.success;
+        const sMsg = saveRes?.message || saveRes?.data?.message;
+        if (
+          sStatus === 200 ||
+          sStatus === '200' ||
+          sStatus === 201 ||
+          sStatus === '201' ||
+          sSuccess === true ||
+          sSuccess === 'true' ||
+          saveRes?.id ||
+          saveRes?.data?.id ||
+          saveRes?.address_id ||
+          saveRes?.data?.address_id ||
+          (typeof sMsg === 'string' && /success|saved/i.test(sMsg)) ||
+          (saveRes?.ok && !saveRes?.error && sStatus !== 400 && sStatus !== 422)
+        ) {
+          success = true;
+          savedId =
+            saveRes?.id ||
+            saveRes?.data?.id ||
+            saveRes?.address_id ||
+            saveRes?.data?.address_id ||
+            saveRes?.data?.data?.id ||
+            null;
+        } else {
+          errorMsg = getApiErrorMessage(saveRes, "Unable to save address.");
+        }
+      }
+
+      setLastSavedId(savedId);
+
       if (success) {
         setIsSuccess(true);
+        setTimeout(() => {
+          setIsSuccess(false);
+          if (isFromCart) {
+            navigation.navigate('CartPage', savedId ? { selectedAddressId: savedId } : undefined);
+          } else {
+            navigation.navigate('AllAddress');
+          }
+        }, 1200);
       } else {
         Alert.alert("Error", errorMsg);
       }
     } catch (error) {
       console.log("Save Address Error:", error);
-      Alert.alert("Error", "Something went wrong saving address.");
+      Alert.alert("Error", error?.message || "Something went wrong saving address.");
     } finally {
       setSaving(false);
     }
@@ -317,6 +537,58 @@ export default function SaveAddress() {
           <View style={styles.topSection}>
             <Text style={[styles.title, { color: theme.textPrimary }]}>{isEdit ? 'Edit Address' : 'Save Address'}</Text>
             <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{isEdit ? 'Update your delivery address details' : 'Add your delivery address details'}</Text>
+          </View>
+
+          {/* LOCATION ACTIONS (LIVE LOCATION / OTHER LOCATION ON MAP) */}
+          <View style={[styles.locationCard, { backgroundColor: isDarkMode ? '#1E293B' : '#F1F5F9', borderColor: isDarkMode ? '#334155' : '#E2E8F0' }]}>
+            <View style={styles.locationHeaderRow}>
+              <View style={styles.locationTitleRow}>
+                <Ionicons name="location" size={18} color={AllColors.primary} />
+                <Text style={[styles.locationCardTitle, { color: theme.textPrimary }]}>Choose Delivery Location</Text>
+              </View>
+            </View>
+
+            <Text style={[styles.locationCardSub, { color: theme.textSecondary }]}>
+              Auto-fill address using current live location or search on map.
+            </Text>
+
+            <View style={styles.locationBtnsRow}>
+              {/* Live Location Button */}
+              <TouchableOpacity
+                style={[styles.locActionBtn, styles.liveLocBtn, locationLoading && { opacity: 0.7 }]}
+                onPress={handleUseLiveLocation}
+                disabled={locationLoading}
+                activeOpacity={0.8}
+              >
+                {locationLoading ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <>
+                    <Ionicons name="navigate" size={18} color="#FFF" />
+                    <Text style={styles.liveLocBtnText}>Use Live Location</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              {/* Choose / Search Location on Map Button */}
+              <TouchableOpacity
+                style={[
+                  styles.locActionBtn,
+                  styles.mapLocBtn,
+                  {
+                    borderColor: AllColors.primary,
+                    backgroundColor: isDarkMode ? 'rgba(235, 19, 109, 0.08)' : '#FFF0F5',
+                  },
+                ]}
+                onPress={handlePickOnMap}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="map-outline" size={19} color={AllColors.primary} />
+                <Text style={[styles.mapLocBtnText, { color: AllColors.primary }]}>
+                  Select Location on Map
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Name */}
@@ -404,6 +676,11 @@ export default function SaveAddress() {
               <TextInput
                 value={city}
                 onChangeText={setCity}
+                onBlur={() => {
+                  if (city.trim()) {
+                    calculateAndSetCoords(houseNo, roadName, landmark, city.trim(), stateName, zipCode);
+                  }
+                }}
                 placeholder="Enter City"
                 placeholderTextColor={isDarkMode ? '#94A3B8' : '#999'}
                 style={[styles.input, { color: theme.textPrimary }]}
@@ -419,6 +696,11 @@ export default function SaveAddress() {
               <TextInput
                 value={stateName}
                 onChangeText={setStateName}
+                onBlur={() => {
+                  if (stateName.trim() && city.trim()) {
+                    calculateAndSetCoords(houseNo, roadName, landmark, city, stateName.trim(), zipCode);
+                  }
+                }}
                 placeholder="Enter State"
                 placeholderTextColor={isDarkMode ? '#94A3B8' : '#999'}
                 style={[styles.input, { color: theme.textPrimary }]}
@@ -433,7 +715,18 @@ export default function SaveAddress() {
               <Ionicons name="location-outline" size={20} color={isDarkMode ? '#94A3B8' : '#777'} />
               <TextInput
                 value={zipCode}
-                onChangeText={setpinCode}
+                onChangeText={(text) => {
+                  const cleaned = text.replace(/[^0-9]/g, '').slice(0, 6);
+                  setpinCode(cleaned);
+                  if (cleaned.length === 6) {
+                    calculateAndSetCoords(houseNo, roadName, landmark, city, stateName, cleaned);
+                  }
+                }}
+                onBlur={() => {
+                  if (zipCode.trim()) {
+                    calculateAndSetCoords(houseNo, roadName, landmark, city, stateName, zipCode.trim());
+                  }
+                }}
                 placeholder="Enter 6-digit PIN Code"
                 placeholderTextColor={isDarkMode ? '#94A3B8' : '#999'}
                 keyboardType="number-pad"
@@ -527,7 +820,11 @@ export default function SaveAddress() {
           message={isEdit ? "Your address has been updated successfully." : "Your address has been saved successfully."}
           onClose={() => {
             setIsSuccess(false);
-            navigation.goBack();
+            if (isFromCart) {
+              navigation.navigate('CartPage', lastSavedId ? { selectedAddressId: lastSavedId } : undefined);
+            } else {
+              navigation.navigate('AllAddress');
+            }
           }}
         />
       </ScrollView>
@@ -648,5 +945,78 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 40,
+  },
+  locationCard: {
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+  },
+  locationHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  locationTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  locationCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  locationCardSub: {
+    fontSize: 12,
+    marginBottom: 12,
+  },
+  coordsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    gap: 5,
+  },
+  onlineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981',
+  },
+  coordsText: {
+    fontSize: 11,
+    color: '#059669',
+    fontWeight: '600',
+  },
+  locationBtnsRow: {
+    flexDirection: 'column',
+    gap: 12,
+  },
+  locActionBtn: {
+    width: '100%',
+    height: 50,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  liveLocBtn: {
+    backgroundColor: AllColors.primary,
+  },
+  liveLocBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  mapLocBtn: {
+    borderWidth: 1.5,
+  },
+  mapLocBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

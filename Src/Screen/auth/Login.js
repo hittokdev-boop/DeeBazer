@@ -20,7 +20,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 
 import AllColors from '../../Constants/Color';
 import CustomAlert from '../../Common/Alert';
-import { BASE_URL, setMobile as saveMobile, setuserId, getDeviceId } from '../../Api/Api';
+import { sendOtpApi, setMobile as saveMobile, setuserId, getDeviceId } from '../../Api/Api';
 import { getFcmToken } from '../../Services/NotificationService';
 import LottieView from 'lottie-react-native';
 import { useNavigation } from "@react-navigation/native";
@@ -50,37 +50,14 @@ const CommonLoginModal = () => {
       const fcmToken = await getFcmToken();
       const deviceType = Platform.OS;
 
-      console.log('📲 [Login] Sending OTP with payload:', {
+      const response = await sendOtpApi({
         mobile: cleanMobile,
-        device_id: deviceId,
-        fcm_token: fcmToken,
-        device_type: deviceType,
+        deviceId,
+        fcmToken,
+        deviceType,
       });
 
-      const formData = new FormData();
-      formData.append('mobile', cleanMobile);
-      formData.append('device_id', deviceId);
-      if (fcmToken) {
-        formData.append('fcm_token', fcmToken);
-      }
-      formData.append('device_type', deviceType);
-
-      const response = await fetch(`${BASE_URL}send-otp`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json'
-        },
-        body: formData,
-      });
-
-      const responseText = await response.text();
-      let data = {};
-
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.log("Failed to parse JSON response", responseText);
-      }
+      const data = response.data || {};
 
       if (response.ok) {
         if (data.user_id) await setuserId(data.user_id);

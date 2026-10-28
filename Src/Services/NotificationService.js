@@ -122,7 +122,15 @@ export const getFcmToken = async () => {
 export const handleNotificationRouting = (remoteMessage) => {
   if (!remoteMessage) return;
 
-  const data = remoteMessage?.data || {};
+  let data = remoteMessage?.data || {};
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch (e) {
+      data = {};
+    }
+  }
+
   const notificationId = data.id || data.notification_id || remoteMessage?.id;
 
   // Auto-mark notification as read on the server when clicked
@@ -131,37 +139,191 @@ export const handleNotificationRouting = (remoteMessage) => {
   }
 
   try {
-    const eventType = data.event_type || data.type;
-    const rawMessage = remoteMessage?.notification?.body || data.message || '';
-    const extractedOrderMatch = rawMessage.match(/#(\d+)/);
-    const orderId = data.order_id || (extractedOrderMatch ? extractedOrderMatch[1] : null);
+    // Check for nested data in data.data
+    let nestedData = {};
+    if (typeof data.data === 'string') {
+      try {
+        nestedData = JSON.parse(data.data);
+      } catch (e) {
+        nestedData = {};
+      }
+    } else if (typeof data.data === 'object' && data.data !== null) {
+      nestedData = data.data;
+    }
 
-    if (eventType === 'seller_new_order' || eventType === 'new_order') {
+    // Check for item in data.item or remoteMessage.item
+    let itemObj = {};
+    if (typeof data.item === 'string') {
+      try {
+        itemObj = JSON.parse(data.item);
+      } catch (e) {
+        itemObj = {};
+      }
+    } else if (typeof data.item === 'object' && data.item !== null) {
+      itemObj = data.item;
+    } else if (typeof remoteMessage.item === 'object' && remoteMessage.item !== null) {
+      itemObj = remoteMessage.item;
+    }
+
+    const eventType = (
+      data.event_type ||
+      data.type ||
+      nestedData.event_type ||
+      nestedData.type ||
+      itemObj.event_type ||
+      itemObj.type ||
+      ''
+    ).toLowerCase();
+
+    const rawMessage = remoteMessage?.notification?.body || data.message || data.body || remoteMessage?.body || '';
+
+    // Extract product IDs and SKU IDs from all possible keys
+    let productId =
+      data.product_id ||
+      data.productId ||
+      nestedData.product_id ||
+      nestedData.productId ||
+      data.item_id ||
+      nestedData.item_id ||
+      itemObj.product_id ||
+      itemObj.productId ||
+      itemObj.item_id;
+
+    let skuId =
+      data.sku_id ||
+      data.skuId ||
+      data.product_sku_id ||
+      data.productSkuId ||
+      nestedData.sku_id ||
+      nestedData.skuId ||
+      nestedData.product_sku_id ||
+      nestedData.productSkuId ||
+      itemObj.sku_id ||
+      itemObj.skuId ||
+      itemObj.product_sku_id ||
+      itemObj.productSkuId;
+
+    let sellerSkuId =
+      data.seller_sku_id ||
+      data.sellerSkuId ||
+      nestedData.seller_sku_id ||
+      nestedData.sellerSkuId ||
+      itemObj.seller_sku_id ||
+      itemObj.sellerSkuId;
+
+    let sellerId =
+      data.seller_id ||
+      data.sellerId ||
+      nestedData.seller_id ||
+      nestedData.sellerId ||
+      itemObj.seller_id ||
+      itemObj.sellerId;
+
+    // Check URL or deeplink in data.url, data.link, or rawMessage
+    const urlString = data.url || data.link || nestedData.url || nestedData.link || rawMessage;
+    if (typeof urlString === 'string') {
+      const matchProduct = urlString.match(/(?:product\/|product_id=)(\d+)/i);
+      if (matchProduct && !productId) {
+        productId = matchProduct[1];
+      }
+      const matchSku = urlString.match(/(?:sku\/|sku_id=)(\d+)/i);
+      if (matchSku && !skuId) {
+        skuId = matchSku[1];
+      }
+    }
+
+    // If type is product / sku, but IDs weren't specifically keyed
+    if (!productId && !skuId && (eventType.includes('product') || eventType.includes('sku') || data.screen === 'ProductDetails')) {
+      const genericId = data.id || nestedData.id || itemObj.id;
+      if (genericId && !String(genericId).startsWith('notif_')) {
+        productId = genericId;
+      }
+    }
+
+    // Extract order info
+    const extractedOrderMatch = rawMessage.match(/#(\d+)/);
+    const orderId =
+      data.order_id ||
+      data.orderId ||
+      nestedData.order_id ||
+      nestedData.orderId ||
+      (eventType.includes('order') && extractedOrderMatch ? extractedOrderMatch[1] : null);
+
+    // --- 1. PRODUCT DETAILS ROUTING ---
+    // If notification contains product_id or sku_id or screen is ProductDetails or event is product-related
+    if (productId || skuId || data.screen === 'ProductDetails' || eventType.includes('product') || eventType.includes('sku')) {
+      console.log('Routing notification to ProductDetails with:', {
+        productId,
+        skuId,
+        sellerSkuId,
+        sellerId,
+      });
+
+      const navParams = {
+        id: productId || skuId,
+        product_id: productId || skuId,
+        sku_id: skuId || null,
+        product_sku_id: skuId || null,
+        seller_sku_id: sellerSkuId || null,
+        seller_id: sellerId || null,
+        sellerId: sellerId || null,
+        vendor_id: sellerId || null,
+        item: {
+          id: productId || skuId,
+          product_id: productId || skuId,
+          sku_id: skuId || null,
+          product_sku_id: skuId || null,
+          seller_sku_id: sellerSkuId || null,
+          seller_id: sellerId || null,
+          sellerId: sellerId || null,
+          vendor_id: sellerId || null,
+          ...(typeof itemObj === 'object' && itemObj !== null ? itemObj : {}),
+        },
+      };
+
+      navigate('ProductDetails', navParams);
+      DeviceEventEmitter.emit('REFRESH_NOTIFICATIONS', remoteMessage);
+      return;
+    }
+
+    // --- 2. EXPLICIT SCREEN ROUTING ---
+    if (data.screen) {
+      const params = data.params ? (typeof data.params === 'string' ? JSON.parse(data.params) : data.params) : data;
+      navigate(data.screen, params);
+      DeviceEventEmitter.emit('REFRESH_NOTIFICATIONS', remoteMessage);
+      return;
+    }
+
+    // --- 3. ORDER ROUTING ---
+    if (eventType === 'seller_new_order' || eventType === 'new_order' || eventType.includes('order') || orderId) {
       if (orderId) {
         navigate('OrderDetails', { order_id: orderId });
       } else {
         navigate('Orders');
       }
-    } else if (data.screen) {
-      navigate(data.screen, data.params ? JSON.parse(data.params) : data);
-    } else if (orderId) {
-      navigate('OrderDetails', { order_id: orderId });
-    } else if (data.product_id) {
-      navigate('ProductDetails', { item: { id: data.product_id } });
-    } else if (data.type === 'order') {
-      navigate('Orders');
-    } else if (data.type === 'cart') {
-      navigate('CartPage');
-    } else {
-      // Navigate to main tab and signal opening notification drawer
-      navigate('Profile');
-      DeviceEventEmitter.emit('OPEN_NOTIFICATION_DRAWER', remoteMessage);
+      DeviceEventEmitter.emit('REFRESH_NOTIFICATIONS', remoteMessage);
+      return;
     }
 
-    // Refresh notifications list in UI
+    // --- 4. CART ROUTING ---
+    if (eventType.includes('cart') || data.type === 'cart') {
+      navigate('CartPage');
+      DeviceEventEmitter.emit('REFRESH_NOTIFICATIONS', remoteMessage);
+      return;
+    }
+
+    // --- 5. WISHLIST ROUTING ---
+    if (eventType.includes('wishlist') || data.type === 'wishlist') {
+      navigate('Wishlist');
+      DeviceEventEmitter.emit('REFRESH_NOTIFICATIONS', remoteMessage);
+      return;
+    }
+
+    // --- 6. DEFAULT / FALLBACK: Open Notifications Drawer ---
+    DeviceEventEmitter.emit('OPEN_NOTIFICATION_DRAWER', remoteMessage);
     DeviceEventEmitter.emit('REFRESH_NOTIFICATIONS', remoteMessage);
   } catch (e) {
-    // Silently handle error
+    console.log('Error handling notification routing:', e);
   }
 };
 

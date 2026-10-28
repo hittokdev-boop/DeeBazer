@@ -23,8 +23,10 @@ import { STATUSBAR_HEIGHT } from '../../Constants/ScreenUtils';
 import CustomAlert from '../../Common/Alert';
 import { useTheme } from '../../Context/ThemeContext';
 import {
-  BASE_URL,
+  verifyOtpApi,
+  sendOtpApi,
   getMobile,
+  setMobile,
   setToken,
   setuserId,
   getDeviceId,
@@ -172,27 +174,15 @@ export default function VerifyOTP() {
       }
       const fcmToken = await getFcmToken();
 
-      const formData = new FormData();
-      formData.append('mobile', mobileRef.current);
-      formData.append('otp', code);
-      formData.append('device_id', deviceIdRef.current);
-      if (fcmToken) {
-        formData.append('fcm_token', fcmToken);
-      }
-      formData.append('device_type', Platform.OS);
-
-      const response = await fetch(`${BASE_URL}verify-otp`, {
-        method: 'POST',
-        body: formData,
+      const response = await verifyOtpApi({
+        mobile: mobileRef.current,
+        otp: code,
+        deviceId: deviceIdRef.current,
+        fcmToken,
+        deviceType: Platform.OS,
       });
 
-      const responseText = await response.text();
-      let data = {};
-      try {
-        data = JSON.parse(responseText);
-      } catch (err) {
-        console.log('Verify OTP response parse error:', responseText);
-      }
+      const data = response.data || {};
 
       const tokenVal = data.token || data.access_token || data.data?.token || data.user?.token;
       const userIdVal = data.user?.id || data.user_id || data.data?.id;
@@ -256,20 +246,14 @@ export default function VerifyOTP() {
       const deviceId = deviceIdRef.current || (await getDeviceId());
       const fcmToken = await getFcmToken();
 
-      const formData = new FormData();
-      formData.append('mobile', mobile);
-      formData.append('device_id', deviceId);
-      if (fcmToken) {
-        formData.append('fcm_token', fcmToken);
-      }
-      formData.append('device_type', Platform.OS);
-
-      const response = await fetch(`${BASE_URL}send-otp`, {
-        method: 'POST',
-        body: formData,
+      const response = await sendOtpApi({
+        mobile,
+        deviceId,
+        fcmToken,
+        deviceType: Platform.OS,
       });
 
-      const data = await response.json();
+      const data = response.data || {};
 
       if (response.ok) {
         setAlertMessage('OTP Sent Successfully! Please check your mobile inbox.');

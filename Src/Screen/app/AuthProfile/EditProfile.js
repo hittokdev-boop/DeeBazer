@@ -18,7 +18,7 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useNavigation } from '@react-navigation/native';
-import { BASE_URL, getToken, setMobile as setStoredMobile } from '../../../Api/Api';
+import { getUserProfileApi, updateUserProfileApi, getToken, setMobile as setStoredMobile } from '../../../Api/Api';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
@@ -60,16 +60,10 @@ export default function EditProfileScreen() {
         return;
       }
 
-      const response = await fetch(`${BASE_URL}me`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-      });
-
-      const data = await response.json();
-      if ((data?.status === 200 || data?.success || response.ok) && data.user) {
+      const response = await getUserProfileApi();
+      // requestApi returns the parsed JSON directly, e.g. { status: 200, user: {...} }
+      const data = response || {};
+      if ((data?.status === 200 || data?.success || data?.ok) && data.user) {
         const u = data.user;
         setName(u.name || '');
         setEmail(u.email || '');
@@ -167,27 +161,13 @@ export default function EditProfileScreen() {
 
       console.log('Sending Profile Update FormData...');
 
-      const response = await fetch(`${BASE_URL}user/profile`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-          // Do NOT explicitly set 'Content-Type', fetch sets multipart/form-data with boundary
-        },
-        body: formData,
-      });
-
-      const responseText = await response.text();
-      let data = {};
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.log('JSON parse error from user/profile:', responseText);
-      }
+      const response = await updateUserProfileApi(formData);
+      // requestApi returns the parsed JSON directly
+      const data = response || {};
 
       console.log('Profile Update Response:', data);
 
-      if (response.ok || data?.status === 200 || data?.success) {
+      if (data?.ok || data?.status === 200 || data?.success) {
         // Update stored mobile in AsyncStorage if returned or changed
         const updatedMobile = data?.user?.mobile || mobile.trim();
         if (updatedMobile) {

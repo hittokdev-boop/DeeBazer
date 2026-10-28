@@ -26,6 +26,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
+import { getOrderDetailsApi, getOrderListApi, returnOrderApi, getToken, getuserId } from '../../../Api/Api';
 import ProductReviewModal, {
   getStoredReviews,
   getRatingColor,
@@ -57,11 +58,9 @@ export default function OrderDetails() {
       (Array.isArray(initialOrder.products) && initialOrder.products.length > 0) ||
       (Array.isArray(initialOrder.order_items) && initialOrder.order_items.length > 0) ||
       initialOrder.name ||
+      initialOrder.product_name ||
       initialOrder.img ||
-      initialOrder.image ||
-      initialOrder.order_number ||
-      initialOrder.order_id_generate ||
-      initialOrder.order_id)
+      initialOrder.image)
   );
 
   const [order, setOrder] = useState(initialOrder);
@@ -131,6 +130,23 @@ export default function OrderDetails() {
     initialOrder?.order_number ||
     initialOrder?.order_id_generate;
 
+  const extractOrdersArray = (res) => {
+    if (!res) return [];
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.data)) return res.data;
+    if (Array.isArray(res?.data?.data)) return res.data.data;
+    if (Array.isArray(res?.orders)) return res.orders;
+    if (Array.isArray(res?.data?.orders)) return res.data.orders;
+    if (Array.isArray(res?.order_list)) return res.order_list;
+    if (res?.data && typeof res.data === 'object' && !Array.isArray(res.data)) {
+      const values = Object.values(res.data).filter(
+        (item) => item && typeof item === 'object' && (item.id || item.order_id || item.order_id_generate)
+      );
+      if (values.length > 0) return values;
+    }
+    return [];
+  };
+
   const fetchOrderDetails = useCallback(
     async (isPullToRefresh = false) => {
       if (!isPullToRefresh && !orderRef.current) {
@@ -170,31 +186,12 @@ export default function OrderDetails() {
             ? Number(targetId)
             : targetId;
 
-        let result = null;
-
-        // 1. Primary Attempt: FormData POST with order_id
-        try {
-          const formData = new FormData();
-          formData.append('order_id', String(parsedOrderId || parsedId));
-
-          const response = await fetch(`${BASE_URL}order-details`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/json',
-            },
-            body: formData,
-          });
-
-          const text = await response.text();
-          try {
-            result = JSON.parse(text);
-          } catch (e) {
-            console.log('Order details FormData parse error:', text);
-          }
-        } catch (e) {
-          console.log('Order details FormData fetch error:', e);
-        }
+        const result = await getOrderDetailsApi({
+          order_id: parsedOrderId || parsedId,
+          id: parsedId,
+          order_number: targetOrderNumber,
+          user_id: userId,
+        });
 
         let rawOrderData =
           result?.data_order ||
@@ -204,61 +201,9 @@ export default function OrderDetails() {
           result?.order_details ||
           (result?.id || result?.order_id || result?.order_number ? result : null);
 
-        // 2. Fallback Attempt: JSON POST if FormData returned no order data
-        if (!rawOrderData || typeof rawOrderData !== 'object') {
-          try {
-            const jsonBody = {
-              order_id: parsedOrderId || parsedId,
-            };
-            if (parsedId && parsedId !== parsedOrderId) jsonBody.id = parsedId;
-            if (targetOrderNumber) jsonBody.order_number = targetOrderNumber;
-            if (userId) jsonBody.user_id = isNaN(userId) ? userId : Number(userId);
-
-            const jsonResponse = await fetch(`${BASE_URL}order-details`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
-                Accept: 'application/json',
-              },
-              body: JSON.stringify(jsonBody),
-            });
-
-            const jsonText = await jsonResponse.text();
-            try {
-              const jsonResult = JSON.parse(jsonText);
-              rawOrderData =
-                jsonResult?.data_order ||
-                jsonResult?.data?.order ||
-                jsonResult?.data ||
-                jsonResult?.order ||
-                jsonResult?.order_details ||
-                (jsonResult?.id || jsonResult?.order_id ? jsonResult : null);
-
-              if (rawOrderData) {
-                result = jsonResult;
-              }
-            } catch (e) {
-              console.log('Order details JSON parse error:', jsonText);
-            }
-          } catch (e) {
-            console.log('Order details JSON fetch error:', e);
-          }
-        }
-
+        let extractedItems = [];
         if (rawOrderData && typeof rawOrderData === 'object') {
-          const rawUser =
-            result?.data_user ||
-            result?.user ||
-            rawOrderData?.address_user ||
-            rawOrderData?.data_user ||
-            rawOrderData?.shipping_address ||
-            rawOrderData?.delivery_address ||
-            rawOrderData?.user_address ||
-            rawOrderData?.user ||
-            (typeof rawOrderData?.address === 'object' ? rawOrderData.address : null);
-
-          const extractedItems =
+          extractedItems =
             Array.isArray(rawOrderData.items) && rawOrderData.items.length > 0
               ? rawOrderData.items
               : Array.isArray(rawOrderData.order_items) && rawOrderData.order_items.length > 0
@@ -274,15 +219,93 @@ export default function OrderDetails() {
                         : (rawOrderData.name || rawOrderData.img || rawOrderData.image)
                           ? [rawOrderData]
                           : [];
+        }
+
+        // Fallback: If no items found from getOrderDetailsApi, try getOrderListApi
+        if (extractedItems.length === 0) {
+          try {
+            const listRes = await getOrderListApi(userId);
+            const ordersList = extractOrdersArray(listRes);
+            const sTargetId = String(targetOrderId || targetId || '').trim();
+            const sTargetNum = String(targetOrderNumber || '').trim();
+
+            const foundOrder = ordersList.find((o) => {
+              const oId = String(o?.order_id || o?.id || '').trim();
+              const oNum = String(o?.order_number || o?.order_id_generate || '').trim();
+              return (
+                (sTargetId && (oId === sTargetId || oNum === sTargetId)) ||
+                (sTargetNum && (oId === sTargetNum || oNum === sTargetNum))
+              );
+            });
+
+            if (foundOrder && typeof foundOrder === 'object') {
+              rawOrderData = {
+                ...(rawOrderData || {}),
+                ...foundOrder,
+              };
+              const listItems =
+                Array.isArray(foundOrder.items) && foundOrder.items.length > 0
+                  ? foundOrder.items
+                  : Array.isArray(foundOrder.order_items) && foundOrder.order_items.length > 0
+                    ? foundOrder.order_items
+                    : Array.isArray(foundOrder.products) && foundOrder.products.length > 0
+                      ? foundOrder.products
+                      : Array.isArray(foundOrder.order_details) && foundOrder.order_details.length > 0
+                        ? foundOrder.order_details
+                        : (foundOrder.name || foundOrder.img || foundOrder.image)
+                          ? [foundOrder]
+                          : [];
+              if (listItems.length > 0) {
+                extractedItems = listItems;
+              }
+            }
+          } catch (listErr) {
+            console.log('OrderDetails fallback getOrderListApi error:', listErr);
+          }
+        }
+
+        if (rawOrderData && typeof rawOrderData === 'object') {
+          const rawUser =
+            result?.data_user ||
+            result?.user ||
+            rawOrderData?.address_user ||
+            rawOrderData?.data_user ||
+            rawOrderData?.shipping_address ||
+            rawOrderData?.delivery_address ||
+            rawOrderData?.user_address ||
+            rawOrderData?.user ||
+            (typeof rawOrderData?.address === 'object' ? rawOrderData.address : null);
 
           setOrder((prev) => {
+            const finalItems =
+              extractedItems.length > 0
+                ? extractedItems
+                : (Array.isArray(prev?.items) && prev.items.length > 0
+                  ? prev.items
+                  : (rawOrderData?.name ? [rawOrderData] : []));
+
+            const finalAddress =
+              (typeof rawUser === 'object' && rawUser !== null && Object.keys(rawUser).length > 0)
+                ? rawUser
+                : (prev?.address_user || prev?.delivery_address || prev?.shipping_address || prev?.data_user || prev?.user || null);
+
             const updated = {
               ...(prev || {}),
               ...rawOrderData,
-              items: extractedItems.length > 0 ? extractedItems : (prev?.items || (rawOrderData.name ? [rawOrderData] : [])),
-              address_user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.address_user || null,
-              data_user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.data_user || null,
-              user: typeof rawUser === 'object' && rawUser !== null ? rawUser : prev?.user || null,
+              items: finalItems,
+              address_user: finalAddress,
+              data_user: finalAddress,
+              shipping_address: finalAddress,
+              delivery_address: finalAddress,
+              user: finalAddress,
+              selling_price: rawOrderData?.selling_price ?? rawOrderData?.amount ?? rawOrderData?.total_amount ?? prev?.selling_price ?? prev?.subtotal ?? 0,
+              subtotal: rawOrderData?.subtotal ?? rawOrderData?.sub_total ?? rawOrderData?.selling_price ?? prev?.subtotal ?? prev?.selling_price ?? 0,
+              total_amount: rawOrderData?.total_amount ?? rawOrderData?.net_amount ?? prev?.total_amount ?? prev?.net_amount ?? 0,
+              net_amount: rawOrderData?.net_amount ?? rawOrderData?.total_amount ?? prev?.net_amount ?? prev?.total_amount ?? 0,
+              shipping_fee: rawOrderData?.shipping_fee ?? rawOrderData?.shipping_charge ?? rawOrderData?.delivery_charge ?? prev?.shipping_fee ?? prev?.delivery_charge ?? 0,
+              delivery_charge: rawOrderData?.delivery_charge ?? rawOrderData?.shipping_fee ?? prev?.delivery_charge ?? prev?.shipping_fee ?? 0,
+              extra_discount: rawOrderData?.extra_discount ?? rawOrderData?.coupon_discount ?? rawOrderData?.discount ?? prev?.extra_discount ?? prev?.coupon_discount ?? 0,
+              payment_method: rawOrderData?.payment_method || rawOrderData?.payment_mode || prev?.payment_method || prev?.payment_mode || 'Cash on Delivery (COD)',
             };
             orderRef.current = updated; // sync ref so callback reads latest without re-triggering
             return updated;
@@ -302,7 +325,7 @@ export default function OrderDetails() {
         setRefreshing(false);
       }
     },
-    [targetOrderId, targetId, targetOrderNumber] // ✅ `order` removed — was causing infinite re-fetch loop
+    [targetOrderId, targetId, targetOrderNumber]
   );
 
   useEffect(() => {
@@ -406,9 +429,13 @@ export default function OrderDetails() {
   // Check if order has any meaningful data to display
   const hasMeaningfulData = Boolean(
     order && (
-      order.name || order.order_number || order.order_id ||
-      order.id || order.img || order.image ||
-      (Array.isArray(order.items) && order.items.length > 0)
+      (Array.isArray(order.items) && order.items.length > 0) ||
+      (Array.isArray(order.products) && order.products.length > 0) ||
+      (Array.isArray(order.order_items) && order.order_items.length > 0) ||
+      order.name ||
+      order.product_name ||
+      order.img ||
+      order.image
     )
   );
 
@@ -931,21 +958,12 @@ export default function OrderDetails() {
     try {
       const token = await getToken();
       const userId = await getuserId();
-      const response = await fetch(`${BASE_URL}return-order`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          order_id: displayOrderId,
-          user_id: userId,
-          reason: selectedReturnReason,
-          comment: returnComment,
-        }),
+      await returnOrderApi({
+        order_id: displayOrderId,
+        user_id: userId,
+        reason: selectedReturnReason,
+        comment: returnComment,
       });
-      await response.json().catch(() => null);
     } catch (e) {
       console.log('Return submission error:', e);
     } finally {

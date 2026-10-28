@@ -18,7 +18,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { BASE_URL, getToken, getuserId, setuserId } from '../../../Api/Api';
+import { getUserProfileApi, getOrderListApi, getToken, getuserId, setuserId } from '../../../Api/Api';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
@@ -88,14 +88,8 @@ export default function Orders() {
       // If userId is missing from storage, fetch from /me
       if (!userId) {
         try {
-          const profileRes = await fetch(`${BASE_URL}me`, {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/json',
-            },
-          });
-          const profileData = await profileRes.json();
+          const profileRes = await getUserProfileApi();
+          const profileData = profileRes.data || {};
           const resolvedId = profileData?.user?.id || profileData?.data?.id || profileData?.id;
           if (resolvedId) {
             userId = resolvedId;
@@ -110,58 +104,12 @@ export default function Orders() {
       let orderListResult = null;
 
       try {
-        const response = await fetch(`${BASE_URL}order-list`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-          },
-        });
-
-        const text = await response.text();
-        try {
-          orderListResult = JSON.parse(text);
-        } catch (e) {
-          console.log('Order list JSON parse error:', text);
-        }
+        orderListResult = await getOrderListApi(parsedUserId);
       } catch (e) {
         console.log('Order list fetch error:', e);
       }
 
       let parsedOrders = extractOrdersArray(orderListResult);
-
-      // Fallback: If empty, try with user_id parameter if available
-      if (
-        (!parsedOrders || parsedOrders.length === 0) &&
-        (!orderListResult || (orderListResult.status !== 200 && orderListResult.status !== '200' && !orderListResult.success))
-      ) {
-        try {
-          const formData = new FormData();
-          if (parsedUserId) formData.append('user_id', String(parsedUserId));
-
-          const response = await fetch(`${BASE_URL}order-list`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/json',
-            },
-            body: formData,
-          });
-
-          const text = await response.text();
-          try {
-            const formDataResult = JSON.parse(text);
-            const extracted = extractOrdersArray(formDataResult);
-            if (extracted.length > 0) {
-              parsedOrders = extracted;
-            }
-          } catch (e) {
-            console.log('Order list FormData parse error:', text);
-          }
-        } catch (e) {
-          console.log('Order list FormData fetch error:', e);
-        }
-      }
 
       setOrders(Array.isArray(parsedOrders) ? parsedOrders : []);
     } catch (error) {

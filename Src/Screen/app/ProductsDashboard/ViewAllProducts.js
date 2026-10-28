@@ -18,7 +18,7 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import AllColors from "../../../Constants/Color";
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
-import { BASE_URL, getToken } from "../../../Api/Api";
+import { getSkuListApi } from "../../../Api/Api";
 import { extractSellerInfo, getCartSkuId } from '../../../Common/sellerUtils';
 
 export default function ViewAllProducts() {
@@ -34,6 +34,7 @@ export default function ViewAllProducts() {
     childCategoryId,
     sellerId,
     sellerName,
+    gender,
   } = route.params || {};
 
   const [productList, setProductList] = useState(initialProducts);
@@ -55,7 +56,7 @@ export default function ViewAllProducts() {
   }).current;
 
   const fetchProducts = async (pageNum = 1, isLoadMore = false) => {
-    if ((!categoryId || categoryId === 'all') && initialProducts.length > 0 && !isLoadMore && !sellerId && !sellerName) {
+    if ((!categoryId || categoryId === 'all') && initialProducts.length > 0 && !isLoadMore && !sellerId && !sellerName && !gender) {
       setProductList(initialProducts);
       setRefreshing(false);
       return;
@@ -69,36 +70,14 @@ export default function ViewAllProducts() {
     }
 
     try {
-      const formData = new FormData();
-      if (categoryId && categoryId !== 'all') {
-        formData.append('category_id', categoryId);
-      } else {
-        formData.append('category_id', 'all');
-      }
-      if (subCategoryId && subCategoryId !== 'all' && subCategoryId !== 'null') {
-        formData.append('sub_category_id', subCategoryId);
-      }
-      if (childCategoryId && childCategoryId !== 'all' && childCategoryId !== 'null') {
-        formData.append('child_category_id', childCategoryId);
-      }
-      formData.append('per_page', 24);
-      formData.append('page', pageNum);
-
-      const token = await getToken();
-      const headers = {
-        Accept: 'application/json',
-      };
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
-      const response = await fetch(`${BASE_URL}sku`, {
-        method: 'POST',
-        headers,
-        body: formData,
+      const data = await getSkuListApi({
+        categoryId: categoryId && categoryId !== 'all' ? categoryId : 'all',
+        subCategoryId,
+        childCategoryId,
+        gender,
+        perPage: 24,
+        page: pageNum,
       });
-
-      const data = await response.json();
       const allItems = (data?.data && Array.isArray(data.data))
         ? data.data.map((sku) => ({
             ...sku,
@@ -351,13 +330,28 @@ export default function ViewAllProducts() {
                     ) : null}
                   </View>
 
-                  {item.discount ? (
-                    <View style={styles.cardFooterRow}>
-                      <View style={styles.discountBadge}>
-                        <Text style={styles.discountText}>{item.discount}% OFF</Text>
+                  {(() => {
+                    const rawDisc = item.discount ?? item.discount_percent ?? item.discount_percentage ?? item.offer_percent;
+                    let disc = null;
+                    if (rawDisc !== undefined && rawDisc !== null && rawDisc !== '') {
+                      const p = parseFloat(String(rawDisc).replace(/[^0-9.]/g, ''));
+                      if (!isNaN(p) && p > 0 && p < 100) disc = Math.round(p);
+                    }
+                    if (!disc) {
+                      const sp = parseFloat(item.discount_price ?? item.price);
+                      const op = parseFloat(item.originalPrice ?? item.actual_price ?? item.mrp);
+                      if (!isNaN(sp) && !isNaN(op) && op > sp && op > 0) {
+                        disc = Math.round(((op - sp) / op) * 100);
+                      }
+                    }
+                    return disc ? (
+                      <View style={styles.cardFooterRow}>
+                        <View style={styles.discountBadge}>
+                          <Text style={styles.discountText}>{disc}% OFF</Text>
+                        </View>
                       </View>
-                    </View>
-                  ) : null}
+                    ) : null;
+                  })()}
                 </View>
               </TouchableOpacity>
             );

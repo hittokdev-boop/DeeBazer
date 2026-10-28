@@ -13,6 +13,7 @@ import {
   ToastAndroid,
   ActivityIndicator,
   KeyboardAvoidingView,
+  PermissionsAndroid,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Feather from 'react-native-vector-icons/Feather';
@@ -21,7 +22,7 @@ import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AllColors from '../../../Constants/Color';
 import { useTheme } from '../../../Context/ThemeContext';
-import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
+import { submitReviewApi, getuserId } from '../../../Api/Api';
 
 const REVIEWS_STORAGE_KEY = '@deebazar_product_reviews';
 
@@ -184,10 +185,32 @@ export default function ProductReviewModal({
     );
   };
 
-  const handleTakePhoto = () => {
+  const handleTakePhoto = async () => {
     if (photos.length >= 5) {
       Alert.alert('Limit Reached', 'You can upload up to 5 photos.');
       return;
+    }
+
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: 'Camera Permission',
+            message: 'DeeBazer needs access to your camera to take photos for your review.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Permission Denied', 'Camera permission is required to capture photos.');
+          return;
+        }
+      } catch (err) {
+        console.warn('Camera permission request error:', err);
+        return;
+      }
     }
 
     launchCamera(
@@ -243,31 +266,15 @@ export default function ProductReviewModal({
     try {
       // 1. Attempt backend submission if endpoint is supported
       try {
-        const token = await getToken();
         const userId = await getuserId();
 
-        const formData = new FormData();
-        formData.append('order_id', String(cleanOrderId));
-        formData.append('product_id', String(productId));
-        formData.append('rating', String(rating));
-        formData.append('comment', comment.trim());
-        if (userId) formData.append('user_id', String(userId));
-
-        photos.forEach((uri, idx) => {
-          formData.append(`photos[${idx}]`, {
-            uri,
-            type: 'image/jpeg',
-            name: `review_photo_${idx}.jpg`,
-          });
-        });
-
-        await fetch(`${BASE_URL}review`, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: formData,
+        await submitReviewApi({
+          order_id: cleanOrderId,
+          product_id: productId,
+          rating,
+          comment: comment.trim(),
+          photos,
+          user_id: userId,
         });
       } catch (apiErr) {
         // Backend might not have review endpoint yet, continue gracefully

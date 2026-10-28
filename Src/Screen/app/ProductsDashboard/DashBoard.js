@@ -44,7 +44,26 @@ import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 
 import CommonLoginModal from '../../auth/Login';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { BASE_URL, getToken, getuserId, } from '../../../Api/Api';
+import {
+  getCategoriesApi,
+  getSubCategoriesApi,
+  getBannersApi,
+  getLegacyBannerApi,
+  getSkuListApi,
+  getPopularProductsApi,
+  getDealOfTheDayApi,
+  getFeaturedProductsApi,
+  getUserProfileApi,
+  getCartViewApi,
+  addToCartApi,
+  removeFromCartApi,
+  viewWishlistApi,
+  addToWishlistApi,
+  removeFromWishlistApi,
+  searchSkuApi,
+  getToken,
+  getuserId,
+} from '../../../Api/Api';
 import Swiper from 'react-native-swiper';
 import DifferentSellerModal from '../../../Common/DifferentSellerModal';
 import {
@@ -57,6 +76,7 @@ import {
   saveLocalCartDetails,
   updateLocalCartDetails,
   syncCartItemsWithServer,
+  extractCartItems,
 } from '../../../Common/sellerUtils';
 
 // import Feather from 'react-native-vector-icons/Feather'
@@ -565,8 +585,29 @@ export default function DashBoard() {
     }
   };
 
-  const openCameraForSearch = () => {
+  const openCameraForSearch = async () => {
     setIsImageSearchModalVisible(false);
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.CAMERA,
+          {
+            title: 'Camera Permission',
+            message: 'DeeBazer needs access to your camera to search products by photo.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Permission Denied', 'Camera permission is required to take photos.');
+          return;
+        }
+      } catch (err) {
+        console.warn('Camera permission request error:', err);
+        return;
+      }
+    }
     const options = {
       mediaType: 'photo',
       quality: 0.8,
@@ -764,8 +805,8 @@ export default function DashBoard() {
     });
   }, [bannerAnim]);
 
-  const triggerNotificationBanner = useCallback((title, body, data = {}) => {
-    setActiveNotification({ title, body, data });
+  const triggerNotificationBanner = useCallback((title, body, data = {}, rawMessage = null) => {
+    setActiveNotification({ title, body, data, rawMessage });
     setIsBannerVisible(true);
 
     if (bannerTimerRef.current) {
@@ -814,19 +855,37 @@ export default function DashBoard() {
       markNotificationAsRead(item.id).catch(() => { });
     }
 
-    // Build raw routing message
+    // Safely parse item.data if string
+    let parsedData = {};
+    if (typeof item.data === 'string') {
+      try {
+        parsedData = JSON.parse(item.data);
+      } catch (e) {
+        parsedData = {};
+      }
+    } else if (typeof item.data === 'object' && item.data !== null) {
+      parsedData = item.data;
+    }
+
+    // Build raw routing message with all product/sku details
     const rawMessage = {
+      id: item.id,
       notification: {
         title: item.title,
         body: item.message || item.body,
       },
       data: {
         id: item.id,
-        event_type: item.event_type || item.type,
-        type: item.type,
-        order_id: item.data?.order_id || (item.message?.match(/#(\d+)/)?.[1]),
-        ...item.data,
+        event_type: item.event_type || item.type || parsedData.event_type || parsedData.type,
+        type: item.type || parsedData.type,
+        product_id: item.product_id || item.productId || item.item_id || parsedData.product_id || parsedData.productId || parsedData.item_id,
+        sku_id: item.sku_id || item.skuId || item.product_sku_id || parsedData.sku_id || parsedData.skuId || parsedData.product_sku_id,
+        seller_sku_id: item.seller_sku_id || parsedData.seller_sku_id,
+        seller_id: item.seller_id || item.sellerId || parsedData.seller_id || parsedData.sellerId,
+        order_id: parsedData.order_id || item.order_id || (item.message?.match(/#(\d+)/)?.[1]),
+        ...parsedData,
       },
+      item: item,
     };
     handleNotificationRouting(rawMessage);
   };
@@ -873,7 +932,7 @@ export default function DashBoard() {
         setNotifications(prev => [newNotif, ...prev.filter(n => n.id !== newNotif.id)]);
         setUnreadCount(prev => prev + 1);
 
-        triggerNotificationBanner(title, body, remoteMessage?.data || {});
+        triggerNotificationBanner(title, body, remoteMessage?.data || {}, remoteMessage);
       },
     );
 
@@ -902,11 +961,20 @@ export default function DashBoard() {
       },
     );
 
+    // Listen for external wishlist changes
+    const wishlistSub = DeviceEventEmitter.addListener(
+      'WISHLIST_UPDATED',
+      () => {
+        getWishlistItems();
+      },
+    );
+
     return () => {
       notificationSub.remove();
       countSub.remove();
       refreshSub.remove();
       openDrawerSub.remove();
+      wishlistSub.remove();
       if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
     };
   }, [loadUnreadCount, loadNotifications, openNotificationDrawer, triggerNotificationBanner]);
@@ -928,11 +996,11 @@ export default function DashBoard() {
   const availableBrands = React.useMemo(() => {
     const set = new Set();
     const allPool = [
-      ...(product || []),
-      ...(dealOfTheDay || []),
-      ...(popularProduct || []),
-      ...(bestsellingProduct || []),
-      ...(featuredproducts || []),
+      ...(Array.isArray(product) ? product : []),
+      ...(Array.isArray(dealOfTheDay) ? dealOfTheDay : []),
+      ...(Array.isArray(popularProduct) ? popularProduct : []),
+      ...(Array.isArray(bestsellingProduct) ? bestsellingProduct : []),
+      ...(Array.isArray(featuredproducts) ? featuredproducts : []),
     ];
     allPool.forEach((p) => {
       if (p?.brand) set.add(String(p.brand).trim());
@@ -943,11 +1011,11 @@ export default function DashBoard() {
 
   const applyFilters = () => {
     const allPool = [
-      ...(product || []),
-      ...(dealOfTheDay || []),
-      ...(popularProduct || []),
-      ...(bestsellingProduct || []),
-      ...(featuredproducts || []),
+      ...(Array.isArray(product) ? product : []),
+      ...(Array.isArray(dealOfTheDay) ? dealOfTheDay : []),
+      ...(Array.isArray(popularProduct) ? popularProduct : []),
+      ...(Array.isArray(bestsellingProduct) ? bestsellingProduct : []),
+      ...(Array.isArray(featuredproducts) ? featuredproducts : []),
     ];
     const uniquePool = allPool.filter(
       (item, index, self) =>
@@ -1109,11 +1177,18 @@ export default function DashBoard() {
       ...(popularProduct || []),
     ];
 
+    const getItemUniqueKey = (it) => {
+      if (!it) return '';
+      return String(it.seller_sku_id || (it.seller_id ? `${it.seller_id}_${it.product_sku_id || it.sku_id || it.id}` : `${it.product_sku_id || it.sku_id || it.id}`));
+    };
+
     const filteredLocal = allPool.filter((item, index, self) => {
-      if (!item || index !== self.findIndex((t) => String(t.id) === String(item.id))) {
+      if (!item) return false;
+      const key = getItemUniqueKey(item);
+      if (!key || index !== self.findIndex((t) => getItemUniqueKey(t) === key)) {
         return false;
       }
-      const itemText = `${item.name || ''} ${item.category_name || ''} ${item.short_desc02 || ''} ${item.description || ''}`.toLowerCase();
+      const itemText = `${item.name || ''} ${item.category_name || ''} ${item.short_desc || item.short_desc02 || ''} ${item.desc || item.description || ''} ${item.seller_name || ''}`.toLowerCase();
       return queryWords.some((word) => itemText.includes(word));
     });
 
@@ -1123,43 +1198,41 @@ export default function DashBoard() {
       try {
         setLoading(true);
 
-        const formData = new FormData();
-        formData.append("keyword", cleanValue);
-        formData.append("search", cleanValue);
-        formData.append("query", cleanValue);
-
-        let response = await fetch(`${BASE_URL}search`, {
-          method: "POST",
-          body: formData,
-        });
-
-        let result = await response.json();
-        let apiResults = result.data || result.products || result.result || [];
-
-        if (!Array.isArray(apiResults) || apiResults.length === 0) {
-          // Fallback to JSON payload if FormData returned empty
-          const jsonResponse = await fetch(`${BASE_URL}search`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              keyword: cleanValue,
-            }),
+        let apiResults = [];
+        try {
+          const apiResponse = await searchSkuApi({
+            keyword: cleanValue,
+            perPage: 12,
+            page: 1,
           });
-          const jsonResult = await jsonResponse.json();
-          apiResults = jsonResult.data || jsonResult.products || jsonResult.result || [];
+          if (apiResponse?.status === 200 && Array.isArray(apiResponse.data)) {
+            apiResults = apiResponse.data;
+          } else if (Array.isArray(apiResponse?.data)) {
+            apiResults = apiResponse.data;
+          } else if (Array.isArray(apiResponse)) {
+            apiResults = apiResponse;
+          }
+        } catch (apiErr) {
+          console.log("searchSkuApi helper error:", apiErr);
         }
 
+        const formattedApiResults = (Array.isArray(apiResults) ? apiResults : []).map((sku) => ({
+          ...sku,
+          product_sku_id: sku.product_sku_id ?? sku.sku_id ?? sku.id,
+        }));
+
         const mergedMap = new Map();
-        [...filteredLocal, ...(Array.isArray(apiResults) ? apiResults : [])].forEach((item) => {
-          if (item && item.id) {
-            mergedMap.set(String(item.id), item);
+        [...filteredLocal, ...formattedApiResults].forEach((item) => {
+          if (item) {
+            const key = getItemUniqueKey(item);
+            if (key) {
+              mergedMap.set(key, item);
+            }
           }
         });
         setSearchProducts(Array.from(mergedMap.values()));
       } catch (error) {
-        console.log("Search Error:", error);
+        console.log("SKU Search Error:", error);
       } finally {
         setLoading(false);
       }
@@ -1219,19 +1292,7 @@ export default function DashBoard() {
     await saveLocalCartDetails(remainingItems);
 
     try {
-      const removeFormData = new FormData();
-      removeFormData.append("product_sku_id", String(primaryId));
-      if (sellerSkuId) {
-        removeFormData.append("seller_sku_id", String(sellerSkuId));
-      }
-      await fetch(`${BASE_URL}cart-remove`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: removeFormData,
-      });
+      await removeFromCartApi(primaryId, sellerSkuId);
 
       if (remainingItems.length === 0) {
         await clearActiveCartSeller();
@@ -1270,25 +1331,15 @@ export default function DashBoard() {
     setCartItems(updated);
     await saveLocalCartDetails(updated);
 
-    const formData = new FormData();
-    formData.append("product_sku_id", String(primaryId));
-    formData.append("qty", 1);
-    formData.append("mode", "add");
-    if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
-
     try {
-      const response = await fetch(`${BASE_URL}cart-to-add`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: formData,
-      });
+      const data = await addToCartApi(
+        primaryId,
+        1,
+        sellerSkuId ? { seller_sku_id: sellerSkuId } : {},
+        "add"
+      );
 
-      const data = await response.json();
-      const isSuccess = response.ok && (data?.status == 200 || data?.success || data?.status === '200');
-
+      const isSuccess = data?.status == 200 || data?.success || data?.status === '200';
       if (!isSuccess) {
         getCartItems();
       } else {
@@ -1312,10 +1363,10 @@ export default function DashBoard() {
     const primaryId = skuId;
     if (!primaryId) return;
 
-    // if (currentQty <= 1) {
-    //   await removeCart(itemOrId);
-    //   return;
-    // }
+    if (currentQty <= 1) {
+      await removeCart(itemOrId);
+      return;
+    }
 
     const nextQty = currentQty - 1;
 
@@ -1335,25 +1386,15 @@ export default function DashBoard() {
     setCartItems(updatedItems);
     await saveLocalCartDetails(updatedItems);
 
-    const formData = new FormData();
-    formData.append("product_sku_id", String(primaryId));
-    formData.append("qty", 1);
-    formData.append("mode", "sub");
-    if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
-
     try {
-      const response = await fetch(`${BASE_URL}cart-to-add`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: formData,
-      });
+      const data = await addToCartApi(
+        primaryId,
+        1,
+        sellerSkuId ? { seller_sku_id: sellerSkuId } : {},
+        "sub"
+      );
 
-      const data = await response.json();
-      const isSuccess = response.ok && (data?.status == 200 || data?.success || data?.status === '200');
-
+      const isSuccess = data?.status == 200 || data?.success || data?.status === '200';
       if (!isSuccess) {
         getCartItems();
       } else {
@@ -1367,29 +1408,36 @@ export default function DashBoard() {
 
   const isItemWishlisted = (item) => {
     if (!item) return false;
-    const sellerSkuId = item?.seller_sku_id;
+    const sellerSkuId = item?.seller_sku_id ?? item?.sellerSkuId;
     const sellerId = item?.seller_id ?? item?.sellerId ?? item?.vendor_id;
-    const skuId = getCartSkuId(item);
+    const targetSkuId =
+      item?.product_sku_id ??
+      item?.sku_id ??
+      item?.sku?.product_sku_id ??
+      item?.sku?.id ??
+      item?.id ??
+      item?.product_id;
 
     if (wishlistData && wishlistData.length > 0) {
       return wishlistData.some((w) => {
+        if (!w) return false;
         const wSellerSku = w.seller_sku_id;
         const wSeller = w.seller_id ?? w.sellerId ?? w.vendor_id;
-        const wSku = w.product_sku_id ?? w.sku_id ?? w.id;
+        const wSku = w.product_sku_id ?? w.sku_id;
 
-        if (sellerSkuId && wSellerSku) {
-          return String(sellerSkuId) === String(wSellerSku);
+        if (sellerSkuId && wSellerSku && String(sellerSkuId) === String(wSellerSku)) {
+          return true;
         }
-        if (skuId && wSku && String(skuId) === String(wSku)) {
+        if (targetSkuId && wSku && String(targetSkuId) === String(wSku)) {
           if (sellerId && wSeller) {
             return String(sellerId) === String(wSeller);
           }
-          if (sellerId && !wSeller) {
-            return false;
-          }
-          if (!sellerId && wSeller) {
-            return false;
-          }
+          return true;
+        }
+        if (targetSkuId && w.product_id && String(targetSkuId) === String(w.product_id)) {
+          return true;
+        }
+        if (!wSku && targetSkuId && w.id && String(targetSkuId) === String(w.id)) {
           return true;
         }
         return false;
@@ -1397,9 +1445,70 @@ export default function DashBoard() {
     }
 
     if (sellerSkuId && wishlistIds.includes(String(sellerSkuId))) return true;
-    if (sellerId && skuId && wishlistIds.includes(`${sellerId}_${skuId}`)) return true;
-    if (!sellerId && !sellerSkuId && skuId && wishlistIds.includes(String(skuId))) return true;
+    if (sellerId && targetSkuId && wishlistIds.includes(`${sellerId}_${targetSkuId}`)) return true;
+    if (targetSkuId && wishlistIds.includes(String(targetSkuId))) return true;
     return false;
+  };
+
+  const getProductDiscountPercent = (item) => {
+    if (!item) return null;
+
+    // 1. Direct API discount field if provided by backend (e.g. item.discount, item.discount_percent, item.discount_percentage, item.offer)
+    const rawDiscount =
+      item.discount ??
+      item.discount_percent ??
+      item.discount_percentage ??
+      item.offer_percent ??
+      item.offer;
+
+    if (rawDiscount !== undefined && rawDiscount !== null && rawDiscount !== '') {
+      const parsed = parseFloat(String(rawDiscount).replace(/[^0-9.]/g, ''));
+      if (!isNaN(parsed) && parsed > 0 && parsed < 100) {
+        return Math.round(parsed);
+      }
+    }
+
+    // 2. Calculate dynamically from actual_price (MRP/original) and current selling price (discount_price/price)
+    const currentSellingPrice = parseFloat(
+      item.discount_price !== undefined && item.discount_price !== null && item.discount_price !== ''
+        ? item.discount_price
+        : item.price
+    );
+
+    const originalPrice = parseFloat(
+      item.actual_price !== undefined && item.actual_price !== null && item.actual_price !== ''
+        ? item.actual_price
+        : (item.originalPrice !== undefined && item.originalPrice !== null && item.originalPrice !== ''
+          ? item.originalPrice
+          : item.mrp)
+    );
+
+    if (
+      !isNaN(originalPrice) &&
+      !isNaN(currentSellingPrice) &&
+      originalPrice > 0 &&
+      currentSellingPrice > 0 &&
+      originalPrice > currentSellingPrice
+    ) {
+      const calculated = Math.round(((originalPrice - currentSellingPrice) / originalPrice) * 100);
+      if (calculated > 0 && calculated < 100) {
+        return calculated;
+      }
+    }
+
+    // 3. Fallback for horizontal sections where price & originalPrice might be flipped
+    const p1 = parseFloat(item.price);
+    const p2 = parseFloat(item.originalPrice);
+    if (!isNaN(p1) && !isNaN(p2) && p1 > 0 && p2 > 0 && p1 !== p2) {
+      const higher = Math.max(p1, p2);
+      const lower = Math.min(p1, p2);
+      const calculated = Math.round(((higher - lower) / higher) * 100);
+      if (calculated > 0 && calculated < 100) {
+        return calculated;
+      }
+    }
+
+    return null;
   };
 
   const isOutOfStock = (item) => {
@@ -1447,26 +1556,22 @@ export default function DashBoard() {
     }
 
     try {
-      const response = await fetch(`${BASE_URL}wishlist-view`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await response.json();
+      const data = await viewWishlistApi();
       const items = data?.data || data?.products || data?.wishlist || [];
       const validItems = Array.isArray(items) ? items : [];
       setWishlistData(validItems);
 
       const ids = [];
       validItems.forEach((entry) => {
+        if (!entry) return;
         if (entry.seller_sku_id) ids.push(String(entry.seller_sku_id));
         const sId = entry.seller_id ?? entry.sellerId ?? entry.vendor_id;
-        const pSkuId = entry.product_sku_id ?? entry.sku_id ?? entry.id;
-        if (sId && pSkuId) ids.push(`${sId}_${pSkuId}`);
-        if (!sId && !entry.seller_sku_id && pSkuId) ids.push(String(pSkuId));
+        const pSkuId = entry.product_sku_id ?? entry.sku_id;
+        if (pSkuId) {
+          ids.push(String(pSkuId));
+          if (sId) ids.push(`${sId}_${pSkuId}`);
+        }
+        if (entry.product_id) ids.push(String(entry.product_id));
       });
 
       setWishlistIds(ids);
@@ -1489,31 +1594,12 @@ export default function DashBoard() {
 
     const sellerSkuId = targetItem?.seller_sku_id;
 
-    const formData = new FormData();
-    formData.append("product_sku_id", String(skuId));
-    formData.append("qty", qty);
-    if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
-
-    const removeFormData = new FormData();
-    removeFormData.append("product_sku_id", String(skuId));
-    if (sellerSkuId) removeFormData.append("seller_sku_id", String(sellerSkuId));
-    await fetch(`${BASE_URL}cart-remove`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-      },
-      body: removeFormData,
-    });
-
-    await fetch(`${BASE_URL}cart-to-add`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-      },
-      body: formData,
-    });
+    try {
+      await removeFromCartApi(skuId, sellerSkuId);
+      await addToCartApi(skuId, qty, sellerSkuId ? { seller_sku_id: sellerSkuId } : {});
+    } catch (err) {
+      console.log('Update cart qty error:', err);
+    }
   };
 
   const toggleWishlist = async (item) => {
@@ -1525,11 +1611,16 @@ export default function DashBoard() {
       return;
     }
 
-    const sellerSkuId = item?.seller_sku_id;
+    const sellerSkuId = item?.seller_sku_id ?? item?.sellerSkuId;
     const sellerId = item?.seller_id ?? item?.sellerId ?? item?.vendor_id;
     const skuId = item?.product_sku_id ?? item?.sku_id ?? item?.id ?? item?.product_id;
+
+    if (!skuId) {
+      Alert.alert('Error', 'Product SKU is missing');
+      return;
+    }
+
     const isWishlisted = isItemWishlisted(item);
-    const endpoint = isWishlisted ? 'wishlist-remove' : 'wishlist-add';
 
     const cardWishlistKey = sellerSkuId
       ? String(sellerSkuId)
@@ -1538,48 +1629,44 @@ export default function DashBoard() {
     // Optimistically update
     setWishlistIds((prev) =>
       isWishlisted
-        ? prev.filter((id) => id !== cardWishlistKey)
-        : [...prev, cardWishlistKey]
+        ? prev.filter((id) =>
+          id !== String(skuId) &&
+          id !== String(sellerSkuId) &&
+          id !== `${sellerId}_${skuId}` &&
+          id !== cardWishlistKey
+        )
+        : [...prev, cardWishlistKey, String(skuId)]
     );
 
     setWishlistData((prev) =>
       isWishlisted
         ? prev.filter((w) => {
           const wSellerSku = w.seller_sku_id;
-          const wSeller = w.seller_id ?? w.sellerId ?? w.vendor_id;
-          const wSku = w.product_sku_id ?? w.sku_id ?? w.id;
-          if (sellerSkuId && wSellerSku) return String(sellerSkuId) !== String(wSellerSku);
-          if (sellerId && wSeller && skuId && wSku) {
-            return !(String(sellerId) === String(wSeller) && String(skuId) === String(wSku));
-          }
-          return String(wSku) !== String(skuId);
+          const wSku = w.product_sku_id ?? w.sku_id;
+          if (sellerSkuId && wSellerSku && String(sellerSkuId) === String(wSellerSku)) return false;
+          if (skuId && wSku && String(skuId) === String(wSku)) return false;
+          if (item?.id && w?.id && String(item.id) === String(w.id)) return false;
+          return true;
         })
         : [...prev, { ...item, id: skuId, product_sku_id: skuId, seller_id: sellerId, seller_sku_id: sellerSkuId }]
     );
 
-    const formData = new FormData();
-    formData.append('product_sku_id', String(skuId));
-    if (sellerSkuId) {
-      formData.append('seller_sku_id', String(sellerSkuId));
-    }
-
     try {
-      const response = await fetch(`${BASE_URL}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
+      const data = isWishlisted
+        ? await removeFromWishlistApi(skuId, sellerSkuId)
+        : await addToWishlistApi(skuId, sellerSkuId);
 
-      const data = await response.json();
-
-      if (!(data?.status === 200 || data?.success)) {
-        getWishlistItems();
-        Alert.alert('Error', data?.message || 'Wishlist action failed');
+      if (data?.status === 200 || data?.success) {
+        DeviceEventEmitter.emit('WISHLIST_UPDATED');
+        if (Platform.OS === 'android') {
+          ToastAndroid.show(
+            isWishlisted ? 'Removed from Wishlist' : 'Added to Wishlist',
+            ToastAndroid.SHORT
+          );
+        }
       } else {
         getWishlistItems();
+        Alert.alert('Error', data?.message || 'Wishlist action failed');
       }
     } catch (error) {
       console.log('Wishlist toggle error:', error);
@@ -1605,20 +1692,16 @@ export default function DashBoard() {
   // };
   const getCatagory = async () => {
     try {
-      const response = await fetch(`${BASE_URL}categories`, {
-        method: 'GET',
-      });
-
-      const data = await response.json();
-
-      if (data?.data) {
+      const data = await getCategoriesApi();
+      const list = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+      if (list.length > 0) {
         setCategories([
           {
             id: 'all',
             name: 'All',
             image: null,
           },
-          ...data.data,
+          ...list,
         ]);
       }
     } catch (error) {
@@ -1630,15 +1713,8 @@ export default function DashBoard() {
     const token = await getToken();
     if (token) {
       try {
-        const response = await fetch(`${BASE_URL}me`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-          },
-        });
-        const data = await response.json();
-        if (data.status === 200 && data.user) {
+        const data = await getUserProfileApi();
+        if (data?.status === 200 && data?.user) {
           const name = data.user.name || 'User';
           setUserName(name);
           AsyncStorage.setItem('USER_NAME', name).catch(() => { });
@@ -1675,11 +1751,7 @@ export default function DashBoard() {
   const getBanners = async () => {
     setBannersLoading(true);
     try {
-      const response = await fetch(`${BASE_URL}banners`, {
-        method: 'GET',
-      });
-      const data = await response.json();
-
+      const data = await getBannersApi();
       if (data?.status === 200 && data?.data && data.data.length > 0) {
         setBanners(data.data);
       } else {
@@ -1695,11 +1767,7 @@ export default function DashBoard() {
 
   const fetchLegacyBanners = async () => {
     try {
-      const response = await fetch(`${BASE_URL}banner`, {
-        method: 'POST',
-        body: new FormData(),
-      });
-      const data = await response.json();
+      const data = await getLegacyBannerApi();
       if (data?.data) {
         setBanners(data.data);
       }
@@ -1797,15 +1865,7 @@ export default function DashBoard() {
     }
     setSubCategoriesLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('category_id', catId);
-
-      const response = await fetch(`${BASE_URL}sub-category`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
+      const data = await getSubCategoriesApi(catId);
       const list = data?.data || data?.subcategories || data?.sub_categories || (Array.isArray(data) ? data : null);
       if ((data?.status == 200 || data?.status === 'success') && Array.isArray(list) && list.length > 0) {
         setSubCategories(list);
@@ -1842,44 +1902,31 @@ export default function DashBoard() {
     setSelectedSubCategoryId(null);
     setSlug(item.slug || '');
     setProductPage(1);
-    getAllPrduct(item.id, null, 1);
-    getSubCategories(item.id);
     setSearchText('');
     setIsFilterActive(false);
+    setFilteredProducts([]);
+    getAllPrduct(item.id, null, 1);
+    getSubCategories(item.id);
   };
 
-  const getAllPrduct = async (catId, subCatId, pageNum = 1) => {
+  const getAllPrduct = async (catId, subCatId, pageNum = 1, genderParam = null, childCatId = null) => {
     setProductLoading(true);
     const selectedCategoryId = catId !== undefined ? catId : catagoriesId;
     const selectedSubId = subCatId !== undefined ? subCatId : selectedSubCategoryId;
 
-    const token = await getToken();
-    const headers = {
-      Accept: 'application/json',
+    const params = {
+      category_id: selectedCategoryId && selectedCategoryId !== 'all' ? selectedCategoryId : null,
+      sub_category_id: selectedSubId && selectedSubId !== 'all' ? selectedSubId : null,
+      child_category_id: childCatId && childCatId !== 'all' ? childCatId : null,
+      gender: genderParam && genderParam !== 'all' ? genderParam : null,
+      per_page: 12,
+      page: pageNum,
     };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
 
-    const formData = new FormData();
-    if (selectedCategoryId && selectedCategoryId !== 'all') {
-      formData.append('category_id', selectedCategoryId);
-    }
-    if (selectedSubId && selectedSubId !== 'all') {
-      formData.append('sub_category_id', selectedSubId);
-    }
-    formData.append("per_page", 12);
-    formData.append("page", pageNum);
     try {
-      const response = await fetch(`${BASE_URL}sku`, {
-        method: 'POST',
-        headers,
-        body: formData,
-      });
-
-      const data = await response.json();
-      console.log(data, ' sku data')
-      if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
+      const data = await getSkuListApi(params);
+      console.log('sku list data for category:', selectedCategoryId, data);
+      if (data?.status === 200 && data?.data && Array.isArray(data.data) && data.data.length > 0) {
         setProduct(data.data.map((sku) => ({
           ...sku,
           product_sku_id: sku.product_sku_id ?? sku.sku_id ?? sku.id,
@@ -1887,133 +1934,82 @@ export default function DashBoard() {
         setProductPage(pageNum);
       } else if (pageNum > 1) {
         // If the next page is empty (reached the end), restart from page 1
-        const fallbackFormData = new FormData();
-        if (selectedCategoryId && selectedCategoryId !== 'all') {
-          fallbackFormData.append('category_id', selectedCategoryId);
-        }
-        if (selectedSubId && selectedSubId !== 'all') {
-          fallbackFormData.append('sub_category_id', selectedSubId);
-        }
-        fallbackFormData.append("per_page", 12);
-        fallbackFormData.append("page", 1);
-
-        const fallbackResponse = await fetch(`${BASE_URL}sku`, {
-          method: 'POST',
-          headers,
-          body: fallbackFormData,
-        });
-        const fallbackData = await fallbackResponse.json();
-        if (fallbackData?.data && Array.isArray(fallbackData.data)) {
+        const fallbackData = await getSkuListApi({ ...params, page: 1 });
+        if (fallbackData?.status === 200 && fallbackData?.data && Array.isArray(fallbackData.data) && fallbackData.data.length > 0) {
           setProduct(fallbackData.data.map((sku) => ({
             ...sku,
             product_sku_id: sku.product_sku_id ?? sku.sku_id ?? sku.id,
           })));
+        } else {
+          setProduct([]);
         }
+        setProductPage(1);
+      } else {
+        // pageNum === 1 and no products found for this category (status 400 "No Record Found" or empty data)
+        setProduct([]);
         setProductPage(1);
       }
     } catch (error) {
       console.error('Error fetching sku list:', error);
+      if (pageNum === 1) {
+        setProduct([]);
+      }
     } finally {
       setProductLoading(false);
     }
   };
 
   const getpopularPoduct = async () => {
-    const userid = await getuserId()
-
     try {
-      const response = await fetch(`${BASE_URL}popular-products`, {
-        method: 'GET',
-
-      });
-
-      const data = await response.json();
-
-      // console.log('data1', data.data[0])
-      if (data.data) {
-
-        setPopularProduct(data.data)
-      };
+      const data = await getPopularProductsApi();
+      const list = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+      setPopularProduct(list);
     } catch (error) {
       console.log('Error:', error);
+      setPopularProduct([]);
     }
-  }
+  };
+
   const getlatestProduct = async () => {
+  };
 
-    //    try {
-    //   const response = await fetch(`${BASE_URL}latest-products`, {
-    //     method: 'GET',
-
-    //   });
-
-    //   const data = await response.json();
-
-    //  console.log('data1',data)
-    //  if(data.data){ 
-
-    //   setLatestproducts(data.data)
-    // };
-    // } catch (error) {
-    //   console.log('Error:', error);
-    // }
-  }
   const getWishlistIds = async () => {
     return getWishlistItems();
   };
+
   const getDealOfTheDay = async () => {
     try {
-      const response = await fetch(`${BASE_URL}deal-of-the-day?limit=4`, {
-        method: 'GET',
-
-      });
-
-      const data = await response.json();
-
-      if (data.data) {
-        // console.log(data.data[0], 'jljf')
-        setDealOfTheDay(data.data)
-      }
+      const data = await getDealOfTheDayApi(4);
+      const list = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+      setDealOfTheDay(list);
     } catch (error) {
       console.log('Error1:', error);
+      setDealOfTheDay([]);
     }
-  }
+  };
+
   const getfeaturedProducts = async () => {
     try {
-      const response = await fetch(`${BASE_URL}featured-products`, {
-        method: 'GET',
-
-      });
-      const datta = await getToken()
-      const id = await getuserId()
-      // console.log(datta)
-      // console.log(id)
-      const data = await response.json();
-
-      if (data.data) {
-        setFeaturedproducts(data.data)
-      }
+      const data = await getFeaturedProductsApi();
+      const list = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+      setFeaturedproducts(list);
     } catch (error) {
       console.log('Error1:', error);
+      setFeaturedproducts([]);
     }
-  }
+  };
+
   const getbestsellingProducts = async () => {
     try {
-      const response = await fetch(`${BASE_URL}featured-products`, {
-        method: 'GET',
-
-      });
-
-      const data = await response.json();
-
-
-      if (data.data) {
-
-        setBestsellingProduct(data.data)
-      }
+      const data = await getFeaturedProductsApi();
+      const list = Array.isArray(data?.data) ? data.data : (Array.isArray(data) ? data : []);
+      setBestsellingProduct(list);
     } catch (error) {
       console.log('Error1:', error);
+      setBestsellingProduct([]);
     }
-  }
+  };
+
   const getCartItems = async () => {
     const userId = await getuserId();
     if (!userId) {
@@ -2023,23 +2019,9 @@ export default function DashBoard() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("user_id", userId);
-
     try {
-      const token = await getToken();
-      const response = await fetch(`${BASE_URL}cart-view`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: formData,
-      });
-
-      const result = await response.json();
-      // console.log('Cart Items:', result);
-      const itemsList = (result?.data && Array.isArray(result.data)) ? result.data : [];
+      const result = await getCartViewApi();
+      const itemsList = extractCartItems(result?.data);
 
       if (itemsList.length === 0) {
         setCartItems([]);
@@ -2096,6 +2078,7 @@ export default function DashBoard() {
     cartOperationLock.current[cardLockKey] = true;
 
     const token = await getToken();
+
     const userId = await getuserId();
     if (!token || !userId) {
       delete cartOperationLock.current[cardLockKey];
@@ -2137,32 +2120,14 @@ export default function DashBoard() {
     });
 
     try {
-      const formData = new FormData();
-      formData.append('product_sku_id', String(targetSku));
-      formData.append('qty', 1);
-      formData.append('mode', 'add');
-      if (sellerSkuId) formData.append('seller_sku_id', String(sellerSkuId));
+      const data = await addToCartApi(
+        targetSku,
+        1,
+        sellerSkuId ? { seller_sku_id: sellerSkuId } : {},
+        'add'
+      );
 
-      console.log('🛒 [cart-to-add REQUEST BODY]:', {
-        product_sku_id: String(targetSku),
-        qty: 1,
-        mode: 'add',
-        seller_sku_id: sellerSkuId ? String(sellerSkuId) : null,
-      });
-
-      const response = await fetch(`${BASE_URL}cart-to-add`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: formData,
-      });
-
-      const data = await response.json();
-      console.log('🛒 [cart-to-add RESPONSE]:', data);
-
-      const isSuccess = response.ok && (data?.status == 200 || data?.success || data?.status === '200');
+      const isSuccess = data?.status == 200 || data?.success || data?.status === '200';
 
       if (!isSuccess) {
         // Revert optimistic updates
@@ -2417,8 +2382,9 @@ export default function DashBoard() {
                 style={styles.bannerInnerContent}
                 onPress={() => {
                   dismissNotificationBanner();
-                  if (activeNotification?.data) {
-                    handleNotificationRouting(activeNotification);
+                  const target = activeNotification?.rawMessage || activeNotification;
+                  if (target) {
+                    handleNotificationRouting(target);
                   }
                 }}
               >
@@ -2594,18 +2560,42 @@ export default function DashBoard() {
               </View>
             ) : (
               <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>All Products</Text>
-              </View>
-            )}
-
-            {((isFilterActive && filteredProducts.length === 0) || (searchText.trim() && searchProducts.length === 0 && !loading)) && (
-              <View style={styles.emptySearchContainer}>
-                <Ionicons name="search-outline" size={48} color={isDarkMode ? '#64748B' : '#94A3B8'} />
-                <Text style={[styles.emptySearchText, { color: theme.textSecondary }]}>
-                  {isFilterActive ? "No products match the selected filters" : `No products found for "${searchText}"`}
+                <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>
+                  {(() => {
+                    if (catagoriesId && catagoriesId !== 'all') {
+                      const matched = catagories.find(c => String(c.id) === String(catagoriesId));
+                      return matched?.name ? `${matched.name}` : 'Products';
+                    }
+                    return 'All Products';
+                  })()}
                 </Text>
               </View>
             )}
+
+            {((isFilterActive && filteredProducts.length === 0) ||
+              (searchText.trim() && searchProducts.length === 0 && !loading) ||
+              (!isFilterActive && !searchText.trim() && product.length === 0 && !productLoading)) && (
+                <View style={styles.emptySearchContainer}>
+                  <Ionicons
+                    name={isFilterActive || searchText.trim() ? "search-outline" : "basket-outline"}
+                    size={48}
+                    color={isDarkMode ? '#64748B' : '#94A3B8'}
+                  />
+                  <Text style={[styles.emptySearchText, { color: theme.textSecondary }]}>
+                    {isFilterActive
+                      ? "No products match the selected filters"
+                      : searchText.trim()
+                        ? `No products found for "${searchText}"`
+                        : (() => {
+                          if (catagoriesId && catagoriesId !== 'all') {
+                            const matched = catagories.find(c => String(c.id) === String(catagoriesId));
+                            return `No products found in ${matched?.name || 'this category'}`;
+                          }
+                          return 'No products available';
+                        })()}
+                  </Text>
+                </View>
+              )}
           </>
         )}
       </>
@@ -2660,9 +2650,16 @@ export default function DashBoard() {
         </TouchableOpacity>
 
         <View style={styles.cardFooterRow}>
-          <Text style={styles.offer}>
-            16% OFF
-          </Text>
+          {(() => {
+            const discountPercent = getProductDiscountPercent(item);
+            return discountPercent ? (
+              <Text style={styles.offer}>
+                {discountPercent}% OFF
+              </Text>
+            ) : (
+              <View />
+            );
+          })()}
           <View style={styles.actionContainer}>
             {isOutOfStock(item) ? (
               <View style={styles.outOfStockBadge}>
@@ -2763,9 +2760,16 @@ export default function DashBoard() {
                   </TouchableOpacity>
 
                   <View style={styles.cardFooterRow}>
-                    <Text style={styles.offer}>
-                      {item.discount}% OFF
-                    </Text>
+                    {(() => {
+                      const discountPercent = getProductDiscountPercent(item);
+                      return discountPercent ? (
+                        <Text style={styles.offer}>
+                          {discountPercent}% OFF
+                        </Text>
+                      ) : (
+                        <View />
+                      );
+                    })()}
                     <View style={styles.actionContainer}>
                       {isOutOfStock(item) ? (
                         <View style={styles.outOfStockBadge}>
@@ -2863,9 +2867,16 @@ export default function DashBoard() {
                   </TouchableOpacity>
 
                   <View style={styles.cardFooterRow}>
-                    <Text style={styles.offer}>
-                      {item.discount}% OFF
-                    </Text>
+                    {(() => {
+                      const discountPercent = getProductDiscountPercent(item);
+                      return discountPercent ? (
+                        <Text style={styles.offer}>
+                          {discountPercent}% OFF
+                        </Text>
+                      ) : (
+                        <View />
+                      );
+                    })()}
                     <View style={styles.actionContainer}>
                       {isOutOfStock(item) ? (
                         <View style={styles.outOfStockBadge}>
@@ -2963,9 +2974,16 @@ export default function DashBoard() {
                   </TouchableOpacity>
 
                   <View style={styles.cardFooterRow}>
-                    <Text style={styles.offer}>
-                      {item.discount}% OFF
-                    </Text>
+                    {(() => {
+                      const discountPercent = getProductDiscountPercent(item);
+                      return discountPercent ? (
+                        <Text style={styles.offer}>
+                          {discountPercent}% OFF
+                        </Text>
+                      ) : (
+                        <View />
+                      );
+                    })()}
                     <View style={styles.actionContainer}>
                       {isOutOfStock(item) ? (
                         <View style={styles.outOfStockBadge}>
@@ -3063,9 +3081,16 @@ export default function DashBoard() {
                   </TouchableOpacity>
 
                   <View style={styles.cardFooterRow}>
-                    <Text style={styles.offer}>
-                      {item.discount}% OFF
-                    </Text>
+                    {(() => {
+                      const discountPercent = getProductDiscountPercent(item);
+                      return discountPercent ? (
+                        <Text style={styles.offer}>
+                          {discountPercent}% OFF
+                        </Text>
+                      ) : (
+                        <View />
+                      );
+                    })()}
                     <View style={styles.actionContainer}>
                       {isOutOfStock(item) ? (
                         <View style={styles.outOfStockBadge}>
@@ -3173,10 +3198,31 @@ export default function DashBoard() {
           >
             <View style={styles.cartItemsPreview}>
               {cartItems.slice(0, 3).map((item, index) => {
-                const imgUri = Array.isArray(item.image) ? item.image[0] : (item.image || item.cat_image || '');
+                let imgUri = '';
+                if (typeof item.image === 'string' && item.image.trim()) {
+                  imgUri = item.image.trim();
+                } else if (Array.isArray(item.image) && item.image.length > 0) {
+                  imgUri = typeof item.image[0] === 'string' ? item.image[0] : (item.image[0]?.image || '');
+                } else if (typeof item.sku_image === 'string' && item.sku_image.trim()) {
+                  imgUri = item.sku_image.trim();
+                } else if (typeof item.product_sku_image === 'string' && item.product_sku_image.trim()) {
+                  imgUri = item.product_sku_image.trim();
+                } else if (typeof item.product_image === 'string' && item.product_image.trim()) {
+                  imgUri = item.product_image.trim();
+                } else if (typeof item.cat_image === 'string' && item.cat_image.trim()) {
+                  imgUri = item.cat_image.trim();
+                } else if (item.sku?.image) {
+                  imgUri = item.sku.image;
+                } else if (Array.isArray(item.images) && item.images.length > 0) {
+                  imgUri = typeof item.images[0] === 'string' ? item.images[0] : (item.images[0]?.image || '');
+                } else if (Array.isArray(item.items) && item.items.length > 0) {
+                  const first = item.items[0];
+                  imgUri = first?.image || first?.sku_image || first?.product_image || '';
+                }
+
                 return (
                   <View
-                    key={item.product_id || item.id || index}
+                    key={item.cart_id || item.seller_sku_id || item.product_sku_id || item.product_id || item.id || index}
                     style={[
                       styles.miniCartImageWrapper,
                       { marginLeft: index > 0 ? -12 : 0, zIndex: 10 - index }
@@ -3186,6 +3232,7 @@ export default function DashBoard() {
                       <Image
                         source={{ uri: imgUri }}
                         style={styles.miniCartImage}
+                        resizeMode="cover"
                       />
                     ) : (
                       <Ionicons name="bag-handle" size={16} color={AllColors.primary} />

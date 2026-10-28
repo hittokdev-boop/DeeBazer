@@ -24,7 +24,19 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import CustomLoader from '../../../Common/Loader';
-import { BASE_URL, getToken, getMobile, removemobile, removeToken, removeuserId, getPassword, removePassword } from '../../../Api/Api';
+import {
+  getUserProfileApi,
+  logoutApi,
+  sendDeleteAccountOtpApi,
+  deleteAccountApi,
+  getToken,
+  getMobile,
+  removemobile,
+  removeToken,
+  removeuserId,
+  getPassword,
+  removePassword,
+} from '../../../Api/Api';
 import CustomAlert from '../../../Common/Alert';
 import SuccessModal from '../../../Common/SuccessScreen';
 import { useTheme } from '../../../Context/ThemeContext';
@@ -141,11 +153,8 @@ export default function Account() {
       const token = await getToken();
       if (token) {
         setIsLoggedIn(true);
-        const response = await fetch(`${BASE_URL}me`, {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await response.json();
+        const response = await getUserProfileApi();
+        const data = response.data || {};
         if (data.status === 200 && data.user) {
           setUserName(data.user.name || 'User');
           setUserEmail(data.user.email || '');
@@ -176,14 +185,7 @@ export default function Account() {
     }
 
     try {
-      const response = await fetch(`${BASE_URL}logout`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await response.json();
+      const response = await logoutApi();
       if (response.ok) {
         setIsSuccess(true);
         await removeToken();
@@ -207,22 +209,10 @@ export default function Account() {
       return;
     }
 
-    const token = await getToken();
-    console.log(token)
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('mobile', userMobile);
-
-      const response = await fetch(`${BASE_URL}send-delete-account-otp`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-        body: formData
-      });
-      const data = await response.json();
+      const response = await sendDeleteAccountOtpApi(userMobile);
+      const data = response.data || {};
       setLoading(false);
       if (response.ok || data.status === 200) {
         setOtp('');
@@ -248,22 +238,13 @@ export default function Account() {
 
     setLoading(true);
     try {
-      const response = await fetch(`${BASE_URL}delete-account`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          mobile: userMobile,
-          otp: otp,
-          reason: selectedReason || 'I no longer want to use the app',
-          reasons: selectedReason || 'I no longer want to use the app'
-        })
+      const response = await deleteAccountApi({
+        mobile: userMobile,
+        otp: otp,
+        reason: selectedReason || 'I no longer want to use the app',
       });
 
-      const data = await response.json();
+      const data = response.data || {};
       setLoading(false);
 
       if (response.ok || data.status === 200) {

@@ -37,9 +37,50 @@ import { NavigationContainer, createNavigationContainerRef } from '@react-naviga
 
 export const navigationRef = createNavigationContainerRef();
 
+let pendingNav = null;
+
 export function navigate(name, params) {
   if (navigationRef.isReady()) {
+    const currentRoute = navigationRef.getCurrentRoute()?.name;
+    if (currentRoute === 'Splash') {
+      pendingNav = { name, params };
+      // Defer navigation until Splash screen finishes (Splash takes ~2.8s)
+      setTimeout(() => {
+        if (pendingNav && navigationRef.isReady()) {
+          const target = pendingNav;
+          pendingNav = null;
+          navigationRef.navigate(target.name, target.params);
+        }
+      }, 3100);
+      return;
+    }
     navigationRef.navigate(name, params);
+  } else {
+    pendingNav = { name, params };
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts += 1;
+      if (navigationRef.isReady()) {
+        clearInterval(interval);
+        const currentRoute = navigationRef.getCurrentRoute()?.name;
+        if (currentRoute === 'Splash') {
+          setTimeout(() => {
+            if (pendingNav && navigationRef.isReady()) {
+              const target = pendingNav;
+              pendingNav = null;
+              navigationRef.navigate(target.name, target.params);
+            }
+          }, 3100);
+        } else if (pendingNav) {
+          const target = pendingNav;
+          pendingNav = null;
+          navigationRef.navigate(target.name, target.params);
+        }
+      } else if (attempts > 30) {
+        clearInterval(interval);
+        pendingNav = null;
+      }
+    }, 200);
   }
 }
 

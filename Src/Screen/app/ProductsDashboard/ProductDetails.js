@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,16 +14,29 @@ import {
   FlatList,
   Dimensions,
   ScrollView,
+  RefreshControl,
   BackHandler,
+  DeviceEventEmitter,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AntDesign from 'react-native-vector-icons/AntDesign';
 import Feather from 'react-native-vector-icons/Feather';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
-import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
+import {
+  getProductDetailsApi,
+  getSkuDetailsApi,
+  getCartViewApi,
+  viewWishlistApi,
+  addToWishlistApi,
+  removeFromWishlistApi,
+  addToCartApi,
+  getToken,
+  getuserId,
+} from '../../../Api/Api';
 import { useTheme } from '../../../Context/ThemeContext';
 import DifferentSellerModal from '../../../Common/DifferentSellerModal';
 import {
@@ -33,10 +46,21 @@ import {
   clearActiveCartSeller,
   getCartSkuId,
   isCartItemMatching,
+  extractCartItems,
 } from '../../../Common/sellerUtils';
 
 const { width } = Dimensions.get('window');
 const slideWidth = width - 32;
+
+const getStorageRamLabel = (attrs = []) => {
+  if (!Array.isArray(attrs)) return '';
+  const storage = attrs.find((a) => /storage|rom|internal\s*memory/i.test(a.attribute || ''))?.value;
+  const ram = attrs.find((a) => /ram|memory/i.test(a.attribute || ''))?.value;
+  if (storage && ram) return `${storage} + ${ram}`;
+  if (storage) return storage;
+  if (ram) return ram;
+  return '';
+};
 
 export default function ProductDetails({ route }) {
   const { theme, isDarkMode } = useTheme();
@@ -45,6 +69,7 @@ export default function ProductDetails({ route }) {
   const [isAddedToCart, setIsAddedToCart] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [cartList, setCartList] = useState([]);
   const [sellerModalVisible, setSellerModalVisible] = useState(false);
@@ -62,6 +87,8 @@ export default function ProductDetails({ route }) {
   const [skuData, setSkuData] = useState(null);
   const [productInfo, setProductInfo] = useState(null);
   const [variants, setVariants] = useState([]);
+  const [skuOptions, setSkuOptions] = useState([]);
+  const [selectors, setSelectors] = useState([]);
   const [selectedSkuId, setSelectedSkuId] = useState(
     sku_id ?? product_sku_id ?? item?.product_sku_id ?? item?.sku_id ?? item?.sku?.id
   );
@@ -76,6 +103,8 @@ export default function ProductDetails({ route }) {
     item?.user_id ??
     null
   );
+  const [isHighlightsOpen, setIsHighlightsOpen] = useState(true);
+  const [isAllDetailsOpen, setIsAllDetailsOpen] = useState(false);
 
   const getProductImages = () => {
     const list = [];
@@ -134,6 +163,57 @@ export default function ProductDetails({ route }) {
     }, [id, product_sku_id, sku_id, selectedSkuId, navigation])
   );
 
+  useEffect(() => {
+    const incomingSkuId =
+      route.params?.sku_id ??
+      route.params?.product_sku_id ??
+      route.params?.id ??
+      route.params?.item?.sku_id ??
+      route.params?.item?.product_sku_id ??
+      route.params?.item?.id;
+
+    const incomingSellerId =
+      route.params?.seller_id ??
+      route.params?.sellerId ??
+      route.params?.vendor_id ??
+      route.params?.item?.seller_id ??
+      route.params?.item?.sellerId;
+
+    if (incomingSkuId && String(incomingSkuId) !== String(selectedSkuId)) {
+      setSelectedSkuId(incomingSkuId);
+      if (incomingSellerId) setSelectedSellerId(incomingSellerId);
+      getPrductDetails(incomingSkuId, incomingSellerId);
+    }
+  }, [
+    route.params?.sku_id,
+    route.params?.product_sku_id,
+    route.params?.id,
+    route.params?.seller_id,
+    route.params?.sellerId,
+  ]);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('WISHLIST_UPDATED', () => {
+      getWishlistStatus();
+    });
+    return () => sub.remove();
+  }, [selectedSkuId, skuData, product]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        getPrductDetails(selectedSkuId, selectedSellerId, true),
+        getWishlistStatus(),
+        getCartStatus(),
+      ]);
+    } catch (e) {
+      console.log('Error refreshing product details:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const shareProduct = async () => {
     try {
       const productId = id || product?.id || product?.product_id;
@@ -165,9 +245,93 @@ export default function ProductDetails({ route }) {
       setSelectedSellerId(varSellerId);
     }
     getPrductDetails(variant.product_sku_id, varSellerId);
+    getWishlistStatus(variant.product_sku_id, variant?.seller_sku_id);
   };
 
-  const getPrductDetails = async (overrideSkuId, overrideSellerId) => {
+  const handleSelectSelectorValue = (val) => {
+    if (!val?.product_sku_id) return;
+    if (String(val.product_sku_id) === String(selectedSkuId)) return;
+    setSelectedSkuId(val.product_sku_id);
+    const matchedVariant = variants.find(
+      (v) => String(v.product_sku_id) === String(val.product_sku_id)
+    );
+    const varSellerId =
+      matchedVariant?.seller_id ??
+      val?.seller_id ??
+      selectedSellerId;
+    if (varSellerId) {
+      setSelectedSellerId(varSellerId);
+    }
+    getPrductDetails(val.product_sku_id, varSellerId);
+    getWishlistStatus(val.product_sku_id, matchedVariant?.seller_sku_id ?? val?.seller_sku_id);
+  };
+
+  const handleSelectColor = (colorItem) => {
+    if (!colorItem) return;
+    const currentAttrs = skuData?.attributes || product?.attributes || [];
+    const currentColorValue = currentAttrs.find((a) => /color|colour/i.test(a.attribute || ''))?.value;
+    if (currentColorValue && String(currentColorValue).toLowerCase() === String(colorItem.value).toLowerCase()) {
+      return;
+    }
+
+    let targetSkuId = colorItem.product_sku_id;
+    let targetSellerId = colorItem.seller_id || selectedSellerId;
+
+    if (variants && variants.length > 0) {
+      const currentStorageRam = getStorageRamLabel(currentAttrs);
+      // Try to match the current variant configuration for the newly selected color
+      let matchingVariant = variants.find((v) => {
+        const vColor = (v.attributes || []).find((a) => /color|colour/i.test(a.attribute || ''))?.value;
+        if (!vColor || String(vColor).toLowerCase() !== String(colorItem.value).toLowerCase()) return false;
+        if (currentStorageRam) {
+          const vStorageRam = getStorageRamLabel(v.attributes);
+          return vStorageRam === currentStorageRam;
+        }
+        return true;
+      });
+
+      // Fallback: any variant with the selected color
+      if (!matchingVariant) {
+        matchingVariant = variants.find((v) => {
+          const vColor = (v.attributes || []).find((a) => /color|colour/i.test(a.attribute || ''))?.value;
+          return vColor && String(vColor).toLowerCase() === String(colorItem.value).toLowerCase();
+        });
+      }
+
+      if (matchingVariant) {
+        targetSkuId = matchingVariant.product_sku_id;
+        targetSellerId = matchingVariant.seller_id || targetSellerId;
+      }
+    }
+
+    if (targetSkuId && String(targetSkuId) !== String(selectedSkuId)) {
+      setSelectedSkuId(targetSkuId);
+      if (targetSellerId) setSelectedSellerId(targetSellerId);
+      getPrductDetails(targetSkuId, targetSellerId);
+      getWishlistStatus(targetSkuId, colorItem?.seller_sku_id);
+    }
+  };
+
+  const handleSelectVariantOption = (item) => {
+    if (!item?.product_sku_id) return;
+    if (String(item.product_sku_id) === String(selectedSkuId)) return;
+    const targetSkuId = item.product_sku_id;
+    const matchedVariant = (variants || []).find(
+      (v) => String(v.product_sku_id) === String(targetSkuId)
+    );
+    const varSellerId =
+      matchedVariant?.seller_id ??
+      item?.seller_id ??
+      selectedSellerId;
+    if (varSellerId) {
+      setSelectedSellerId(varSellerId);
+    }
+    setSelectedSkuId(targetSkuId);
+    getPrductDetails(targetSkuId, varSellerId);
+    getWishlistStatus(targetSkuId, matchedVariant?.seller_sku_id ?? item?.seller_sku_id);
+  };
+
+  const getPrductDetails = async (overrideSkuId, overrideSellerId, isPullToRefresh = false) => {
     const currentSkuId =
       overrideSkuId ??
       selectedSkuId ??
@@ -201,7 +365,9 @@ export default function ProductDetails({ route }) {
       productInfo?.seller_id ??
       skuData?.seller_id;
 
-    setLoading(true);
+    if (!isPullToRefresh) {
+      setLoading(true);
+    }
     const token = await getToken();
     const userId = await getuserId();
     const headers = {
@@ -214,33 +380,20 @@ export default function ProductDetails({ route }) {
     try {
       let result = null;
       if (currentSkuId) {
-        const formData = new FormData();
-        formData.append('sku_id', String(currentSkuId));
-        if (currentSellerId !== undefined && currentSellerId !== null && currentSellerId !== '') {
-          formData.append('seller_id', String(currentSellerId));
-        }
-        if (userId) {
-          formData.append('user_id', String(userId));
-        }
-
-        console.log('Fetching sku-details with body:', {
+        console.log('Fetching sku-details with params:', {
           sku_id: currentSkuId,
           seller_id: currentSellerId,
         });
 
-        const response = await fetch(`${BASE_URL}sku-details`, {
-          method: 'POST',
-          headers,
-          body: formData,
-        });
-
-        result = await response.json();
+        result = await getSkuDetailsApi(currentSkuId, currentSellerId);
       }
       if (result?.status === 200 && result?.data) {
         const d = result.data;
         const p = d.product || {};
         const s = d.sku || {};
         const v = Array.isArray(d.variants) ? d.variants : [];
+        const opts = Array.isArray(d.options) ? d.options : [];
+        const sel = Array.isArray(d.selectors) ? d.selectors : [];
 
         const incomingSellerId =
           s.seller_id ??
@@ -254,7 +407,14 @@ export default function ProductDetails({ route }) {
         setProductInfo(p);
         setSkuData(s);
         setVariants(v);
+        setSkuOptions(opts);
+        setSelectors(sel);
         setSelectedSkuId(s.product_sku_id ?? currentSkuId);
+
+        // Dynamic SKU display name: Always use sku.name from API
+        const sName = s.name ? s.name.trim() : '';
+        const pName = p.name ? p.name.trim() : '';
+        const displayName = sName || pName || 'Product Details';
 
         const merged = {
           ...p,
@@ -262,11 +422,13 @@ export default function ProductDetails({ route }) {
           id: p.id ?? s.product_id ?? currentSkuId,
           product_id: p.id ?? s.product_id,
           product_sku_id: s.product_sku_id ?? currentSkuId,
+          seller_sku_id: s.seller_sku_id ?? p.seller_sku_id,
           seller_id: incomingSellerId,
+          seller_name: s.seller_name ?? p.seller_name ?? p.seller?.name,
           sku_code: s.sku_code,
-          name: p.name ? (s.name && s.name !== p.name ? `${p.name} - ${s.name}` : p.name) : (s.name || 'Product Details'),
-          product_name: p.name,
-          sku_name: s.name,
+          name: displayName,
+          product_name: pName || sName,
+          sku_name: sName,
           actual_price: s.actual_price ?? p.actual_price,
           discount_price: s.discount_price ?? p.discount_price,
           price: s.discount_price ?? s.actual_price ?? p.discount_price ?? p.actual_price,
@@ -276,6 +438,7 @@ export default function ProductDetails({ route }) {
           available_qty: s.available_qty,
           weight: s.weight,
           dimensions: s.dimensions,
+          attributes: Array.isArray(s.attributes) ? s.attributes : [],
           image: s.image || p.image,
           short_desc: p.short_desc || s.short_desc,
           desc: p.desc || s.desc,
@@ -289,6 +452,7 @@ export default function ProductDetails({ route }) {
         };
 
         setProduct(merged);
+        getWishlistStatus(s.product_sku_id ?? currentSkuId, s.seller_sku_id ?? p.seller_sku_id);
 
         if (s.image) {
           setProductImage(s.image);
@@ -306,14 +470,14 @@ export default function ProductDetails({ route }) {
         if (currentSellerId) fallbackFormData.append('seller_id', String(currentSellerId));
         if (userId) fallbackFormData.append('user_id', String(userId));
 
-        const fbRes = await fetch(`${BASE_URL}product-details`, {
-          method: 'POST',
-          headers,
-          body: fallbackFormData,
-        });
-        const fbData = await fbRes.json();
+        const fbData = await getProductDetailsApi(
+          currentProductId ?? currentSkuId,
+          currentSellerId,
+          userId
+        );
         if (fbData?.data) {
           setProduct(fbData.data);
+          getWishlistStatus(fbData.data.product_sku_id ?? currentSkuId, fbData.data.seller_sku_id);
           if (fbData.data.image) {
             if (Array.isArray(fbData.data.image) && fbData.data.image.length > 0) {
               setProductImage(fbData.data.image[0]);
@@ -336,21 +500,8 @@ export default function ProductDetails({ route }) {
     if (!userId) return;
 
     try {
-      const formData = new FormData();
-      formData.append('user_id', userId);
-
-      const response = await fetch(`${BASE_URL}cart-view`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: formData,
-      });
-
-      const result = await response.json();
-      const items = result?.data || result?.cart || [];
-      const validItems = Array.isArray(items) ? items : [];
+      const result = await getCartViewApi();
+      const validItems = extractCartItems(result?.data);
       setCartList(validItems);
 
       if (validItems.length === 0) {
@@ -374,7 +525,7 @@ export default function ProductDetails({ route }) {
     }
   };
 
-  const getWishlistStatus = async () => {
+  const getWishlistStatus = async (overrideCheckSkuId, overrideCheckSellerSkuId) => {
     const token = await getToken();
     const userId = await getuserId();
 
@@ -384,26 +535,53 @@ export default function ProductDetails({ route }) {
     }
 
     try {
-      const response = await fetch(`${BASE_URL}wishlist-view`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const data = await response.json();
+      const data = await viewWishlistApi();
       const items = data?.data || data?.products || data?.wishlist || [];
-      const currentSkuId = selectedSkuId ?? product_sku_id ?? sku_id ?? getCartSkuId(product);
-      const currentSellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
+      const validItems = Array.isArray(items) ? items : [];
 
-      const hasProduct = items.some((entry) => {
-        if (currentSellerSkuId && entry?.seller_sku_id) {
-          return String(entry.seller_sku_id) === String(currentSellerSkuId);
+      const currentSkuId =
+        overrideCheckSkuId ??
+        selectedSkuId ??
+        skuData?.product_sku_id ??
+        product?.product_sku_id ??
+        product_sku_id ??
+        sku_id ??
+        product?.sku_id ??
+        product?.id ??
+        id;
+
+      const currentSellerSkuId =
+        overrideCheckSellerSkuId ??
+        skuData?.seller_sku_id ??
+        product?.seller_sku_id;
+
+      const currentProductId =
+        product?.id ??
+        product?.product_id ??
+        id;
+
+      const hasProduct = validItems.some((entry) => {
+        if (!entry) return false;
+        // 1. Direct seller_sku_id match
+        if (currentSellerSkuId && entry.seller_sku_id && String(entry.seller_sku_id) === String(currentSellerSkuId)) {
+          return true;
         }
-        const entrySku = entry?.product_sku_id ?? entry?.sku_id ?? entry?.id;
-        return String(entrySku) === String(currentSkuId);
+        // 2. product_sku_id match
+        const entrySku = entry.product_sku_id ?? entry.sku_id;
+        if (currentSkuId && entrySku && String(entrySku) === String(currentSkuId)) {
+          return true;
+        }
+        // 3. product_id match
+        if (currentProductId && entry.product_id && String(entry.product_id) === String(currentProductId)) {
+          return true;
+        }
+        // 4. entry id fallback if entry has no product_sku_id
+        if (!entrySku && currentSkuId && entry.id && String(entry.id) === String(currentSkuId)) {
+          return true;
+        }
+        return false;
       });
+
       setIsWishlisted(hasProduct);
     } catch (error) {
       console.log('Wishlist status error:', error);
@@ -419,42 +597,47 @@ export default function ProductDetails({ route }) {
       return;
     }
 
-    const currentSkuId = selectedSkuId ?? product_sku_id ?? sku_id ?? getCartSkuId(product);
-    const currentSellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
-    const endpoint = isWishlisted ? 'wishlist-remove' : 'wishlist-add';
-    const formData = new FormData();
-    formData.append('product_sku_id', String(currentSkuId));
-    if (currentSellerSkuId) {
-      formData.append('seller_sku_id', String(currentSellerSkuId));
+    const currentSkuId =
+      skuData?.product_sku_id ??
+      selectedSkuId ??
+      product?.product_sku_id ??
+      product_sku_id ??
+      sku_id ??
+      product?.sku_id ??
+      product?.id ??
+      id;
+
+    if (!currentSkuId) {
+      Alert.alert('Unable to update wishlist', 'Product SKU is missing.');
+      return;
     }
 
-    try {
-      const response = await fetch(`${BASE_URL}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
+    const currentSellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
+    const prevWishlisted = isWishlisted;
+    setIsWishlisted(!prevWishlisted);
 
-      const data = await response.json();
+    try {
+      const data = prevWishlisted
+        ? await removeFromWishlistApi(currentSkuId, currentSellerSkuId)
+        : await addToWishlistApi(currentSkuId, currentSellerSkuId);
 
       if (data?.status === 200 || data?.success) {
-        setIsWishlisted((prev) => !prev);
+        DeviceEventEmitter.emit('WISHLIST_UPDATED');
         if (Platform.OS === 'android') {
           ToastAndroid.show(
-            isWishlisted ? 'Removed from Wishlist' : 'Added to Wishlist',
+            prevWishlisted ? 'Removed from Wishlist' : 'Added to Wishlist',
             ToastAndroid.SHORT
           );
         } else {
-          Alert.alert('Success', isWishlisted ? 'Removed from wishlist' : 'Added to wishlist');
+          Alert.alert('Success', prevWishlisted ? 'Removed from wishlist' : 'Added to wishlist');
         }
       } else {
-        throw new Error(data?.message || 'Wishlist action failed');
+        setIsWishlisted(prevWishlisted);
+        Alert.alert('Error', data?.message || 'Wishlist action failed');
       }
     } catch (error) {
       console.log('Wishlist toggle error:', error);
+      setIsWishlisted(prevWishlisted);
       if (Platform.OS !== 'android') {
         Alert.alert('Error', 'Something went wrong');
       }
@@ -473,19 +656,8 @@ export default function ProductDetails({ route }) {
     let currentCart = cartList;
     if (!currentCart || currentCart.length === 0) {
       try {
-        const formData = new FormData();
-        formData.append('user_id', userId);
-        const cRes = await fetch(`${BASE_URL}cart-view`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-          },
-          body: formData,
-        });
-
-        const cData = await cRes.json();
-        currentCart = (cData?.data && Array.isArray(cData.data)) ? cData.data : (cData?.cart || []);
+        const cData = await getCartViewApi();
+        currentCart = extractCartItems(cData?.data);
         setCartList(currentCart);
       } catch (e) {
         console.log('Error refreshing cart in details:', e);
@@ -513,24 +685,16 @@ export default function ProductDetails({ route }) {
       Alert.alert('Unable to add item', 'This item does not have a valid SKU.');
       return false;
     }
-    const formData = new FormData();
-    formData.append('product_sku_id', String(skuId));
-    formData.append('qty', 1);
-    formData.append('mode', 'add');
+
     const sellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
-    if (sellerSkuId) formData.append('seller_sku_id', String(sellerSkuId));
 
     try {
-      const response = await fetch(`${BASE_URL}cart-to-add`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: formData,
-      });
-
-      const data = await response.json();
+      const data = await addToCartApi(
+        skuId,
+        1,
+        sellerSkuId ? { seller_sku_id: sellerSkuId } : {},
+        'add'
+      );
 
       if (data?.status == 200 || data?.success) {
         await saveActiveCartSeller(product);
@@ -747,6 +911,373 @@ export default function ProductDetails({ route }) {
   console.log('🔁 sellerPolicy:', sellerPolicy, '| returnDays:', returnDays);
   const productImages = getProductImages();
 
+  // Flipkart style - Process Color and Variant selection data
+  const { colorSection, variantSections } = useMemo(() => {
+    const currentAttrs = skuData?.attributes || product?.attributes || [];
+    const currentColorValue =
+      currentAttrs.find((a) => /color|colour/i.test(a.attribute || ''))?.value ||
+      (selectors || []).find((s) => /color|colour/i.test(s.attribute || ''))?.selected_value ||
+      '';
+
+    // 1. Color attribute
+    const colorSelector = (selectors || []).find(
+      (s) => /color|colour/i.test(s.attribute || '')
+    );
+
+    let colorList = [];
+    let selectedColorName = currentColorValue;
+
+    if (colorSelector && Array.isArray(colorSelector.values) && colorSelector.values.length > 0) {
+      colorList = colorSelector.values.map((v) => {
+        const isSel =
+          (currentColorValue && String(v.value).toLowerCase() === String(currentColorValue).toLowerCase()) ||
+          v.is_selected ||
+          String(v.product_sku_id) === String(selectedSkuId);
+        if (isSel && !selectedColorName) selectedColorName = v.value;
+        const matchedVar = (variants || []).find(
+          (vt) => String(vt.product_sku_id) === String(v.product_sku_id)
+        );
+        return {
+          id: String(v.attribute_value_id || v.product_sku_id || v.value),
+          value: v.value,
+          product_sku_id: v.product_sku_id,
+          seller_id: matchedVar?.seller_id,
+          seller_sku_id: matchedVar?.seller_sku_id,
+          image: v.image || matchedVar?.image || (isSel ? productImage : null),
+          in_stock: v.in_stock !== false,
+          is_selected: Boolean(isSel),
+        };
+      });
+    } else if (variants && variants.length > 0) {
+      const seenColors = new Set();
+      variants.forEach((v) => {
+        const cAttr = (v.attributes || []).find((a) => /color|colour/i.test(a.attribute || ''));
+        if (cAttr && cAttr.value && !seenColors.has(String(cAttr.value).toLowerCase())) {
+          seenColors.add(String(cAttr.value).toLowerCase());
+          const isSel =
+            (currentColorValue && String(cAttr.value).toLowerCase() === String(currentColorValue).toLowerCase()) ||
+            String(v.product_sku_id) === String(selectedSkuId);
+          if (isSel) selectedColorName = cAttr.value;
+          colorList.push({
+            id: String(v.product_sku_id || cAttr.value),
+            value: cAttr.value,
+            product_sku_id: v.product_sku_id,
+            seller_id: v.seller_id,
+            seller_sku_id: v.seller_sku_id,
+            image: v.image || (isSel ? productImage : null),
+            in_stock: v.in_stock !== false,
+            is_selected: Boolean(isSel),
+          });
+        }
+      });
+    }
+
+    const otherSelectors = (selectors || []).filter(
+      (s) => !/color|colour/i.test(s.attribute || '')
+    );
+
+    const storageSel = otherSelectors.find((s) => /storage|rom|internal\s*memory/i.test(s.attribute || ''));
+    const ramSel = otherSelectors.find((s) => /ram|memory/i.test(s.attribute || ''));
+
+    let variantGroups = [];
+
+    const hasStorageOrRamInVariants = (variants || []).some((v) =>
+      Boolean(getStorageRamLabel(v.attributes))
+    );
+
+    if (hasStorageOrRamInVariants && variants && variants.length > 0) {
+      // Filter variants that match the currently selected color (if color exists)
+      const matchingColorVariants = currentColorValue
+        ? variants.filter((v) => {
+          const vColor = (v.attributes || []).find((a) => /color|colour/i.test(a.attribute || ''))?.value;
+          return vColor && String(vColor).toLowerCase() === String(currentColorValue).toLowerCase();
+        })
+        : variants;
+
+      const relevantVariants = matchingColorVariants.length > 0 ? matchingColorVariants : variants;
+
+      // Collect unique Storage + RAM configurations ONLY from relevantVariants (variants belonging to this SKU's color)
+      const uniqueConfigMap = new Map();
+      relevantVariants.forEach((v) => {
+        const label = getStorageRamLabel(v.attributes);
+        if (!label) return;
+
+        const isCurrentSku = String(v.product_sku_id) === String(selectedSkuId);
+        // Prefer the currently selected SKU if duplicate config exists
+        if (!uniqueConfigMap.has(label) || isCurrentSku) {
+          uniqueConfigMap.set(label, v);
+        }
+      });
+
+      const currentSkuStorageRam = getStorageRamLabel(currentAttrs);
+
+      const siblingItems = Array.from(uniqueConfigMap.entries()).map(([label, v]) => {
+        const isSel = String(v.product_sku_id) === String(selectedSkuId) ||
+          (currentSkuStorageRam && label === currentSkuStorageRam);
+        const price = v.discount_price ?? v.actual_price;
+        const actualPrice = v.actual_price;
+        const discPercent = v.discount_percent;
+        const hasDiscount = Boolean(discPercent && actualPrice && price && actualPrice > price);
+
+        return {
+          id: String(v.product_sku_id || v.seller_sku_id),
+          label,
+          product_sku_id: v.product_sku_id,
+          seller_id: v.seller_id,
+          seller_sku_id: v.seller_sku_id,
+          price,
+          actualPrice,
+          discountPercent: discPercent,
+          hasDiscount,
+          in_stock: v.in_stock !== false,
+          is_selected: Boolean(isSel),
+        };
+      });
+
+      const activeSibling = siblingItems.find((s) => s.is_selected);
+      const selectedVariantLabel = activeSibling?.label || currentSkuStorageRam || siblingItems[0]?.label || '';
+
+      variantGroups.push({
+        title: 'Variant',
+        selectedLabel: selectedVariantLabel,
+        items: siblingItems,
+        isVariantCards: true,
+      });
+    } else if (storageSel || ramSel) {
+      const currentStorage = storageSel?.selected_value || storageSel?.values?.[0]?.value || '';
+      const currentRam = ramSel?.selected_value || ramSel?.values?.[0]?.value || '';
+      const combinedLabel = [currentStorage, currentRam].filter(Boolean).join(' + ');
+
+      const curPrice = product?.discount_price ?? product?.actual_price;
+      const curActual = product?.actual_price;
+      const curDisc = discountPercent;
+      const hasDiscount = Boolean(curDisc && curActual && curPrice && curActual > curPrice);
+
+      variantGroups.push({
+        title: 'Variant',
+        selectedLabel: combinedLabel,
+        items: [
+          {
+            id: 'combined_variant',
+            label: combinedLabel,
+            product_sku_id: selectedSkuId,
+            price: curPrice,
+            actualPrice: curActual,
+            discountPercent: curDisc,
+            hasDiscount,
+            in_stock: !outOfStockFlag,
+            is_selected: true,
+          },
+        ],
+        isVariantCards: true,
+      });
+    } else if (variants && variants.length > 1) {
+      // Non-tech product with variants (e.g. Size or style)
+      const matchingColorVariants = currentColorValue
+        ? variants.filter((v) => {
+          const vColor = (v.attributes || []).find((a) => /color|colour/i.test(a.attribute || ''))?.value;
+          return vColor && String(vColor).toLowerCase() === String(currentColorValue).toLowerCase();
+        })
+        : variants;
+      const relevantVariants = matchingColorVariants.length > 0 ? matchingColorVariants : variants;
+
+      const uniqueNonTechMap = new Map();
+      relevantVariants.forEach((v) => {
+        const nonSpecAttrs = (v.attributes || []).filter(
+          (a) => !/color|colour|weight|dimension|screen|display|battery|camera|processor|cpu|os|operating|connectivity|network/i.test(a.attribute || '')
+        );
+        let label = '';
+        if (nonSpecAttrs.length > 0) {
+          label = nonSpecAttrs.map((a) => a.value).join(' + ');
+        } else {
+          label = v.name || v.sku_code || 'Variant';
+        }
+
+        const isCurrentSku = String(v.product_sku_id) === String(selectedSkuId);
+        if (!uniqueNonTechMap.has(label) || isCurrentSku) {
+          uniqueNonTechMap.set(label, v);
+        }
+      });
+
+      const siblingItems = Array.from(uniqueNonTechMap.entries()).map(([label, v]) => {
+        const isSel = String(v.product_sku_id) === String(selectedSkuId);
+        const price = v.discount_price ?? v.actual_price;
+        const actualPrice = v.actual_price;
+        const discPercent = v.discount_percent;
+        const hasDiscount = Boolean(discPercent && actualPrice && price && actualPrice > price);
+
+        return {
+          id: String(v.product_sku_id || v.seller_sku_id),
+          label,
+          product_sku_id: v.product_sku_id,
+          seller_id: v.seller_id,
+          seller_sku_id: v.seller_sku_id,
+          price,
+          actualPrice,
+          discountPercent: discPercent,
+          hasDiscount,
+          in_stock: v.in_stock !== false,
+          is_selected: isSel,
+        };
+      });
+
+      const activeSibling = siblingItems.find((s) => s.is_selected);
+      const selectedVariantLabel = activeSibling ? activeSibling.label : (siblingItems[0]?.label || '');
+
+      variantGroups.push({
+        title: 'Variant',
+        selectedLabel: selectedVariantLabel,
+        items: siblingItems,
+        isVariantCards: true,
+      });
+    } else {
+      // Check for Size in fashion products
+      const sizeSel = otherSelectors.find((s) => /size|fit/i.test(s.attribute || ''));
+      if (sizeSel && Array.isArray(sizeSel.values) && sizeSel.values.length > 0) {
+        const items = sizeSel.values.map((v) => {
+          const isSel = v.is_selected || String(v.product_sku_id) === String(selectedSkuId);
+          return {
+            id: String(v.attribute_value_id || v.product_sku_id || v.value),
+            label: v.value,
+            product_sku_id: v.product_sku_id,
+            is_selected: isSel,
+            isChipOnly: true,
+            in_stock: v.in_stock !== false,
+          };
+        });
+        variantGroups.push({
+          title: sizeSel.attribute || 'Size',
+          selectedLabel: sizeSel.selected_value || (items.find((i) => i.is_selected)?.label) || '',
+          items,
+          isVariantCards: false,
+        });
+      }
+    }
+
+    return {
+      colorSection: colorList.length > 0 ? {
+        title: 'Selected Color',
+        selectedLabel: selectedColorName || colorList.find((c) => c.is_selected)?.value || colorList[0]?.value || '',
+        items: colorList,
+      } : null,
+      variantSections: variantGroups,
+    };
+  }, [selectors, variants, selectedSkuId, product, skuData, discountPercent, productImage, outOfStockFlag]);
+
+  // Flipkart style - Highlights computation
+  const highlights = useMemo(() => {
+    const list = [];
+    const attrs = Array.isArray(skuData?.attributes) ? skuData.attributes : [];
+
+    const ramAttr = attrs.find((a) => /^(ram|memory)$/i.test(a.attribute?.trim()));
+    const romAttr = attrs.find((a) => /^(storage|rom|internal\s*memory)$/i.test(a.attribute?.trim()));
+    const processorAttr = attrs.find((a) => /^(processor|cpu|chipset)$/i.test(a.attribute?.trim()));
+    const rearCameraAttr = attrs.find((a) => /^(rear\s*camera|primary\s*camera|back\s*camera|camera)$/i.test(a.attribute?.trim()));
+    const frontCameraAttr = attrs.find((a) => /^(front\s*camera|selfie\s*camera)$/i.test(a.attribute?.trim()));
+    const screenAttr = attrs.find((a) => /^(screen\s*size|screen|display)$/i.test(a.attribute?.trim()));
+    const batteryAttr = attrs.find((a) => /^(battery|battery\s*capacity)$/i.test(a.attribute?.trim()));
+    const osAttr = attrs.find((a) => /^(operating\s*system|os)$/i.test(a.attribute?.trim()));
+
+    if (ramAttr && romAttr) {
+      list.push({
+        icon: 'memory',
+        text: `${ramAttr.value} RAM | ${romAttr.value} ROM`,
+      });
+    } else if (ramAttr) {
+      list.push({
+        icon: 'memory',
+        text: `${ramAttr.value} RAM`,
+      });
+    } else if (romAttr) {
+      list.push({
+        icon: 'chip',
+        text: `${romAttr.value} ROM`,
+      });
+    }
+
+    if (processorAttr) {
+      list.push({
+        icon: 'cpu-64-bit',
+        text: processorAttr.value.toLowerCase().includes('processor')
+          ? processorAttr.value
+          : `${processorAttr.value} Processor`,
+      });
+    }
+
+    if (rearCameraAttr) {
+      list.push({
+        icon: 'camera-outline',
+        text: rearCameraAttr.value.toLowerCase().includes('camera')
+          ? rearCameraAttr.value
+          : `${rearCameraAttr.value} Rear Camera`,
+      });
+    }
+
+    if (frontCameraAttr) {
+      list.push({
+        icon: 'camera-front-variant',
+        text: frontCameraAttr.value.toLowerCase().includes('camera')
+          ? frontCameraAttr.value
+          : `${frontCameraAttr.value} Front Camera`,
+      });
+    }
+
+    if (screenAttr) {
+      list.push({
+        icon: 'cellphone',
+        text: screenAttr.value,
+      });
+    }
+
+    if (batteryAttr) {
+      list.push({
+        icon: 'battery-high',
+        text: batteryAttr.value.toLowerCase().includes('battery')
+          ? batteryAttr.value
+          : `${batteryAttr.value} Battery`,
+      });
+    }
+
+    if (osAttr) {
+      list.push({
+        icon: 'android',
+        text: osAttr.value,
+      });
+    }
+
+    const weightVal = skuData?.weight || attrs.find((a) => /^weight$/i.test(a.attribute?.trim()))?.value;
+    if (weightVal) {
+      list.push({
+        icon: 'scale',
+        text: typeof weightVal === 'number' ? `${weightVal} kg Weight` : `${weightVal} Weight`,
+      });
+    }
+
+    const handledAttributes = [
+      ramAttr,
+      romAttr,
+      processorAttr,
+      rearCameraAttr,
+      frontCameraAttr,
+      screenAttr,
+      batteryAttr,
+      osAttr,
+    ].filter(Boolean);
+
+    attrs.forEach((attr) => {
+      if (/color|colour/i.test(attr.attribute || '')) return;
+      if (handledAttributes.some((h) => h.attribute === attr.attribute)) return;
+      if (/weight/i.test(attr.attribute || '') && weightVal) return;
+
+      list.push({
+        icon: 'check-circle-outline',
+        text: `${attr.attribute}: ${attr.value}`,
+      });
+    });
+
+    return list;
+  }, [skuData]);
+
   if (loading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.bg }]}>
@@ -815,6 +1346,14 @@ export default function ProductDetails({ route }) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[AllColors.primary]}
+            tintColor={AllColors.primary}
+          />
+        }
       >
         {/* Top Header & Product Image Section */}
         <View
@@ -882,6 +1421,8 @@ export default function ProductDetails({ route }) {
                 showsHorizontalScrollIndicator={false}
                 data={productImages}
                 keyExtractor={(_, index) => String(index)}
+                style={styles.imageFlatList}
+                contentContainerStyle={styles.imageFlatListContent}
                 onMomentumScrollEnd={(e) => {
                   const contentOffset = e.nativeEvent.contentOffset.x;
                   const widthVal = e.nativeEvent.layoutMeasurement.width;
@@ -907,36 +1448,6 @@ export default function ProductDetails({ route }) {
                   size={80}
                   color={isDarkMode ? '#64748B' : '#CBD5E1'}
                 />
-              </View>
-            )}
-
-            {/* Transparent shield overlay covering the full image when Out of Stock */}
-            {outOfStockFlag && (
-              <View
-                style={[
-                  styles.meeshoImageOverlay,
-                  { backgroundColor: isDarkMode ? 'rgba(15, 23, 42, 0.65)' : 'rgba(255, 255, 255, 0.65)' },
-                ]}
-                pointerEvents="none"
-              >
-                <View
-                  style={[
-                    styles.meeshoOutOfStockBadgeLarge,
-                    {
-                      backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
-                      borderColor: isDarkMode ? '#475569' : '#CBD5E1',
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.meeshoOutOfStockTextLarge,
-                      { color: isDarkMode ? '#F8FAFC' : '#1E293B' },
-                    ]}
-                  >
-                    OUT OF STOCK
-                  </Text>
-                </View>
               </View>
             )}
           </View>
@@ -972,7 +1483,7 @@ export default function ProductDetails({ route }) {
 
           {/* Title */}
           <Text style={[styles.productTitle, { color: theme.textPrimary }]}>
-            {product?.name || 'Product Name'}
+            {skuData?.name || product?.sku_name || product?.name || 'Product Name'}
           </Text>
 
           {/* Rating & Seller Row */}
@@ -1033,6 +1544,25 @@ export default function ProductDetails({ route }) {
             ) : null}
           </View>
 
+          {/* Stock Status Badge */}
+          {outOfStockFlag ? (
+            <View style={styles.stockStatusBadgeOutOfStock}>
+              <Ionicons name="close-circle" size={13} color="#DC2626" />
+              <Text style={styles.stockStatusTextOutOfStock}>Out of Stock</Text>
+            </View>
+          ) : (
+            <View style={styles.stockStatusBadgeInStock}>
+              <Ionicons name="checkmark-circle" size={13} color="#059669" />
+              <Text style={styles.stockStatusTextInStock}>
+                {product?.available_qty !== undefined && product?.available_qty !== null
+                  ? product.available_qty <= 10
+                    ? `Only ${product.available_qty} left in stock - order soon`
+                    : `In Stock (${product.available_qty} available)`
+                  : 'In Stock'}
+              </Text>
+            </View>
+          )}
+
           {/* Short Description */}
           {product?.short_desc ? (
             <Text style={[styles.shortDescText, { color: theme.textSecondary }]}>
@@ -1040,58 +1570,67 @@ export default function ProductDetails({ route }) {
             </Text>
           ) : null}
 
-          {/* Variants Section */}
-          {variants && variants.length > 0 && (
-            <View style={styles.variantsSection}>
-              <Text style={[styles.variantsHeading, { color: theme.textPrimary }]}>
-                Select Variant ({variants.length})
-              </Text>
+          {/* Flipkart Style - Selected Color Swatches */}
+          {colorSection && colorSection.items.length > 0 && (
+            <View style={styles.fkSectionContainer}>
+              <View style={styles.fkSectionHeader}>
+                <Text style={[styles.fkSectionTitle, { color: theme.textPrimary }]}>
+                  {colorSection.title}:{' '}
+                  <Text style={[styles.fkSectionValue, { color: theme.textSecondary }]}>
+                    {colorSection.selectedLabel}
+                  </Text>
+                </Text>
+              </View>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.variantsScroll}
+                contentContainerStyle={styles.fkScroll}
               >
-                {variants.map((v) => {
-                  const isSelected = String(v.product_sku_id) === String(selectedSkuId);
+                {colorSection.items.map((cItem) => {
+                  const isSelected = cItem.is_selected;
+                  const isOutOfStock = !cItem.in_stock;
+
                   return (
                     <TouchableOpacity
-                      key={v.product_sku_id}
+                      key={cItem.id}
                       style={[
-                        styles.variantCard,
+                        styles.fkColorCard,
                         {
-                          backgroundColor: isSelected
-                            ? (isDarkMode ? '#1E293B' : '#FEF2F2')
-                            : (isDarkMode ? '#0F172A' : '#F8FAFC'),
-                          borderColor: isSelected ? AllColors.primary : theme.borderColor,
+                          backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
+                          borderColor: isSelected
+                            ? (isDarkMode ? '#F8FAFC' : '#0F172A')
+                            : (isDarkMode ? '#334155' : '#CBD5E1'),
                           borderWidth: isSelected ? 2 : 1,
+                          opacity: isOutOfStock ? 0.5 : 1,
                         },
                       ]}
-                      onPress={() => handleSelectVariant(v)}
+                      onPress={() => handleSelectColor(cItem)}
                       activeOpacity={0.7}
                     >
-                      {v.image ? (
-                        <Image source={{ uri: v.image }} style={styles.variantThumb} />
-                      ) : null}
-                      <View style={styles.variantInfo}>
-                        <Text
-                          style={[
-                            styles.variantName,
-                            { color: isSelected ? AllColors.primary : theme.textPrimary },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {v.name || v.sku_code}
-                        </Text>
-                        <Text style={[styles.variantPrice, { color: theme.textSecondary }]}>
-                          ₹{v.discount_price ?? v.actual_price}
-                        </Text>
-                        {v.discount_percent ? (
-                          <Text style={styles.variantDiscount}>{v.discount_percent}% off</Text>
-                        ) : null}
-                        {v.in_stock === false && (
-                          <Text style={styles.variantOutOfStock}>Out of stock</Text>
-                        )}
-                      </View>
+                      {cItem.image ? (
+                        <Image
+                          source={{ uri: cItem.image }}
+                          style={styles.fkColorImage}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <View style={styles.fkColorFallback}>
+                          <Text
+                            style={[
+                              styles.fkColorFallbackText,
+                              { color: isSelected ? theme.textPrimary : theme.textSecondary },
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {cItem.value}
+                          </Text>
+                        </View>
+                      )}
+                      {isOutOfStock && (
+                        <View style={styles.fkColorOosTag}>
+                          <Text style={styles.fkColorOosText}>Out of stock</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -1099,46 +1638,288 @@ export default function ProductDetails({ route }) {
             </View>
           )}
 
-          {/* SKU Specifications */}
-          {(skuData?.sku_code || skuData?.weight || skuData?.dimensions) && (
-            <View style={styles.specsSection}>
-              <Text style={[styles.specsTitle, { color: theme.textPrimary }]}>
-                SKU Specifications
-              </Text>
-              <View
-                style={[
-                  styles.specsTable,
-                  {
-                    backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC',
-                    borderColor: theme.borderColor,
-                  },
-                ]}
+          {/* Flipkart Style - Variant Cards / Options */}
+          {variantSections && variantSections.length > 0 && (
+            <View style={styles.fkVariantSectionsWrapper}>
+              {variantSections.map((vGroup, gIdx) => (
+                <View key={`vgroup-${gIdx}`} style={styles.fkSectionContainer}>
+                  <View style={styles.fkSectionHeader}>
+                    <Text style={[styles.fkSectionTitle, { color: theme.textPrimary }]}>
+                      {vGroup.title}:{' '}
+                      <Text style={[styles.fkSectionValue, { color: theme.textSecondary }]}>
+                        {vGroup.selectedLabel}
+                      </Text>
+                    </Text>
+                  </View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.fkScroll}
+                  >
+                    {vGroup.items.map((item) => {
+                      const isSelected = item.is_selected;
+                      const isOutOfStock = !item.in_stock;
+
+                      if (item.isChipOnly || !vGroup.isVariantCards) {
+                        return (
+                          <TouchableOpacity
+                            key={item.id}
+                            style={[
+                              styles.fkChip,
+                              {
+                                backgroundColor: isSelected
+                                  ? (isDarkMode ? '#1E293B' : '#FEF2F2')
+                                  : (isDarkMode ? '#0F172A' : '#FFFFFF'),
+                                borderColor: isSelected
+                                  ? (isDarkMode ? '#F8FAFC' : '#0F172A')
+                                  : (isDarkMode ? '#334155' : '#CBD5E1'),
+                                borderWidth: isSelected ? 2 : 1,
+                                opacity: isOutOfStock ? 0.5 : 1,
+                              },
+                            ]}
+                            onPress={() => handleSelectVariantOption(item)}
+                            activeOpacity={0.7}
+                          >
+                            <Text
+                              style={[
+                                styles.fkChipText,
+                                {
+                                  color: isSelected ? theme.textPrimary : theme.textSecondary,
+                                  fontWeight: isSelected ? '700' : '600',
+                                  textDecorationLine: isOutOfStock ? 'line-through' : 'none',
+                                },
+                              ]}
+                            >
+                              {item.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      }
+
+                      return (
+                        <TouchableOpacity
+                          key={item.id}
+                          style={[
+                            styles.fkVariantCard,
+                            {
+                              backgroundColor: isDarkMode ? '#0F172A' : '#FFFFFF',
+                              borderColor: isSelected
+                                ? (isDarkMode ? '#F8FAFC' : '#0F172A')
+                                : (isDarkMode ? '#334155' : '#CBD5E1'),
+                              borderWidth: isSelected ? 2 : 1,
+                              opacity: isOutOfStock ? 0.55 : 1,
+                            },
+                          ]}
+                          onPress={() => handleSelectVariantOption(item)}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.fkVariantTitle,
+                              {
+                                color: theme.textPrimary,
+                                fontWeight: isSelected ? '700' : '600',
+                              },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {item.label}
+                          </Text>
+
+                          {item.hasDiscount && (
+                            <View style={styles.fkVariantDiscountRow}>
+                              <Text style={styles.fkVariantDiscountDown}>
+                                ↓{item.discountPercent}%
+                              </Text>
+                              <Text style={styles.fkVariantOldMrp}>
+                                ₹{item.actualPrice}
+                              </Text>
+                            </View>
+                          )}
+
+                          {item.price !== undefined && item.price !== null && (
+                            <Text
+                              style={[
+                                styles.fkVariantPrice,
+                                { color: theme.textPrimary },
+                              ]}
+                            >
+                              ₹{item.price}
+                            </Text>
+                          )}
+
+                          {isOutOfStock && (
+                            <Text style={styles.fkVariantOosText}>Out of stock</Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Flipkart Style - Product Highlights Accordion */}
+          {highlights && highlights.length > 0 && (
+            <View
+              style={[
+                styles.highlightsSection,
+                {
+                  borderTopColor: isDarkMode ? '#334155' : '#E2E8F0',
+                },
+              ]}
+            >
+              <TouchableOpacity
+                style={styles.accordionHeader}
+                onPress={() => setIsHighlightsOpen(!isHighlightsOpen)}
+                activeOpacity={0.7}
               >
-                {skuData?.sku_code ? (
-                  <View style={styles.specRow}>
-                    <Text style={[styles.specLabel, { color: theme.textSecondary }]}>SKU Code</Text>
-                    <Text style={[styles.specValue, { color: theme.textPrimary }]}>
-                      {skuData.sku_code}
-                    </Text>
-                  </View>
-                ) : null}
-                {skuData?.weight ? (
-                  <View style={styles.specRow}>
-                    <Text style={[styles.specLabel, { color: theme.textSecondary }]}>Weight</Text>
-                    <Text style={[styles.specValue, { color: theme.textPrimary }]}>
-                      {skuData.weight} kg
-                    </Text>
-                  </View>
-                ) : null}
-                {skuData?.dimensions ? (
-                  <View style={[styles.specRow, { borderBottomWidth: 0 }]}>
-                    <Text style={[styles.specLabel, { color: theme.textSecondary }]}>Dimensions</Text>
-                    <Text style={[styles.specValue, { color: theme.textPrimary }]}>
-                      {skuData.dimensions}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
+                <Text style={[styles.accordionTitle, { color: theme.textPrimary }]}>
+                  Product highlights
+                </Text>
+                <View
+                  style={[
+                    styles.chevronBadge,
+                    { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' },
+                  ]}
+                >
+                  <Feather
+                    name={isHighlightsOpen ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color={theme.textPrimary}
+                  />
+                </View>
+              </TouchableOpacity>
+
+              {isHighlightsOpen && (
+                <View style={styles.highlightsList}>
+                  {highlights.map((item, idx) => (
+                    <View key={`hl-${idx}`} style={styles.highlightRow}>
+                      <View
+                        style={[
+                          styles.highlightIconBox,
+                          { backgroundColor: isDarkMode ? '#0F2942' : '#E0F2FE' },
+                        ]}
+                      >
+                        <MaterialCommunityIcons
+                          name={item.icon}
+                          size={20}
+                          color={isDarkMode ? '#38BDF8' : '#0284C7'}
+                        />
+                      </View>
+                      <Text
+                        style={[
+                          styles.highlightText,
+                          { color: theme.textPrimary },
+                        ]}
+                      >
+                        {item.text}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Flipkart Style - All Details / Specifications Accordion */}
+          {(skuData?.sku_code || skuData?.weight || skuData?.dimensions || (Array.isArray(skuData?.attributes) && skuData.attributes.length > 0) || skuData?.available_qty !== undefined || skuData?.seller_name) && (
+            <View
+              style={[
+                styles.allDetailsSection,
+                {
+                  borderTopColor: isDarkMode ? '#334155' : '#E2E8F0',
+                },
+              ]}
+            >
+              <TouchableOpacity
+                style={styles.accordionHeader}
+                onPress={() => setIsAllDetailsOpen(!isAllDetailsOpen)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.accordionTitle, { color: theme.textPrimary }]}>
+                  All details
+                </Text>
+                <View
+                  style={[
+                    styles.chevronBadge,
+                    { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' },
+                  ]}
+                >
+                  <Feather
+                    name={isAllDetailsOpen ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color={theme.textPrimary}
+                  />
+                </View>
+              </TouchableOpacity>
+
+              {isAllDetailsOpen && (
+                <View
+                  style={[
+                    styles.specsTable,
+                    {
+                      backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC',
+                      borderColor: theme.borderColor,
+                      marginTop: 12,
+                    },
+                  ]}
+                >
+                  {skuData?.sku_code ? (
+                    <View style={styles.specRow}>
+                      <Text style={[styles.specLabel, { color: theme.textSecondary }]}>SKU Code</Text>
+                      <Text style={[styles.specValue, { color: theme.textPrimary }]}>
+                        {skuData.sku_code}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {Array.isArray(skuData?.attributes) && skuData.attributes.length > 0 &&
+                    skuData.attributes.map((attr, idx) => (
+                      <View key={`attr-${idx}`} style={styles.specRow}>
+                        <Text style={[styles.specLabel, { color: theme.textSecondary }]}>
+                          {attr.attribute || 'Attribute'}
+                        </Text>
+                        <Text style={[styles.specValue, { color: theme.textPrimary }]}>
+                          {attr.value}
+                        </Text>
+                      </View>
+                    ))
+                  }
+                  {skuData?.weight ? (
+                    <View style={styles.specRow}>
+                      <Text style={[styles.specLabel, { color: theme.textSecondary }]}>Weight</Text>
+                      <Text style={[styles.specValue, { color: theme.textPrimary }]}>
+                        {skuData.weight} {typeof skuData.weight === 'number' ? 'kg' : ''}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {skuData?.dimensions ? (
+                    <View style={styles.specRow}>
+                      <Text style={[styles.specLabel, { color: theme.textSecondary }]}>Dimensions</Text>
+                      <Text style={[styles.specValue, { color: theme.textPrimary }]}>
+                        {skuData.dimensions}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {skuData?.available_qty !== undefined && skuData?.available_qty !== null ? (
+                    <View style={styles.specRow}>
+                      <Text style={[styles.specLabel, { color: theme.textSecondary }]}>Available Stock</Text>
+                      <Text style={[styles.specValue, { color: skuData.available_qty > 0 ? '#059669' : '#EF4444' }]}>
+                        {skuData.available_qty} units
+                      </Text>
+                    </View>
+                  ) : null}
+                  {skuData?.seller_name ? (
+                    <View style={[styles.specRow, { borderBottomWidth: 0 }]}>
+                      <Text style={[styles.specLabel, { color: theme.textSecondary }]}>Seller</Text>
+                      <Text style={[styles.specValue, { color: theme.textPrimary }]}>
+                        {skuData.seller_name}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              )}
             </View>
           )}
 
@@ -1421,37 +2202,51 @@ const styles = StyleSheet.create({
   },
   imageWrapper: {
     flex: 1,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: 12,
     position: 'relative',
   },
-  meeshoImageOverlay: {
+  imageFlatList: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
+  imageFlatListContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+  },
+  imageShieldOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.65)',
+    backgroundColor: 'rgba(255, 255, 255, 0.72)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 16,
-    zIndex: 10,
+    zIndex: 99,
+    elevation: 10,
   },
   meeshoOutOfStockBadgeLarge: {
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingVertical: 9,
-    borderRadius: 6,
-    borderWidth: 1.2,
-    borderColor: '#CBD5E1',
-    elevation: 4,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#000000',
+    elevation: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   meeshoOutOfStockTextLarge: {
-    color: '#1E293B',
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.8,
+    color: '#000000',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    textAlign: 'center',
   },
   productImg: {
     width: '90%',
@@ -1462,6 +2257,8 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+    overflow: 'hidden',
   },
   paginationContainer: {
     flexDirection: 'row',
@@ -1741,63 +2538,203 @@ const styles = StyleSheet.create({
   btnIconMarginRight: {
     marginRight: 8,
   },
-  variantsSection: {
-    marginTop: 18,
+  /* Flipkart-style Variant & Highlights Design */
+  fkVariantSectionsWrapper: {
     marginBottom: 4,
   },
-  variantsHeading: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 10,
+  fkSectionContainer: {
+    marginTop: 14,
+    marginBottom: 4,
   },
-  variantsScroll: {
-    paddingVertical: 4,
-  },
-  variantCard: {
+  fkSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    borderRadius: 12,
-    marginRight: 10,
-    minWidth: 130,
-    maxWidth: 170,
+    marginBottom: 10,
   },
-  variantThumb: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-    marginRight: 8,
-  },
-  variantInfo: {
-    flex: 1,
-  },
-  variantName: {
-    fontSize: 13,
+  fkSectionTitle: {
+    fontSize: 14.5,
     fontWeight: '700',
   },
-  variantPrice: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 2,
+  fkSectionValue: {
+    fontWeight: '500',
   },
-  variantDiscount: {
-    fontSize: 10,
+  fkScroll: {
+    paddingVertical: 3,
+    paddingRight: 10,
+  },
+  fkColorCard: {
+    width: 70,
+    height: 86,
+    borderRadius: 10,
+    marginRight: 10,
+    padding: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  fkColorImage: {
+    width: '100%',
+    height: '100%',
+  },
+  fkColorFallback: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+    padding: 4,
+  },
+  fkColorFallbackText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  fkColorOosTag: {
+    position: 'absolute',
+    bottom: 2,
+    backgroundColor: 'rgba(239, 68, 68, 0.9)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  fkColorOosText: {
+    color: '#FFFFFF',
+    fontSize: 8.5,
+    fontWeight: '700',
+  },
+  fkVariantCard: {
+    minWidth: 114,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginRight: 10,
+    justifyContent: 'center',
+  },
+  fkVariantTitle: {
+    fontSize: 13,
+    marginBottom: 2,
+  },
+  fkVariantDiscountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginVertical: 1,
+  },
+  fkVariantDiscountDown: {
+    fontSize: 11,
     fontWeight: '700',
     color: '#059669',
   },
-  variantOutOfStock: {
-    fontSize: 10,
-    fontWeight: '700',
+  fkVariantOldMrp: {
+    fontSize: 11,
+    color: '#94A3B8',
+    textDecorationLine: 'line-through',
+  },
+  fkVariantPrice: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  fkVariantOosText: {
+    fontSize: 9.5,
     color: '#EF4444',
+    fontWeight: '700',
+    marginTop: 2,
   },
-  specsSection: {
+  fkChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    minWidth: 46,
+    marginRight: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fkChipText: {
+    fontSize: 13.5,
+    textAlign: 'center',
+  },
+  highlightsSection: {
     marginTop: 18,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  specsTitle: {
+  allDetailsSection: {
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  accordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  accordionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    marginBottom: 10,
+  },
+  chevronBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  highlightsList: {
+    marginTop: 14,
+    gap: 12,
+  },
+  highlightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  highlightIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  highlightText: {
+    fontSize: 13.5,
+    fontWeight: '500',
+    flex: 1,
+    lineHeight: 19,
+  },
+  stockStatusBadgeOutOfStock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: -4,
+  },
+  stockStatusTextOutOfStock: {
+    color: '#DC2626',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  stockStatusBadgeInStock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginTop: -4,
+  },
+  stockStatusTextInStock: {
+    color: '#059669',
+    fontSize: 12,
+    fontWeight: '700',
   },
   specsTable: {
     borderRadius: 12,

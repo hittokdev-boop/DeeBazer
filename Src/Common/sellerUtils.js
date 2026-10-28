@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BASE_URL } from '../Api/Api';
+import { getProductDetailsApi } from '../Api/Api';
 
 const ACTIVE_CART_SELLER_KEY = 'ACTIVE_CART_SELLER';
 
@@ -63,13 +63,7 @@ export const resolveSellerInfo = async (itemOrId) => {
   if (!productId) return { sellerId: null, sellerName: '' };
 
   try {
-    const formData = new FormData();
-    formData.append('product_id', productId);
-    const res = await fetch(`${BASE_URL}product-details`, {
-      method: 'POST',
-      body: formData,
-    });
-    const json = await res.json();
+    const json = await getProductDetailsApi(productId);
     if (json?.data) {
       return extractSellerInfo(json.data);
     }
@@ -139,95 +133,95 @@ export const checkDifferentSeller = async (cartItems = [], targetProduct = null,
     targetSellerName: '',
     targetSellerId: null,
   };
-/*
-  if (!Array.isArray(cartItems) || cartItems.length === 0) {
-    return {
-      isDifferent: false,
-      cartSellerName: '',
-      targetSellerName: '',
-      targetSellerId: null,
-    };
-  }
-
-
-  let targetSeller = extractSellerInfo(targetProduct);
-  if (!targetSeller.sellerId && !targetSeller.sellerName && targetProduct) {
-    targetSeller = await resolveSellerInfo(targetProduct);
-  }
-
-  let cartSeller = null;
-  for (const item of cartItems) {
-    const info = extractSellerInfo(item);
-    if (info.sellerId || info.sellerName) {
-      cartSeller = info;
-      break;
+  /*
+    if (!Array.isArray(cartItems) || cartItems.length === 0) {
+      return {
+        isDifferent: false,
+        cartSellerName: '',
+        targetSellerName: '',
+        targetSellerId: null,
+      };
     }
-  }
-
-  if (!cartSeller && cachedSeller) {
-    cartSeller = {
-      sellerId: cachedSeller.sellerId !== null && cachedSeller.sellerId !== undefined ? String(cachedSeller.sellerId) : null,
-      sellerName: String(cachedSeller.sellerName || '').trim(),
-    };
-  }
-
-  // If still missing seller info for cart items, fetch details of first cart item
-  if ((!cartSeller || (!cartSeller.sellerId && !cartSeller.sellerName)) && cartItems.length > 0) {
-    const resolved = await resolveSellerInfo(cartItems[0]);
-    if (resolved.sellerId || resolved.sellerName) {
-      cartSeller = resolved;
-      await saveActiveCartSeller(cartSeller);
+  
+  
+    let targetSeller = extractSellerInfo(targetProduct);
+    if (!targetSeller.sellerId && !targetSeller.sellerName && targetProduct) {
+      targetSeller = await resolveSellerInfo(targetProduct);
     }
-  }
-
-  if (!cartSeller || (!cartSeller.sellerId && !cartSeller.sellerName)) {
-    return {
-      isDifferent: false,
-      cartSellerName: '',
-      targetSellerName: targetSeller.sellerName || '',
-      targetSellerId: targetSeller.sellerId || null,
-    };
-  }
-
-  if (!targetSeller || (!targetSeller.sellerId && !targetSeller.sellerName)) {
+  
+    let cartSeller = null;
+    for (const item of cartItems) {
+      const info = extractSellerInfo(item);
+      if (info.sellerId || info.sellerName) {
+        cartSeller = info;
+        break;
+      }
+    }
+  
+    if (!cartSeller && cachedSeller) {
+      cartSeller = {
+        sellerId: cachedSeller.sellerId !== null && cachedSeller.sellerId !== undefined ? String(cachedSeller.sellerId) : null,
+        sellerName: String(cachedSeller.sellerName || '').trim(),
+      };
+    }
+  
+    // If still missing seller info for cart items, fetch details of first cart item
+    if ((!cartSeller || (!cartSeller.sellerId && !cartSeller.sellerName)) && cartItems.length > 0) {
+      const resolved = await resolveSellerInfo(cartItems[0]);
+      if (resolved.sellerId || resolved.sellerName) {
+        cartSeller = resolved;
+        await saveActiveCartSeller(cartSeller);
+      }
+    }
+  
+    if (!cartSeller || (!cartSeller.sellerId && !cartSeller.sellerName)) {
+      return {
+        isDifferent: false,
+        cartSellerName: '',
+        targetSellerName: targetSeller.sellerName || '',
+        targetSellerId: targetSeller.sellerId || null,
+      };
+    }
+  
+    if (!targetSeller || (!targetSeller.sellerId && !targetSeller.sellerName)) {
+      return {
+        isDifferent: false,
+        cartSellerName: cartSeller.sellerName || '',
+        targetSellerName: '',
+        targetSellerId: null,
+      };
+    }
+  
+    if (cartSeller.sellerId && targetSeller.sellerId) {
+      const isDifferent = String(cartSeller.sellerId) !== String(targetSeller.sellerId);
+      return {
+        isDifferent,
+        cartSellerName: cartSeller.sellerName || `Seller #${cartSeller.sellerId}`,
+        cartSellerId: cartSeller.sellerId || null,
+        targetSellerName: targetSeller.sellerName || `Seller #${targetSeller.sellerId}`,
+        targetSellerId: targetSeller.sellerId,
+      };
+    }
+  
+    if (cartSeller.sellerName && targetSeller.sellerName) {
+      const isDifferent = cartSeller.sellerName.toLowerCase() !== targetSeller.sellerName.toLowerCase();
+      return {
+        isDifferent,
+        cartSellerName: cartSeller.sellerName,
+        cartSellerId: cartSeller.sellerId || null,
+        targetSellerName: targetSeller.sellerName,
+        targetSellerId: targetSeller.sellerId,
+      };
+    }
+  
     return {
       isDifferent: false,
       cartSellerName: cartSeller.sellerName || '',
-      targetSellerName: '',
-      targetSellerId: null,
-    };
-  }
-
-  if (cartSeller.sellerId && targetSeller.sellerId) {
-    const isDifferent = String(cartSeller.sellerId) !== String(targetSeller.sellerId);
-    return {
-      isDifferent,
-      cartSellerName: cartSeller.sellerName || `Seller #${cartSeller.sellerId}`,
       cartSellerId: cartSeller.sellerId || null,
-      targetSellerName: targetSeller.sellerName || `Seller #${targetSeller.sellerId}`,
+      targetSellerName: targetSeller.sellerName || '',
       targetSellerId: targetSeller.sellerId,
     };
-  }
-
-  if (cartSeller.sellerName && targetSeller.sellerName) {
-    const isDifferent = cartSeller.sellerName.toLowerCase() !== targetSeller.sellerName.toLowerCase();
-    return {
-      isDifferent,
-      cartSellerName: cartSeller.sellerName,
-      cartSellerId: cartSeller.sellerId || null,
-      targetSellerName: targetSeller.sellerName,
-      targetSellerId: targetSeller.sellerId,
-    };
-  }
-
-  return {
-    isDifferent: false,
-    cartSellerName: cartSeller.sellerName || '',
-    cartSellerId: cartSeller.sellerId || null,
-    targetSellerName: targetSeller.sellerName || '',
-    targetSellerId: targetSeller.sellerId,
-  };
-*/
+  */
 };
 
 const LOCAL_CART_DETAILS_KEY = 'LOCAL_CART_DETAILS_V2';
@@ -257,7 +251,7 @@ export const getLocalCartDetails = async () => {
 export const saveLocalCartDetails = async (items) => {
   try {
     await AsyncStorage.setItem(LOCAL_CART_DETAILS_KEY, JSON.stringify(items || []));
-  } catch (e) {}
+  } catch (e) { }
 };
 
 export const updateLocalCartDetails = (updateItems) => {
@@ -312,8 +306,8 @@ export const syncCartItemsWithServer = (serverItems = [], localItems = []) => {
       result.push(serverItem);
     } else if (matches.length === 1) {
       result.push({
-        ...serverItem,
         ...matches[0],
+        ...serverItem,
         qty: serverQty,
       });
     } else {
@@ -340,6 +334,32 @@ export const syncCartItemsWithServer = (serverItems = [], localItems = []) => {
   return result;
 };
 
+export const extractCartItems = (serverData) => {
+  if (!serverData) return [];
+  if (Array.isArray(serverData)) {
+    if (serverData.length > 0 && Array.isArray(serverData[0]?.items)) {
+      const allItems = [];
+      serverData.forEach((seller) => {
+        if (Array.isArray(seller.items)) {
+          seller.items.forEach((item) => {
+            allItems.push({
+              ...item,
+              seller_id: item.seller_id || seller.seller_id,
+              seller_name: item.seller_name || seller.seller_name,
+            });
+          });
+        }
+      });
+      return allItems;
+    }
+    return serverData;
+  }
+  if (serverData && typeof serverData === 'object' && Array.isArray(serverData.data)) {
+    return extractCartItems(serverData.data);
+  }
+  return [];
+};
+
 export default {
   extractSellerInfo,
   resolveSellerInfo,
@@ -353,4 +373,5 @@ export default {
   getCartSkuId,
   isCartItemMatching,
   syncCartItemsWithServer,
+  extractCartItems,
 };

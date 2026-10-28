@@ -10,8 +10,9 @@ import {
   ScrollView,
   StatusBar,
 } from 'react-native';
-import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
+import { getAddressListApi, deleteAddressApi, getToken, getuserId } from '../../../Api/Api';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
@@ -54,64 +55,9 @@ export default function AllAddress() {
       const token = await getToken();
       const ID = await getuserId();
 
-      let success = false;
-      let errorMsg = 'Failed to delete address.';
-
-      // 1. Try FormData request
-      try {
-        const formData = new FormData();
-        formData.append('address_id', String(addressId));
-        if (ID) formData.append('user_id', String(ID));
-
-        const response = await fetch(`${BASE_URL}delete-address`, {
-          method: 'POST',
-          headers: {
-            Authorization: token ? `Bearer ${token}` : '',
-          },
-          body: formData,
-        });
-
-        const text = await response.text();
-        let result = {};
-        try { result = JSON.parse(text); } catch (e) { }
-
-        if (response.ok && (result.status === 200 || result.status === '200' || result.status === true || result.success)) {
-          success = true;
-        } else if (result.message) {
-          errorMsg = result.message;
-        }
-      } catch (e) {
-        console.log('Delete FormData error:', e);
-      }
-
-      // 2. Fallback to JSON request if FormData failed
-      if (!success) {
-        try {
-          const response = await fetch(`${BASE_URL}delete-address`, {
-            method: 'POST',
-            headers: {
-              Authorization: token ? `Bearer ${token}` : '',
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              address_id: addressId,
-              user_id: ID,
-            }),
-          });
-
-          const text = await response.text();
-          let result = {};
-          try { result = JSON.parse(text); } catch (e) { }
-
-          if (response.ok && (result.status === 200 || result.status === '200' || result.status === true || result.success)) {
-            success = true;
-          } else if (result.message) {
-            errorMsg = result.message;
-          }
-        } catch (e) {
-          console.log('Delete JSON error:', e);
-        }
-      }
+      const result = await deleteAddressApi(addressId, ID);
+      const success = result.success;
+      const errorMsg = result.error || 'Failed to delete address.';
 
       if (success) {
         requestForAllAddress();
@@ -137,6 +83,10 @@ export default function AllAddress() {
 
   const openAddAddress = () => {
     Navigation.navigate('MapScreen');
+  };
+
+  const openAddOtherAddress = () => {
+    Navigation.navigate('SaveAddress');
   };
 
   const parseAddressList = (data) => {
@@ -190,65 +140,10 @@ export default function AllAddress() {
   const requestForAllAddress = async () => {
     try {
       setLoading(true);
-      const token = await getToken();
       const ID = await getuserId();
 
-      let list = [];
-
-      // 1. Try FormData request (PHP APIs expect $_POST['user_id'])
-      try {
-        const formData = new FormData();
-        if (ID) formData.append('user_id', String(ID));
-
-        const response = await fetch(`${BASE_URL}list-address`, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            Authorization: token ? `Bearer ${token}` : '',
-          },
-          body: formData,
-        });
-
-        const responseText = await response.text();
-        let data = {};
-        try {
-          data = JSON.parse(responseText);
-        } catch (e) {
-          console.log('List address FormData parse error:', responseText);
-        }
-        list = parseAddressList(data);
-      } catch (e) {
-        console.log('FormData fetch error:', e);
-      }
-
-      // 2. Fallback to JSON request if FormData returned empty
-      if (!list || list.length === 0) {
-        try {
-          const bodyData = {};
-          if (ID) bodyData.user_id = ID;
-
-          const jsonResponse = await fetch(`${BASE_URL}list-address`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Accept: 'application/json',
-              Authorization: token ? `Bearer ${token}` : '',
-            },
-            body: JSON.stringify(bodyData),
-          });
-
-          const jsonText = await jsonResponse.text();
-          let jsonData = {};
-          try {
-            jsonData = JSON.parse(jsonText);
-          } catch (e) {
-            console.log('List address JSON parse error:', jsonText);
-          }
-          list = parseAddressList(jsonData);
-        } catch (e) {
-          console.log('JSON fetch error:', e);
-        }
-      }
+      const res = await getAddressListApi(ID);
+      const list = parseAddressList(res.data);
 
       setAddressList(list);
     } catch (error) {
@@ -286,16 +181,47 @@ export default function AllAddress() {
 
         {/* Show only when address list has data */}
         {addressList?.length > 0 && (
-          <TouchableOpacity
-            onPress={openAddAddress}
-            style={styles.addBtn}>
-            <MaterialCommunityIcons
-              name="plus"
-              size={18}
-              color={AllColors.primary}
-            />
-            <Text style={styles.addBtnText}>Add New Address</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+            <TouchableOpacity
+              onPress={openAddAddress}
+              style={[
+                styles.addBtn,
+                {
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 8,
+                  backgroundColor: isDarkMode ? '#1E293B' : '#F1F5F9',
+                  borderWidth: 1.5,
+                  borderColor: isDarkMode ? '#334155' : '#CBD5E1',
+                },
+              ]}>
+              <Ionicons
+                name="navigate-outline"
+                size={15}
+                color={AllColors.primary}
+              />
+              <Text style={[styles.addBtnText, { fontSize: 12, fontWeight: '700', marginLeft: 5 }]}>Live Location</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={openAddOtherAddress}
+              style={[
+                styles.addBtn,
+                {
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 8,
+                  backgroundColor: AllColors.primary,
+                },
+              ]}>
+              <MaterialCommunityIcons
+                name="plus"
+                size={15}
+                color="#FFF"
+              />
+              <Text style={[styles.addBtnText, { color: '#FFF', fontSize: 12, fontWeight: '700', marginLeft: 4 }]}>Other Location</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -326,18 +252,45 @@ export default function AllAddress() {
               Add a new address to continue shopping.
             </Text>
 
-            <TouchableOpacity
-              style={styles.emptyButton}
-              onPress={openAddAddress}>
-              <MaterialCommunityIcons
-                name="plus"
-                size={18}
-                color={AllColors.white}
-              />
-              <Text style={styles.emptyButtonText}>
-                Add New Address
-              </Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'column', gap: 14, marginTop: 26, width: '100%', alignItems: 'center' }}>
+              <TouchableOpacity
+                style={[
+                  styles.emptyButton,
+                  {
+                    marginTop: 0,
+                    width: '88%',
+                    height: 50,
+                    justifyContent: 'center',
+                    backgroundColor: isDarkMode ? '#1E293B' : '#F1F5F9',
+                    borderWidth: 1.5,
+                    borderColor: AllColors.primary,
+                    paddingHorizontal: 20,
+                  },
+                ]}
+                onPress={openAddAddress}>
+                <Ionicons
+                  name="navigate-outline"
+                  size={18}
+                  color={AllColors.primary}
+                />
+                <Text style={[styles.emptyButtonText, { color: AllColors.primary, fontSize: 15, fontWeight: '700', marginLeft: 8 }]}>
+                  Live Location
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.emptyButton, { marginTop: 0, width: '88%', height: 50, justifyContent: 'center', paddingHorizontal: 20 }]}
+                onPress={openAddOtherAddress}>
+                <MaterialCommunityIcons
+                  name="plus"
+                  size={20}
+                  color={AllColors.white}
+                />
+                <Text style={[styles.emptyButtonText, { fontSize: 15, fontWeight: '700', marginLeft: 8 }]}>
+                  Other Location
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
       ) : (

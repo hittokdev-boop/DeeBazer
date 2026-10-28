@@ -16,7 +16,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
-import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
+import { getOrderDetailsApi, getToken, getuserId } from '../../../Api/Api';
 import { clearActiveCartSeller } from '../../../Common/sellerUtils';
 
 export default function OrderSuccess() {
@@ -68,21 +68,7 @@ export default function OrderSuccess() {
           ? Number(targetId)
           : targetId;
 
-      const requestBody = {
-        order_id: parsedOrderId,
-      };
-
-      const response = await fetch(`${BASE_URL}order-details`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      const result = await response.json();
+      const result = await getOrderDetailsApi(parsedOrderId);
       const rawOrderData =
         result?.data_order ||
         result?.data?.order ||

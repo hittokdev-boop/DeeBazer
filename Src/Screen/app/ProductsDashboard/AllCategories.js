@@ -18,7 +18,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
-import { BASE_URL } from '../../../Api/Api';
+import { getCategoriesApi, getSubCategoriesApi } from '../../../Api/Api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SIDEBAR_WIDTH = 92;
@@ -51,11 +51,9 @@ export default function AllCategories() {
     setHasError(false);
 
     try {
-      const response = await fetch(`${BASE_URL}categories`, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-      });
-      const json = await response.json();
+      const response = await getCategoriesApi();
+      // requestApi returns the parsed JSON directly, e.g. { status: 200, data: [...] }
+      const json = response || {};
 
       if (json?.data && Array.isArray(json.data) && json.data.length > 0) {
         setCategories(json.data);
@@ -97,16 +95,9 @@ export default function AllCategories() {
 
     setIsLoadingSubCategories(true);
     try {
-      const formData = new FormData();
-      formData.append('category_id', String(catId));
-
-      const response = await fetch(`${BASE_URL}sub-category`, {
-        method: 'POST',
-        headers: { Accept: 'application/json' },
-        body: formData,
-      });
-
-      const json = await response.json();
+      const response = await getSubCategoriesApi(catId);
+      // requestApi returns the parsed JSON directly
+      const json = response || {};
       const list =
         json?.data ||
         json?.subcategories ||

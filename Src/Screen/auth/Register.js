@@ -17,7 +17,7 @@ import AllColors from '../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../Constants/ScreenUtils';
 import CustomAlert from '../../Common/Alert';
 import { launchImageLibrary } from 'react-native-image-picker';
-import { BASE_URL, setToken, getDeviceId, setuserId, setMobile as saveMobile, setPassword as saveApiPassword } from '../../Api/Api';
+import { registerApi, sendOtpApi, setToken, getDeviceId, setuserId, setMobile as saveMobile, setPassword as saveApiPassword } from '../../Api/Api';
 import { getFcmToken } from '../../Services/NotificationService';
 import { useNavigation } from "@react-navigation/native";
 import LottieView from 'lottie-react-native';
@@ -50,30 +50,15 @@ const Register = () => {
       const cleanEmail = email.trim().toLowerCase();
       const cleanPassword = password.trim().toLowerCase();
 
-      const formData = new FormData();
-      formData.append('name', name);
-      formData.append('email', cleanEmail);
-      formData.append('mobile', mobile);
-      formData.append('password', cleanPassword);
-      formData.append('role', 'user');
-
-      const response = await fetch(`${BASE_URL}register`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-        },
-        body: formData,
+      const response = await registerApi({
+        name,
+        email: cleanEmail,
+        mobile,
+        password: cleanPassword,
+        role: 'user',
       });
 
-      const responseText = await response.text();
-      // console.log('Register Raw Response:', responseText);
-
-      let data = {};
-      try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        console.log("Failed to parse JSON response");
-      }
+      const data = response.data || {};
 
       if (response.ok) {
         await saveApiPassword(cleanPassword);
@@ -83,20 +68,14 @@ const Register = () => {
           const deviceId = await getDeviceId();
           const fcmToken = await getFcmToken();
 
-          const otpFormData = new FormData();
-          otpFormData.append('mobile', mobile);
-          otpFormData.append('device_id', deviceId);
-          if (fcmToken) {
-            otpFormData.append('fcm_token', fcmToken);
-          }
-          otpFormData.append('device_type', Platform.OS);
-
-          const otpResponse = await fetch(`${BASE_URL}send-otp`, {
-            method: 'POST',
-            body: otpFormData,
+          const otpResponse = await sendOtpApi({
+            mobile,
+            deviceId,
+            fcmToken,
+            deviceType: Platform.OS,
           });
 
-          const otpData = await otpResponse.json();
+          const otpData = otpResponse.data || {};
 
           if (otpResponse.ok) {
             if (otpData.user_id) await setuserId(otpData.user_id);

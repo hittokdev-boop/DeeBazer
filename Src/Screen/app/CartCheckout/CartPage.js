@@ -20,9 +20,21 @@ import { Rating } from '@kolking/react-native-rating';
 import AllColors from '../../../Constants/Color';
 import AntDesign from 'react-native-vector-icons/AntDesign'
 import Feather from 'react-native-vector-icons/Feather'
-import { BASE_URL, getToken, getuserId } from '../../../Api/Api';
+import {
+  addToCartApi,
+  removeFromCartApi,
+  addToWishlistApi,
+  getCartViewApi,
+  createOrderApi,
+  createCashfreeOrderApi,
+  getUserProfileApi,
+  getAddressListApi,
+  deleteAddressApi,
+  getToken,
+  getuserId,
+} from '../../../Api/Api';
 import { ScrollView } from 'react-native-gesture-handler';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons'
 import RazorpayCheckout from "react-native-razorpay";
@@ -37,12 +49,18 @@ import {
   clearActiveCartSeller,
   getCartSkuId,
   isCartItemMatching,
+  extractCartItems,
 } from '../../../Common/sellerUtils';
 const CartPage = () => {
+  const route = useRoute();
   const { theme, isDarkMode } = useTheme();
-  const [cartItems, setCartItems] = useState([])
+  const [cartItems, setCartItems] = useState([]);
+  const [sellerGroups, setSellerGroups] = useState([]);
+  const [sellerSelections, setSellerSelections] = useState({});
+  const [updatingSellerId, setUpdatingSellerId] = useState(null);
+  const [unavailableItems, setUnavailableItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [extraData, setExtraData] = useState({})
+  const [extraData, setExtraData] = useState({});
   const [couponCode, setCouponCode] = useState('DEEBAZER50');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
@@ -59,6 +77,11 @@ const CartPage = () => {
 
   const billSummary = useMemo(() => {
     try {
+      const serverSubTotal = extraData?.sub_total != null ? Number(extraData.sub_total) : null;
+      const serverDiscount = extraData?.discount != null ? Number(extraData.discount) : null;
+      const serverDelivery = extraData?.delivery_charge != null ? Number(extraData.delivery_charge) : null;
+      const serverTotal = extraData?.total_amount != null ? Number(extraData.total_amount) : null;
+
       const discountedSum = cartItems.reduce(
         (sum, it) => sum + Number(it.discount_total ?? it.discount_price ?? 0),
         0
@@ -69,16 +92,19 @@ const CartPage = () => {
         0
       );
 
-      const discount = actualSum - discountedSum;
-      const delivery_charge = Number(extraData?.delivery_charge ?? 0);
-      const total_amount = discountedSum + delivery_charge - couponDiscount;
+      const discount = serverDiscount !== null ? serverDiscount : Number((actualSum - discountedSum).toFixed(2));
+      const sub_total = serverSubTotal !== null ? serverSubTotal : Number(actualSum.toFixed(2));
+      const delivery_charge = serverDelivery !== null ? serverDelivery : Number(extraData?.delivery_charge ?? 0);
+      const calculatedTotal = serverTotal !== null
+        ? Math.max(0, serverTotal - couponDiscount)
+        : Math.max(0, discountedSum + delivery_charge - couponDiscount);
 
       return {
-        sub_total: Number(actualSum.toFixed(2)),
+        sub_total: Number(sub_total.toFixed(2)),
         discount: Number(discount.toFixed(2)),
         coupon_discount: Number(couponDiscount.toFixed(2)),
-        delivery_charge,
-        total_amount: Number(Math.max(0, total_amount).toFixed(2)),
+        delivery_charge: Number(delivery_charge.toFixed(2)),
+        total_amount: Number(calculatedTotal.toFixed(2)),
       };
     } catch (e) {
       return {
@@ -111,24 +137,14 @@ const CartPage = () => {
       Alert.alert('Error', 'This cart item is missing its SKU.');
       return;
     }
-    const sellerId = product?.seller_id ?? product?.sellerId ?? product?.vendor_id;
     const sellerSkuId = product?.seller_sku_id;
     try {
-      const formData = new FormData();
-      formData.append("product_sku_id", String(skuId));
-      formData.append("qty", 1);
-      formData.append("mode", mode);
-      if (sellerSkuId) formData.append("seller_sku_id", String(sellerSkuId));
-
-      const response = await fetch(`${BASE_URL}cart-to-add`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: formData,
-      });
-      const result = await response.json();
+      const result = await addToCartApi(
+        skuId,
+        1,
+        sellerSkuId ? { seller_sku_id: sellerSkuId } : {},
+        mode
+      );
 
       console.log("Cart Update:", result);
 
@@ -169,7 +185,6 @@ const CartPage = () => {
   };
 
   const increaseQty = async (product) => {
-    console.log(product, 'jhkjh')
     const currentQty = Number(product.qty) || 1;
     const newQty = currentQty + 1;
     const targetSkuId = getCartSkuId(product);
@@ -200,6 +215,31 @@ const CartPage = () => {
       const nextSummary = computeExtraDataFromCart(updated);
       setExtraData(nextSummary);
       return updated;
+    });
+
+    setSellerGroups((prev) => {
+      if (!Array.isArray(prev)) return [];
+      return prev.map((seller) => {
+        const updatedItems = (seller.items || []).map((item) => {
+          if (!isCartItemMatching(item, product)) return item;
+          const prevQty = Number(item.qty) || 1;
+          const perUnitFromDiscount =
+            item.unit_price || (Number(item.discount_price) / prevQty) || Number(item.actual_price) || 0;
+          const unitPrice = Number(perUnitFromDiscount) || Number(item.actual_price || 0);
+          const actualTotal = Number(item.actual_price || 0) * newQty;
+          const discountTotal = Number((unitPrice * newQty).toFixed(2));
+
+          return {
+            ...item,
+            unit_price: unitPrice,
+            qty: newQty,
+            actual_total: Number(actualTotal.toFixed(2)),
+            discount_total: discountTotal,
+            discount_price: discountTotal,
+          };
+        });
+        return { ...seller, items: updatedItems };
+      });
     });
 
     await updateCartQty(product, 'add');
@@ -243,6 +283,31 @@ const CartPage = () => {
       return updated;
     });
 
+    setSellerGroups((prev) => {
+      if (!Array.isArray(prev)) return [];
+      return prev.map((seller) => {
+        const updatedItems = (seller.items || []).map((item) => {
+          if (!isCartItemMatching(item, product)) return item;
+          const prevQty = Number(item.qty) || 1;
+          const perUnitFromDiscount =
+            item.unit_price || (Number(item.discount_price) / prevQty) || Number(item.actual_price) || 0;
+          const unitPrice = Number(perUnitFromDiscount) || Number(item.actual_price || 0);
+          const actualTotal = Number(item.actual_price || 0) * newQty;
+          const discountTotal = Number((unitPrice * newQty).toFixed(2));
+
+          return {
+            ...item,
+            unit_price: unitPrice,
+            qty: newQty,
+            actual_total: Number(actualTotal.toFixed(2)),
+            discount_total: discountTotal,
+            discount_price: discountTotal,
+          };
+        });
+        return { ...seller, items: updatedItems };
+      });
+    });
+
     await updateCartQty(product, 'sub');
   };
 
@@ -260,69 +325,72 @@ const CartPage = () => {
       return;
     }
 
-    try {
-      const formData = new FormData();
-      formData.append("product_sku_id", String(skuId));
-      if (sellerSkuId) {
-        formData.append("seller_sku_id", String(sellerSkuId));
-      }
+    // Save previous state for rollback if network fails
+    const prevCartItems = [...cartItems];
+    const prevSellerGroups = [...sellerGroups];
+    const prevExtraData = { ...extraData };
 
-      const response = await fetch(`${BASE_URL}cart-remove`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-        body: formData,
-      });
+    // 1. Optimistically update cartItems
+    const updatedCartItems = cartItems.filter((item) => {
+      return isObject
+        ? !isCartItemMatching(item, itemOrId)
+        : getCartSkuId(item) !== skuId;
+    });
+    setCartItems(updatedCartItems);
 
-      const result = await response.json();
-
-      if (response.ok && result.status === 200) {
-        setCartItems((prev) => {
-          const updated = prev.filter((item) => {
-            return isObject
-              ? !isCartItemMatching(item, itemOrId)
-              : getCartSkuId(item) !== skuId;
-          });
-          if (updated.length === 0) {
-            clearActiveCartSeller();
-          }
-          const nextSummary = computeExtraDataFromCart(updated);
-          setExtraData(nextSummary);
-          return updated;
+    // 2. Optimistically update sellerGroups
+    const updatedSellerGroups = sellerGroups
+      .map((seller) => {
+        const remainingItems = (seller.items || []).filter((item) => {
+          return isObject
+            ? !isCartItemMatching(item, itemOrId)
+            : getCartSkuId(item) !== skuId;
         });
+        return {
+          ...seller,
+          items: remainingItems,
+        };
+      })
+      .filter((seller) => seller.items && seller.items.length > 0);
+    setSellerGroups(updatedSellerGroups);
+
+    if (updatedCartItems.length === 0) {
+      clearActiveCartSeller();
+    }
+    const nextSummary = computeExtraDataFromCart(updatedCartItems);
+    setExtraData(nextSummary);
+
+    try {
+      const result = await removeFromCartApi(skuId, sellerSkuId, userid);
+      const isSuccess = result?.status == 200 || result?.status === '200' || result?.success;
+
+      if (!isSuccess) {
+        // Rollback state if server rejected removal
+        setCartItems(prevCartItems);
+        setSellerGroups(prevSellerGroups);
+        setExtraData(prevExtraData);
+        Alert.alert("Error", result?.message || "Failed to remove item");
+        CartView();
       } else {
-        Alert.alert("Error", result.message || "Failed to remove item");
+        // Quietly sync cart in background
+        CartView();
       }
     } catch (error) {
       console.log("Remove Cart Error:", error);
+      // Rollback state on network error
+      setCartItems(prevCartItems);
+      setSellerGroups(prevSellerGroups);
+      setExtraData(prevExtraData);
       Alert.alert("Error", "Something went wrong");
+      CartView();
     }
   };
   const moveToWishlist = async (item) => {
     try {
-      const token = await getToken();
       const skuId = getCartSkuId(item);
       const sellerSkuId = item?.seller_sku_id;
 
-      // Add to Wishlist
-      const formData = new FormData();
-      formData.append("product_sku_id", String(skuId));
-      if (sellerSkuId) {
-        formData.append("seller_sku_id", String(sellerSkuId));
-      }
-
-      const response = await fetch(`${BASE_URL}wishlist-add`, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const result = await response.json();
+      const result = await addToWishlistApi(skuId, sellerSkuId);
       if (result.status === 200 || result.success) {
         await removeItem(item);
 
@@ -405,6 +473,63 @@ const CartPage = () => {
       );
       return;
     }
+
+    if (Array.isArray(unavailableItems) && unavailableItems.length > 0) {
+      Alert.alert(
+        "Unavailable Items in Cart",
+        "Your cart contains items that are currently unavailable. Please remove them before proceeding with checkout."
+      );
+      return;
+    }
+
+    if (Array.isArray(sellerGroups) && sellerGroups.length > 0) {
+      for (const seller of sellerGroups) {
+        const sid = String(seller.seller_id);
+        const sel = sellerSelections[sid];
+        const sName = seller.seller_name || `Seller #${sid}`;
+
+        if (seller.delivery_error) {
+          Alert.alert(
+            "Delivery Error",
+            `${sName}: ${seller.delivery_error}. Please select Store Pickup or choose another delivery address.`
+          );
+          return;
+        }
+
+        const hasUnavailable = (seller.items || []).some(
+          (it) => it.available === false || it.available_stock === 0
+        );
+        if (hasUnavailable) {
+          Alert.alert(
+            "Unavailable Product",
+            `One or more items from ${sName} are out of stock. Please remove them before checkout.`
+          );
+          return;
+        }
+
+        if (!sel || !sel.mode) {
+          Alert.alert(
+            "Choose Delivery Method",
+            `Please select Home Delivery or Store Pickup for ${sName}.`
+          );
+          return;
+        }
+        if (
+          sel.mode === 'delivery' &&
+          Array.isArray(seller.delivery_options) &&
+          seller.delivery_options.length > 0 &&
+          !sel.option &&
+          !seller.selected_option
+        ) {
+          Alert.alert(
+            "Select Delivery Partner",
+            `Please choose a delivery partner for ${sName}.`
+          );
+          return;
+        }
+      }
+    }
+
     setIsPaymentModalVisible(true);
   };
 
@@ -435,17 +560,9 @@ const CartPage = () => {
             notify_url: "https://deebazar.com/payment-notify"
           };
 
-          const cashfreeResponse = await fetch(`${BASE_URL}payment/cashfree/create-order`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(cashfreeBody),
-          });
-
-          const cashfreeResult = await cashfreeResponse.json();
-          if (cashfreeResponse.ok && (cashfreeResult.status === "success" || cashfreeResult.checkout_url)) {
+          const cashfreeRes = await createCashfreeOrderApi(cashfreeBody);
+          const cashfreeResult = cashfreeRes.data || {};
+          if (cashfreeRes.ok && (cashfreeResult.status === "success" || cashfreeResult.checkout_url)) {
             checkoutUrl = cashfreeResult.checkout_url;
           } else {
             console.log("Cashfree order creation failed:", cashfreeResult);
@@ -455,52 +572,59 @@ const CartPage = () => {
         }
       }
 
-      const formData = new FormData();
-      if (currentAddressId) {
-        formData.append("address_id", String(currentAddressId));
-      }
-      formData.append("payment_method", String(selectedMethod));
-
-      let response = await fetch(`${BASE_URL}orders`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        },
-        body: formData,
-      });
-
-      let result = await response.json();
-      console.log("Create Order Result:", result);
-
-      // Fallback to JSON if FormData not accepted
-      if (!response.ok && (!result || result.status !== 200)) {
-        const jsonBody = {
-          address_id: currentAddressId ? (isNaN(currentAddressId) ? currentAddressId : Number(currentAddressId)) : undefined,
-          payment_method: String(selectedMethod),
-        };
-        const jsonRes = await fetch(`${BASE_URL}orders`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-          body: JSON.stringify(jsonBody),
+      // Format seller selections: { [seller_id]: { mode: "pickup" } } or { [seller_id]: { mode: "delivery", option: "seller" } }
+      const finalSelections = {};
+      if (Array.isArray(sellerGroups) && sellerGroups.length > 0) {
+        sellerGroups.forEach((s) => {
+          const sid = String(s.seller_id);
+          const sel = sellerSelections[sid] || {};
+          const mode = sel.mode || s.selected_mode || 'delivery';
+          if (mode === 'pickup') {
+            finalSelections[sid] = { mode: 'pickup' };
+          } else {
+            const option = sel.option || s.selected_option || (s.delivery_options?.[0]?.code) || 'seller';
+            finalSelections[sid] = {
+              mode: 'delivery',
+              option: option,
+            };
+          }
         });
-        const jsonResult = await jsonRes.json();
-        if (jsonRes.ok || jsonResult.status === 200) {
-          response = jsonRes;
-          result = jsonResult;
-        }
+      } else if (sellerSelections && Object.keys(sellerSelections).length > 0) {
+        Object.keys(sellerSelections).forEach((sid) => {
+          const sel = sellerSelections[sid];
+          if (sel?.mode === 'pickup') {
+            finalSelections[sid] = { mode: 'pickup' };
+          } else {
+            finalSelections[sid] = {
+              mode: 'delivery',
+              option: sel?.option || 'seller',
+            };
+          }
+        });
       }
+
+      console.log("Placing order payload selections:", JSON.stringify(finalSelections));
+
+      const result = await createOrderApi(currentAddressId, selectedMethod, finalSelections, appliedCoupon?.code);
+      console.log("Create Order Result:", result);
 
       setIsPaymentModalVisible(false);
       setIsPlacingOrder(false);
 
-      const isSuccess = response.ok && (result.status === 200 || result.status === '200' || result.status === 'success' || result.success === true);
+      const isSuccess = result && (result.status === 200 || result.status === '200' || result.status === 'success' || result.success === true);
 
       if (isSuccess) {
+        const orderedCartItems = [...cartItems];
+        const currentSummary = { ...billSummary };
+        const activeDeliveryAddress =
+          addressData && Object.keys(addressData).length > 0
+            ? addressData
+            : (selectedAddress || {
+                name: userProfile?.name || 'Customer',
+                mobile: userProfile?.mobile || '',
+                address: '',
+              });
+
         setCartItems([]);
         setAppliedCoupon(null);
         setCouponDiscount(0);
@@ -522,13 +646,60 @@ const CartPage = () => {
 
         const firstOrderId = Array.isArray(result.order_ids) && result.order_ids.length > 0 ? result.order_ids[0] : null;
         const createdOrderId = firstOrderId || result.order_id || result.data?.id || result.id || result.order?.id || result.order?.order_id || result.data?.order_id;
-        const orderNumber = result.order_number || firstOrderId || result.order?.order_number || result.data?.order_number;
+        const orderNumber = result.order_number || firstOrderId || result.order?.order_number || result.data?.order_number || createdOrderId;
+
+        const constructedOrder = {
+          order_id: createdOrderId,
+          id: createdOrderId,
+          order_number: orderNumber,
+          order_status: "Processing",
+          status: "Processing",
+          delivery_status: "Processing",
+          payment_method: selectedMethod === 'cod' ? 'Cash on Delivery (COD)' : selectedMethod,
+          payment_mode: selectedMethod === 'cod' ? 'Cash on Delivery (COD)' : selectedMethod,
+          payment_type: selectedMethod,
+          items: orderedCartItems.map((item, idx) => ({
+            id: item.id || item.product_id || idx,
+            product_id: item.product_id || item.id,
+            name: item.name || item.product_name || item.title || 'Product',
+            product_name: item.name || item.product_name || item.title || 'Product',
+            img: item.img || item.image || item.product_image || item.thumbnail,
+            image: item.img || item.image || item.product_image || item.thumbnail,
+            selling_price: item.discount_price ?? item.selling_price ?? item.price ?? 0,
+            price: item.discount_price ?? item.selling_price ?? item.price ?? 0,
+            actual_price: item.actual_price ?? item.selling_price ?? item.price ?? 0,
+            qty: item.qty || item.quantity || 1,
+            seller_policy: item.seller_policy || item.policy || null,
+            return_days: item.return_days,
+          })),
+          address_user: activeDeliveryAddress,
+          data_user: activeDeliveryAddress,
+          shipping_address: activeDeliveryAddress,
+          delivery_address: activeDeliveryAddress,
+          user: activeDeliveryAddress,
+          selling_price: currentSummary.sub_total || 0,
+          subtotal: currentSummary.sub_total || 0,
+          amount: currentSummary.sub_total || 0,
+          shipping_fee: currentSummary.delivery_charge || 0,
+          shipping_charge: currentSummary.delivery_charge || 0,
+          delivery_charge: currentSummary.delivery_charge || 0,
+          extra_discount: currentSummary.coupon_discount || currentSummary.discount || 0,
+          coupon_discount: currentSummary.coupon_discount || 0,
+          discount: currentSummary.discount || 0,
+          total_amount: currentSummary.total_amount || 0,
+          net_amount: currentSummary.total_amount || 0,
+          created_at: new Date().toISOString(),
+          created_date: new Date().toISOString(),
+          order_date: new Date().toISOString(),
+          ...(result.data && typeof result.data === 'object' ? result.data : {}),
+          ...(result.order && typeof result.order === 'object' ? result.order : {}),
+        };
 
         navigation.navigate("OrderDetails", {
           order_id: createdOrderId,
           id: createdOrderId,
           order_number: orderNumber,
-          order: result.data || result.order || result,
+          order: constructedOrder,
           payment_method: selectedMethod,
         });
       } else {
@@ -604,12 +775,81 @@ const CartPage = () => {
   useFocusEffect(
     useCallback(() => {
       setLoading(true);
-      CartView();
+      const passedAddressId = route?.params?.selectedAddressId;
+      CartView(passedAddressId || null);
       getUserId();
       setIsModal(false);
-    }, [])
+    }, [route?.params?.selectedAddressId])
   );
-  const CartView = async (selectedAddrId = null) => {
+  const handleSelectMode = (sellerId, mode) => {
+    const sKey = String(sellerId);
+    const current = sellerSelections[sKey] || {};
+    if (current.mode === mode) return;
+
+    const sellerObj = Array.isArray(sellerGroups) ? sellerGroups.find((s) => String(s.seller_id) === sKey) : null;
+    const defaultOption = current.option || sellerObj?.selected_option || sellerObj?.delivery_options?.[0]?.code || 'seller';
+
+    const updatedForSeller = mode === 'pickup'
+      ? { mode: 'pickup' }
+      : { mode: 'delivery', option: defaultOption };
+
+    const nextSelections = {
+      ...sellerSelections,
+      [sKey]: updatedForSeller,
+    };
+    setSellerSelections(nextSelections);
+
+    // Optimistic local update
+    setSellerGroups((prev) =>
+      prev.map((s) => {
+        if (String(s.seller_id) === sKey) {
+          return {
+            ...s,
+            selected_mode: mode,
+            selected_option: mode === 'pickup' ? null : (s.selected_option || defaultOption),
+          };
+        }
+        return s;
+      })
+    );
+
+    CartView(null, nextSelections, sellerId);
+  };
+
+  const handleSelectDeliveryOption = (sellerId, optionCode) => {
+    const sKey = String(sellerId);
+    const current = sellerSelections[sKey] || {};
+    const chosenOption = optionCode || 'seller';
+    if (current.option === chosenOption) return;
+
+    const updatedForSeller = {
+      mode: 'delivery',
+      option: chosenOption,
+    };
+    const nextSelections = {
+      ...sellerSelections,
+      [sKey]: updatedForSeller,
+    };
+    setSellerSelections(nextSelections);
+
+    // Optimistic local update
+    setSellerGroups((prev) =>
+      prev.map((s) => {
+        if (String(s.seller_id) === sKey) {
+          return {
+            ...s,
+            selected_mode: 'delivery',
+            selected_option: chosenOption,
+          };
+        }
+        return s;
+      })
+    );
+
+    CartView(null, nextSelections, sellerId);
+  };
+
+  const CartView = async (selectedAddrId = null, overrideSelections = null, targetSellerId = null) => {
     const userid = await getuserId();
     if (!userid) {
       setRefreshing(false);
@@ -618,50 +858,70 @@ const CartPage = () => {
     }
 
     const currentAddressId = selectedAddrId || addressId || addressData?.id;
-
-    const formData = new FormData();
-    formData.append('user_id', userid);
-    if (currentAddressId) {
-      formData.append('address_id', currentAddressId);
+    if (targetSellerId) {
+      setUpdatingSellerId(targetSellerId);
     }
 
-    try {
-      const token = await getToken();
-      const response = await fetch(`${BASE_URL}cart-view`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: formData,
-      });
+    const activeSelections = overrideSelections !== null ? overrideSelections : sellerSelections;
 
-      const data = await response.json();
+    try {
+      const data = await getCartViewApi(currentAddressId, activeSelections);
       if (data?.address_data?.id) {
         setAddresId(data.address_data.id);
       }
 
-      setAddressData(data.address_data || {});
-      const fetchedItems = (data?.data && Array.isArray(data.data)) ? data.data : [];
-      setCartItems(fetchedItems);
-      setExtraData(data.extra_data || {});
+      setAddressData(data?.address_data || {});
+      setExtraData(data?.extra_data || {});
+      setUnavailableItems(Array.isArray(data?.unavailable) ? data.unavailable : []);
 
-      if (fetchedItems.length === 0) {
-        await clearActiveCartSeller();
+      if (Array.isArray(data?.data)) {
+        const isGrouped = data.data.length > 0 && Array.isArray(data.data[0]?.items);
+        if (isGrouped) {
+          setSellerGroups(data.data);
+          const flat = extractCartItems(data.data);
+          setCartItems(flat);
+
+          // Synchronize selections with backend response
+          const nextSelections = { ...activeSelections };
+          data.data.forEach((s) => {
+            const sid = String(s.seller_id);
+            if (s.selected_mode) {
+              if (s.selected_mode === 'pickup') {
+                nextSelections[sid] = { mode: 'pickup' };
+              } else {
+                nextSelections[sid] = {
+                  mode: 'delivery',
+                  option: s.selected_option || nextSelections[sid]?.option || (s.delivery_options?.[0]?.code) || 'seller',
+                };
+              }
+            }
+          });
+          setSellerSelections(nextSelections);
+
+          if (flat.length === 0) {
+            await clearActiveCartSeller();
+          } else {
+            await saveActiveCartSeller(flat[0]);
+          }
+        } else {
+          setSellerGroups([]);
+          setCartItems(data.data);
+          if (data.data.length === 0) {
+            await clearActiveCartSeller();
+          } else {
+            await saveActiveCartSeller(data.data[0]);
+          }
+        }
       } else {
-        await saveActiveCartSeller(fetchedItems[0]);
+        setSellerGroups([]);
+        setCartItems([]);
+        await clearActiveCartSeller();
       }
 
-      // Fetch user profile info to replace static variables
+      const token = await getToken();
       if (token) {
-        const profileResponse = await fetch(`${BASE_URL}me`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
-          },
-        });
-        const profileData = await profileResponse.json().catch(() => ({}));
+        const profileResponse = await getUserProfileApi();
+        const profileData = profileResponse.data || {};
         if (profileData && profileData.user) {
           setUserProfile(profileData.user);
         }
@@ -671,6 +931,7 @@ const CartPage = () => {
     } finally {
       setRefreshing(false);
       setLoading(false);
+      setUpdatingSellerId(null);
     }
   };
 
@@ -710,50 +971,8 @@ const CartPage = () => {
     const ID = await getuserId();
 
     try {
-      let list = [];
-      try {
-        const formData = new FormData();
-        if (ID) formData.append('user_id', String(ID));
-
-        const response = await fetch(`${BASE_URL}list-address`, {
-          method: 'POST',
-          headers: {
-            Accept: 'application/json',
-            Authorization: token ? `Bearer ${token}` : '',
-          },
-          body: formData,
-        });
-        const text = await response.text();
-        let data = {};
-        try { data = JSON.parse(text); } catch (e) { }
-        list = parseAddressList(data);
-      } catch (e) {
-        console.log('CartPage list-address FormData error:', e);
-      }
-
-      if (!list || list.length === 0) {
-        try {
-          const response = await fetch(`${BASE_URL}list-address`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Accept: 'application/json',
-              Authorization: token ? `Bearer ${token}` : '',
-            },
-            body: JSON.stringify({
-              user_id: ID,
-            }),
-          });
-          const text = await response.text();
-
-          let data = {};
-          try { data = JSON.parse(text); } catch (e) { }
-          list = parseAddressList(data);
-        } catch (e) {
-          console.log('CartPage list-address JSON error:', e);
-        }
-      }
-
+      const res = await getAddressListApi(ID);
+      const list = parseAddressList(res.data);
       setAddressList(list || []);
     } catch (error) {
       console.log('Fetch Error:', error);
@@ -768,7 +987,7 @@ const CartPage = () => {
   const navigation = useNavigation()
   const gotoMAP = () => {
     setIsModal(false);
-    navigation.navigate('MapScreen');
+    navigation.navigate('MapScreen', { fromCart: true, returnScreen: 'CartPage' });
   };
   const confirmUpdate = (addressId) => {
     Alert.alert(
@@ -812,26 +1031,9 @@ const CartPage = () => {
   };
   const handleDelete = async (addressId) => {
     try {
-      const token = await getToken();
+      const result = await deleteAddressApi(addressId);
 
-      const response = await fetch(`${BASE_URL}delete-address`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          address_id: addressId,
-        }),
-      });
-
-      const result = await response.json();
-
-      // console.log('Delete Response:', result);
-
-      if (response.ok && result.status) {
-        // Alert.alert('Success', 'Address deleted successfully.');
-
+      if (result.success || result.ok) {
         setMenuId(null);
 
         if (selectedAddress?.id === addressId) {
@@ -839,7 +1041,7 @@ const CartPage = () => {
         }
 
       } else {
-        Alert.alert('Error', result.message || 'Failed to delete address.');
+        Alert.alert('Error', result?.data?.message || 'Failed to delete address.');
       }
 
     } catch (error) {
@@ -911,7 +1113,16 @@ const CartPage = () => {
       </SafeAreaView>
     );
   }
-  if (isuser && (!cartItems || cartItems.length === 0)) {
+
+  if (loading && (!cartItems || cartItems.length === 0)) {
+    return (
+      <SafeAreaView edges={[]} style={[styles.container, { backgroundColor: theme.bg, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={AllColors.primary} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!loading && isuser && (!cartItems || cartItems.length === 0) && (!unavailableItems || unavailableItems.length === 0)) {
     return (
       <SafeAreaView edges={[]} style={[styles.container, { backgroundColor: theme.bg }]}>
         <ScrollView
@@ -976,19 +1187,21 @@ const CartPage = () => {
 
       </View>
 
-      <View
-      >
-        {/* ================= Product Card ================= */}
+      <View style={{ flex: 1 }}>
+        {/* ================= Product Cards / Seller Packages ================= */}
         <FlatList
-          data={cartItems}
-          keyExtractor={(item, index) => String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${getCartSkuId(item) || index}` : `${getCartSkuId(item) || index}`))}
+          data={sellerGroups.length > 0 ? sellerGroups : cartItems}
+          keyExtractor={(item, index) =>
+            sellerGroups.length > 0
+              ? `seller_${item.seller_id || index}`
+              : String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${getCartSkuId(item) || index}` : `${getCartSkuId(item) || index}`))
+          }
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 170 }}
+          contentContainerStyle={{ paddingTop: 12, paddingBottom: 220 }}
           initialNumToRender={5}
           maxToRenderPerBatch={5}
           windowSize={5}
-          removeClippedSubviews={true}
-          updateCellsBatchingPeriod={50}
+          removeClippedSubviews={false}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -997,94 +1210,523 @@ const CartPage = () => {
               tintColor={AllColors.primary}
             />
           }
-          renderItem={({ item }) => (
-            <View style={[styles.productCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
-              <View style={styles.deliveryTop} />
-
-              <View style={[styles.line, { backgroundColor: isDarkMode ? '#334155' : '#F2F2F2' }]} />
-
-              <View style={styles.productRow}>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  style={styles.productTouchable}
-                  onPress={() =>
-                    navigation.navigate('ProductDetails', {
-                      id: item.product_id || item.id,
-                      product_sku_id: getCartSkuId(item),
-                      sku_id: getCartSkuId(item),
-                      seller_id: item.seller_id || item.sellerId || item.vendor_id || item.seller?.id || item.user_id,
-                      item,
-                    })
-                  }
+          renderItem={({ item }) => {
+            if (sellerGroups.length > 0) {
+              const seller = item;
+              return (
+                <View
+                  style={[
+                    styles.sellerGroupCard,
+                    {
+                      backgroundColor: theme.cardBg,
+                      borderColor: isDarkMode ? '#334155' : '#E2E8F0',
+                    },
+                  ]}
                 >
-                  <Image
-                    source={{ uri: item.image }}
-                    style={[styles.image, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.white }]}
-                  />
+                  {/* Seller Header */}
+                  <View
+                    style={[
+                      styles.sellerHeaderRow,
+                      { borderBottomColor: isDarkMode ? '#334155' : '#F1F5F9' },
+                    ]}
+                  >
+                    <View style={styles.sellerHeaderLeft}>
+                      <View
+                        style={[
+                          styles.sellerIconBox,
+                          {
+                            backgroundColor: isDarkMode
+                              ? 'rgba(247, 22, 112, 0.15)'
+                              : '#FFF1F7',
+                          },
+                        ]}
+                      >
+                        <Feather
+                          name="shopping-bag"
+                          size={15}
+                          color={AllColors.primary}
+                        />
+                      </View>
+                      <Text
+                        style={[styles.sellerGroupTitle, { color: theme.textPrimary }]}
+                        numberOfLines={1}
+                      >
+                        {seller.seller_name || `Seller #${seller.seller_id}`}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.sellerBadge,
+                        { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' },
+                      ]}
+                    >
+                      <Text style={[styles.sellerItemsCount, { color: theme.textSecondary }]}>
+                        {seller.items?.length || 0} {seller.items?.length === 1 ? 'item' : 'items'}
+                      </Text>
+                    </View>
+                  </View>
 
-                  <View style={styles.productInfoWrapper}>
-                    {item.offer ? (
-                      <View style={styles.offerBadge}>
-                        <Text style={styles.offerText}>
-                          {item.offer}
+                  {/* Items for this seller */}
+                  {Array.isArray(seller.items) &&
+                    seller.items.map((prodItem, pIdx) => (
+                      <View
+                        key={String(prodItem.cart_id || prodItem.product_sku_id || pIdx)}
+                        style={[
+                          styles.groupProductItem,
+                          pIdx > 0 && {
+                            borderTopWidth: 1,
+                            borderTopColor: isDarkMode ? '#334155' : '#F1F5F9',
+                          },
+                        ]}
+                      >
+                        <View style={styles.productRow}>
+                          <TouchableOpacity
+                            activeOpacity={0.8}
+                            style={styles.productTouchable}
+                            onPress={() =>
+                              navigation.navigate('ProductDetails', {
+                                id: prodItem.product_id || prodItem.id,
+                                product_sku_id: getCartSkuId(prodItem),
+                                sku_id: getCartSkuId(prodItem),
+                                seller_id: prodItem.seller_id || seller.seller_id,
+                                item: prodItem,
+                              })
+                            }
+                          >
+                            <Image
+                              source={{ uri: prodItem.image }}
+                              style={[
+                                styles.image,
+                                {
+                                  backgroundColor: isDarkMode ? '#0F172A' : AllColors.white,
+                                  borderColor: isDarkMode ? '#334155' : '#F1F5F9',
+                                },
+                              ]}
+                            />
+
+                            <View style={styles.productInfoWrapper}>
+                              {prodItem.offer ? (
+                                <View style={styles.offerBadge}>
+                                  <Text style={styles.offerText}>{prodItem.offer}</Text>
+                                </View>
+                              ) : null}
+
+                              <Text
+                                numberOfLines={2}
+                                style={[styles.productName, { color: theme.textPrimary }]}
+                              >
+                                {prodItem.name}
+                              </Text>
+
+                              {prodItem.available === false || prodItem.available_stock === 0 ? (
+                                <View style={styles.stockBadgeOut}>
+                                  <Text style={styles.stockTextOut}>Out of Stock</Text>
+                                </View>
+                              ) : prodItem.available_stock > 0 && prodItem.available_stock <= 5 ? (
+                                <Text style={styles.stockTextLow}>
+                                  Only {prodItem.available_stock} left!
+                                </Text>
+                              ) : null}
+
+                              <TouchableOpacity
+                                style={styles.wishlistRow}
+                                activeOpacity={0.7}
+                                onPress={() => moveToWishlist(prodItem)}
+                              >
+                                <Feather
+                                  name="heart"
+                                  size={12}
+                                  color={isDarkMode ? '#94A3B8' : '#64748B'}
+                                />
+                                <Text
+                                  style={[
+                                    styles.wishlist,
+                                    { color: isDarkMode ? '#94A3B8' : '#64748B' },
+                                  ]}
+                                >
+                                  Move to wishlist
+                                </Text>
+                              </TouchableOpacity>
+                            </View>
+                          </TouchableOpacity>
+
+                          <View style={styles.productRightCol}>
+                            <View style={styles.qtyBox}>
+                              <TouchableOpacity
+                                style={styles.qtyBtn}
+                                onPress={() => decreaseQty(prodItem)}
+                              >
+                                <Text style={styles.qtyBtnSymbol}>−</Text>
+                              </TouchableOpacity>
+                              <Text style={styles.qtyText}>{prodItem.qty}</Text>
+                              <TouchableOpacity
+                                style={styles.qtyBtn}
+                                onPress={() => increaseQty(prodItem)}
+                              >
+                                <Text style={styles.qtyBtnSymbol}>+</Text>
+                              </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.priceContainer}>
+                              <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>
+                                ₹
+                                {Number(
+                                  prodItem.actual_total ??
+                                  Number(prodItem.actual_price || 0) * Number(prodItem.qty || 1)
+                                ).toFixed(2)}
+                              </Text>
+                              <Text style={[styles.newPrice, { color: theme.textPrimary }]}>
+                                ₹
+                                {Number(
+                                  prodItem.discount_total ?? prodItem.discount_price ?? 0
+                                ).toFixed(2)}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+                    ))}
+
+                  {/* Delivery / Fulfillment Method Box */}
+                  <View
+                    style={[
+                      styles.fulfillmentBox,
+                      {
+                        backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC',
+                        borderColor: isDarkMode ? '#334155' : '#E2E8F0',
+                      },
+                    ]}
+                  >
+                    <View style={styles.fulfillmentHeader}>
+                      <View style={styles.fulfillmentTitleRow}>
+                        <Feather name="truck" size={14} color={AllColors.primary} />
+                        <Text style={[styles.fulfillmentTitle, { color: isDarkMode ? '#CBD5E1' : '#475569' }]}>
+                          Delivery Method
+                        </Text>
+                      </View>
+                      {updatingSellerId === seller.seller_id ? (
+                        <ActivityIndicator size="small" color={AllColors.primary} />
+                      ) : null}
+                    </View>
+
+                    {/* Mode Selection Tabs (Delivery vs Store Pickup) */}
+                    {Array.isArray(seller.modes) && seller.modes.length > 0 && (
+                      <View style={styles.modeTabsRow}>
+                        {seller.modes.map((mode) => {
+                          const isSelected = seller.selected_mode === mode;
+                          const isDelivery = mode === 'delivery';
+                          return (
+                            <TouchableOpacity
+                              key={mode}
+                              activeOpacity={0.7}
+                              style={[
+                                styles.modeTabBtn,
+                                {
+                                  backgroundColor: isSelected
+                                    ? isDarkMode
+                                      ? 'rgba(247, 22, 112, 0.15)'
+                                      : '#FFF1F7'
+                                    : isDarkMode
+                                      ? '#1E293B'
+                                      : '#FFFFFF',
+                                  borderColor: isSelected
+                                    ? AllColors.primary
+                                    : isDarkMode
+                                      ? '#334155'
+                                      : '#CBD5E1',
+                                  marginRight: isDelivery ? 8 : 0,
+                                },
+                              ]}
+                              onPress={() => handleSelectMode(seller.seller_id, mode)}
+                            >
+                              <Feather
+                                name={isDelivery ? 'truck' : 'shopping-bag'}
+                                size={15}
+                                color={isSelected ? AllColors.primary : (isDarkMode ? '#94A3B8' : '#64748B')}
+                              />
+                              <Text
+                                style={[
+                                  styles.modeTabText,
+                                  {
+                                    color: isSelected ? AllColors.primary : theme.textPrimary,
+                                    fontWeight: isSelected ? '700' : '600',
+                                  },
+                                ]}
+                              >
+                                {isDelivery ? 'Delivery' : 'Store Pickup'}
+                              </Text>
+                              {isSelected && (
+                                <Feather
+                                  name="check-circle"
+                                  size={13}
+                                  color={AllColors.primary}
+                                  style={{ marginLeft: 4 }}
+                                />
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {/* Delivery Partner options if Delivery mode is chosen */}
+                    {seller.selected_mode === 'delivery' && (
+                      <View style={styles.deliveryOptionsContainer}>
+                        {Array.isArray(seller.delivery_options) && seller.delivery_options.length > 0 ? (
+                          <>
+                            <Text style={[styles.chooseCourierText, { color: theme.textSecondary }]}>
+                              Choose Courier Partner:
+                            </Text>
+                            {seller.delivery_options.map((opt) => {
+                              const isOptSelected = seller.selected_option === opt.code;
+                              return (
+                                <TouchableOpacity
+                                  key={opt.code}
+                                  activeOpacity={0.7}
+                                  style={[
+                                    styles.courierCard,
+                                    {
+                                      backgroundColor: isOptSelected
+                                        ? isDarkMode
+                                          ? 'rgba(16, 185, 129, 0.15)'
+                                          : '#F0FDF4'
+                                        : isDarkMode
+                                          ? '#1E293B'
+                                          : '#FFFFFF',
+                                      borderColor: isOptSelected
+                                        ? '#10B981'
+                                        : isDarkMode
+                                          ? '#334155'
+                                          : '#E2E8F0',
+                                    },
+                                  ]}
+                                  onPress={() =>
+                                    handleSelectDeliveryOption(seller.seller_id, opt.code)
+                                  }
+                                >
+                                  <View style={styles.courierLeft}>
+                                    <Feather
+                                      name={isOptSelected ? 'check-circle' : 'circle'}
+                                      size={17}
+                                      color={isOptSelected ? '#10B981' : (isDarkMode ? '#64748B' : '#94A3B8')}
+                                    />
+                                    <View style={{ marginLeft: 8 }}>
+                                      <Text
+                                        style={[styles.courierName, { color: theme.textPrimary }]}
+                                      >
+                                        {opt.name || opt.code}
+                                      </Text>
+                                      {opt.days ? (
+                                        <Text
+                                          style={[styles.courierDays, { color: theme.textSecondary }]}
+                                        >
+                                          Estimated delivery: {opt.days} Days
+                                        </Text>
+                                      ) : null}
+                                    </View>
+                                  </View>
+                                  <Text
+                                    style={[
+                                      styles.courierCharge,
+                                      {
+                                        color:
+                                          Number(opt.charge) === 0 ? '#10B981' : theme.textPrimary,
+                                      },
+                                    ]}
+                                  >
+                                    {Number(opt.charge) === 0 ? 'FREE' : `₹${opt.charge}`}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </>
+                        ) : updatingSellerId === seller.seller_id ? (
+                          <View style={{ paddingVertical: 8, alignItems: 'center' }}>
+                            <Text style={{ fontSize: 12, color: theme.textSecondary }}>
+                              Calculating available couriers...
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    )}
+
+                    {/* Store Pickup Banner */}
+                    {seller.selected_mode === 'pickup' && (
+                      <View style={styles.pickupActiveBox}>
+                        <Feather name="check-circle" size={16} color="#059669" />
+                        <Text style={styles.pickupActiveText}>
+                          Store Pickup selected • Free of charge. Collect directly from seller store.
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Delivery Error Notice if any */}
+                    {seller.delivery_error ? (
+                      <View style={styles.deliveryErrorBox}>
+                        <Feather name="alert-circle" size={14} color="#DC2626" />
+                        <Text style={styles.deliveryErrorText}>
+                          {seller.delivery_error}
                         </Text>
                       </View>
                     ) : null}
 
-                    <Text
-                      numberOfLines={2}
-                      style={[styles.productName, { color: theme.textPrimary }]}
-                    >
-                      {item.name}
-                    </Text>
 
-                    <Text style={[styles.size, { color: theme.textSecondary }]}>
-                      {item.short_desc02}
-                    </Text>
-
-                    <TouchableOpacity onPress={() => moveToWishlist(item)}>
-                      <Text style={[styles.wishlist, { color: isDarkMode ? '#94A3B8' : '#555', borderColor: isDarkMode ? '#64748B' : undefined }]}>
-                        Move to wishlist
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-
-                <View>
-                  <View style={styles.qtyBox}>
-                    <TouchableOpacity
-                      onPress={() => decreaseQty(item)}
-                    >
-                      <Text style={styles.qtyBtn}>−</Text>
-                    </TouchableOpacity>
-
-                    <Text style={styles.qtyText}>
-                      {item.qty}
-                    </Text>
-
-                    <TouchableOpacity
-                      onPress={() => increaseQty(item)}
-                    >
-                      <Text style={styles.qtyBtn}>+</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.priceContainer}>
-                    <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>
-                      ₹{Number(item.actual_total ?? (Number(item.actual_price || 0) * Number(item.qty || 1))).toFixed(2)}
-                    </Text>
-
-                    <Text style={[styles.newPrice, { color: theme.textPrimary }]}>
-                      ₹{Number(item.discount_total ?? item.discount_price ?? 0).toFixed(2)}
-                    </Text>
 
                   </View>
                 </View>
+              );
+            }
+
+            // Fallback for flat array items
+            return (
+              <View style={[styles.productCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
+                <View style={styles.deliveryTop} />
+                <View style={[styles.line, { backgroundColor: isDarkMode ? '#334155' : '#F2F2F2' }]} />
+                <View style={styles.productRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.productTouchable}
+                    onPress={() =>
+                      navigation.navigate('ProductDetails', {
+                        id: item.product_id || item.id,
+                        product_sku_id: getCartSkuId(item),
+                        sku_id: getCartSkuId(item),
+                        seller_id: item.seller_id || item.sellerId || item.vendor_id || item.seller?.id || item.user_id,
+                        item,
+                      })
+                    }
+                  >
+                    <Image
+                      source={{ uri: item.image }}
+                      style={[styles.image, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.white }]}
+                    />
+
+                    <View style={styles.productInfoWrapper}>
+                      {item.offer ? (
+                        <View style={styles.offerBadge}>
+                          <Text style={styles.offerText}>
+                            {item.offer}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      <Text
+                        numberOfLines={2}
+                        style={[styles.productName, { color: theme.textPrimary }]}
+                      >
+                        {item.name}
+                      </Text>
+
+                      {item.available === false || item.available_stock === 0 ? (
+                        <View style={styles.stockBadgeOut}>
+                          <Text style={styles.stockTextOut}>Out of Stock</Text>
+                        </View>
+                      ) : item.available_stock > 0 && item.available_stock <= 5 ? (
+                        <Text style={styles.stockTextLow}>
+                          Only {item.available_stock} left!
+                        </Text>
+                      ) : null}
+
+                      <TouchableOpacity onPress={() => moveToWishlist(item)}>
+                        <Text style={[styles.wishlist, { color: isDarkMode ? '#94A3B8' : '#555', borderColor: isDarkMode ? '#64748B' : undefined }]}>
+                          Move to wishlist
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </TouchableOpacity>
+
+                  <View style={styles.productRightCol}>
+                    <View style={styles.qtyBox}>
+                      <TouchableOpacity onPress={() => decreaseQty(item)}>
+                        <Text style={styles.qtyBtnSymbol}>−</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.qtyText}>{item.qty}</Text>
+                      <TouchableOpacity onPress={() => increaseQty(item)}>
+                        <Text style={styles.qtyBtnSymbol}>+</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.priceContainer}>
+                      <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>
+                        ₹{Number(item.actual_total ?? (Number(item.actual_price || 0) * Number(item.qty || 1))).toFixed(2)}
+                      </Text>
+                      <Text style={[styles.newPrice, { color: theme.textPrimary }]}>
+                        ₹{Number(item.discount_total ?? item.discount_price ?? 0).toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
               </View>
-            </View>
-          )}
+            );
+          }}
           ListFooterComponent={
             <>
+              {/* ===== UNAVAILABLE ITEMS SECTION ===== */}
+              {Array.isArray(unavailableItems) && unavailableItems.length > 0 && (
+                <View
+                  style={[
+                    styles.unavailableSectionCard,
+                    {
+                      backgroundColor: theme.cardBg,
+                      borderColor: isDarkMode ? '#7F1D1D' : '#FEE2E2',
+                    },
+                  ]}
+                >
+                  <View style={styles.unavailableHeaderRow}>
+                    <View style={styles.unavailableHeaderLeft}>
+                      <Feather name="alert-triangle" size={16} color="#DC2626" />
+                      <Text
+                        style={[
+                          styles.unavailableTitle,
+                          { color: isDarkMode ? '#FCA5A5' : '#B91C1C' },
+                        ]}
+                      >
+                        Unavailable Items ({unavailableItems.length})
+                      </Text>
+                    </View>
+                    <Text style={[styles.unavailableSubtext, { color: theme.textSecondary }]}>
+                      These items are out of stock and cannot be purchased
+                    </Text>
+                  </View>
+
+                  {unavailableItems.map((uItem, uIdx) => (
+                    <View
+                      key={String(uItem.cart_id || uItem.product_sku_id || uIdx)}
+                      style={[
+                        styles.unavailableItemRow,
+                        uIdx > 0 && {
+                          borderTopWidth: 1,
+                          borderTopColor: isDarkMode ? '#334155' : '#FEE2E2',
+                        },
+                      ]}
+                    >
+                      <Image
+                        source={{ uri: uItem.image }}
+                        style={[styles.unavailableImg, { opacity: 0.6 }]}
+                      />
+                      <View style={styles.unavailableItemInfo}>
+                        <Text
+                          numberOfLines={1}
+                          style={[styles.unavailableItemName, { color: theme.textSecondary }]}
+                        >
+                          {uItem.name}
+                        </Text>
+                        <View style={styles.outOfStockPill}>
+                          <Text style={styles.outOfStockPillText}>Currently Unavailable</Text>
+                        </View>
+                      </View>
+
+                      <TouchableOpacity
+                        style={styles.unavailableRemoveBtn}
+                        onPress={() => requestForRemoveCart(uItem)}
+                      >
+                        <Feather name="trash-2" size={16} color="#DC2626" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               {/* ===== COUPON SECTION ===== */}
               <View style={[styles.couponCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor, borderWidth: isDarkMode ? 1 : 0 }]}>
                 <View style={styles.couponHeader}>
@@ -1244,7 +1886,7 @@ const CartPage = () => {
               style={styles.addAddressMargin}
               onPress={() => {
                 setIsModal(false);
-                navigation.navigate('SaveAddress');
+                navigation.navigate('SaveAddress', { fromCart: true, returnScreen: 'CartPage' });
               }}
             >
               <Text style={styles.addAddressText}>+Add New Address</Text>
@@ -2396,6 +3038,278 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     flex: 1,
   },
+
+  // ===== MULTI-SELLER & FULFILLMENT STYLES =====
+  sellerGroupCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginHorizontal: 12,
+    marginBottom: 14,
+    padding: 14,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  sellerHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    marginBottom: 10,
+  },
+  sellerHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  sellerIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#FFF1F7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  sellerGroupTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+    flex: 1,
+  },
+  sellerBadge: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  sellerItemsCount: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  groupProductItem: {
+    paddingVertical: 8,
+  },
+  productRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  productTouchable: {
+    flexDirection: 'row',
+    flex: 1,
+    alignItems: 'center',
+  },
+  image: {
+    width: 70,
+    height: 70,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  productInfoWrapper: {
+    flex: 1,
+    marginLeft: 10,
+    marginRight: 6,
+  },
+  productName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1E293B',
+    lineHeight: 18,
+  },
+  wishlistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  wishlist: {
+    fontSize: 11,
+    color: '#64748B',
+    marginLeft: 4,
+  },
+  productRightCol: {
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 68,
+  },
+  qtyBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#16A34A',
+    borderRadius: 7,
+    paddingHorizontal: 4,
+    height: 26,
+  },
+  qtyBtn: {
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  qtyBtnSymbol: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  qtyText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    paddingHorizontal: 4,
+  },
+  priceContainer: {
+    alignItems: 'flex-end',
+  },
+  oldPrice: {
+    fontSize: 11,
+    color: '#94A3B8',
+    textDecorationLine: 'line-through',
+  },
+  newPrice: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  fulfillmentBox: {
+    marginTop: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 10,
+  },
+  fulfillmentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  fulfillmentTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  fulfillmentTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+    marginLeft: 5,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  modeTabsRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+  },
+  modeTabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    borderRadius: 9,
+    borderWidth: 1.5,
+  },
+  modeTabText: {
+    fontSize: 13,
+    marginLeft: 5,
+  },
+  deliveryOptionsContainer: {
+    marginTop: 4,
+  },
+  chooseCourierText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  courierCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 9,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    marginBottom: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  courierLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  courierName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  courierDays: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  courierCharge: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  pickupActiveBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    padding: 8,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  pickupActiveText: {
+    color: '#059669',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6,
+    flex: 1,
+  },
+  sellerSummaryFooter: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  sellerSummaryLine: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+  sellerSummaryLabel: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  sellerSummaryVal: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  sellerSummaryTotalLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  sellerSummaryTotalVal: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: AllColors.primary,
+  },
 });
 const loginStyles = StyleSheet.create({
   container: {
@@ -2482,6 +3396,145 @@ const loginStyles = StyleSheet.create({
     color: AllColors.primary,
     fontSize: 14,
     fontWeight: "700",
+  },
+  variantText: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  stockBadgeOut: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  stockTextOut: {
+    color: '#DC2626',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  stockTextLow: {
+    color: '#D97706',
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 3,
+  },
+  deliveryErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginTop: 8,
+  },
+  deliveryErrorText: {
+    color: '#DC2626',
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 6,
+    flex: 1,
+  },
+  sellerSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 8,
+    marginTop: 10,
+    paddingHorizontal: 4,
+  },
+  sellerSummaryCol: {
+    alignItems: 'center',
+  },
+  sellerSummaryLabel: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '500',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+  },
+  sellerSummaryVal: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  sellerSummaryValBold: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: AllColors.primary,
+  },
+  unavailableSectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    marginHorizontal: 12,
+    marginBottom: 14,
+    padding: 14,
+  },
+  unavailableHeaderRow: {
+    marginBottom: 10,
+  },
+  unavailableHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  unavailableTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  unavailableSubtext: {
+    fontSize: 11,
+    marginTop: 2,
+    marginLeft: 22,
+  },
+  unavailableItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  unavailableImg: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+  },
+  unavailableItemInfo: {
+    flex: 1,
+    marginLeft: 10,
+    marginRight: 6,
+  },
+  unavailableItemName: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  unavailableVariantText: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+  outOfStockPill: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginTop: 3,
+  },
+  outOfStockPillText: {
+    color: '#DC2626',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  unavailableRemoveBtn: {
+    padding: 8,
   },
 });
 
