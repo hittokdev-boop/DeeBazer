@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import { useTheme } from '../../../Context/ThemeContext';
 
 import {
@@ -162,6 +162,222 @@ const SubCategoryCardItem = ({ item, isSelected, onPress }) => {
     </TouchableOpacity>
   );
 };
+
+const ProductGridCard = React.memo(({
+  item,
+  isDarkMode,
+  theme,
+  isWishlisted,
+  qty,
+  isOutOfStock,
+  discountPercent,
+  onPress,
+  onToggleWishlist,
+  onAddToCart,
+  onIncreaseQty,
+  onDecreaseQty,
+}) => {
+  const displayPrice = item.discount_price ?? item.price ?? item.actual_price;
+  const showOldPrice = item.actual_price && (item.discount_price || item.price) && item.actual_price !== (item.discount_price ?? item.price);
+
+  return (
+    <View
+      style={[styles.gridCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
+    >
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={onPress}
+      >
+        <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
+          <Image
+            source={{ uri: item.image }}
+            style={styles.dealImage}
+          />
+          <TouchableOpacity
+            style={[
+              styles.wishlistButton,
+              {
+                backgroundColor: isDarkMode
+                  ? (isWishlisted ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
+                  : (isWishlisted ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
+              },
+            ]}
+            onPress={onToggleWishlist}
+          >
+            <Ionicons
+              name={isWishlisted ? "heart" : "heart-outline"}
+              size={18}
+              color={isWishlisted ? "#fff" : AllColors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+
+        <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
+          {item.name}
+        </Text>
+
+        {(displayPrice !== undefined && displayPrice !== null) ? (
+          <View style={styles.priceRow}>
+            <Text style={[styles.price, { color: theme.textPrimary }]}>₹{displayPrice}</Text>
+            {showOldPrice ? (
+              <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.actual_price}</Text>
+            ) : null}
+          </View>
+        ) : null}
+      </TouchableOpacity>
+
+      <View style={styles.cardFooterRow}>
+        {discountPercent ? (
+          <Text style={styles.offer}>
+            {discountPercent}% OFF
+          </Text>
+        ) : (
+          <View />
+        )}
+        <View style={styles.actionContainer}>
+          {isOutOfStock ? (
+            <View style={styles.outOfStockBadge}>
+              <Text style={styles.outOfStockText}>Out of Stock</Text>
+            </View>
+          ) : qty > 0 ? (
+            <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
+              <TouchableOpacity
+                style={styles.qtyBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={onDecreaseQty}>
+                <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
+              </TouchableOpacity>
+
+              <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{qty}</Text>
+
+              <TouchableOpacity
+                style={styles.qtyBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={onIncreaseQty}>
+                <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}
+              onPress={onAddToCart}>
+              <Ionicons
+                name="cart"
+                size={22}
+                color={AllColors.primary}
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+});
+
+const HorizontalProductCard = React.memo(({
+  item,
+  isDarkMode,
+  theme,
+  isWishlisted,
+  qty,
+  isOutOfStock,
+  discountPercent,
+  onPress,
+  onToggleWishlist,
+  onAddToCart,
+  onIncreaseQty,
+  onDecreaseQty,
+}) => {
+  const displayPrice = item.discount_price ?? item.price ?? item.actual_price ?? item.originalPrice;
+  const oldPrice = item.actual_price || item.price;
+  const showOldPrice = oldPrice && displayPrice && oldPrice !== displayPrice;
+
+  return (
+    <View style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
+      <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
+        <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
+          <Image
+            source={{ uri: item.image }}
+            style={styles.dealImage}
+          />
+          <TouchableOpacity
+            style={[
+              styles.wishlistButton,
+              {
+                backgroundColor: isDarkMode
+                  ? (isWishlisted ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
+                  : (isWishlisted ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
+              },
+            ]}
+            onPress={onToggleWishlist}
+          >
+            <Ionicons
+              name={isWishlisted ? "heart" : "heart-outline"}
+              size={16}
+              color={isWishlisted ? "#fff" : AllColors.primary}
+            />
+          </TouchableOpacity>
+        </View>
+
+        <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
+          {item.name}
+        </Text>
+
+        <View style={styles.priceRow}>
+          <Text style={[styles.price, { color: theme.textPrimary }]}>₹{displayPrice}</Text>
+          {showOldPrice ? (
+            <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{oldPrice}</Text>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+
+      <View style={styles.cardFooterRow}>
+        {discountPercent ? (
+          <Text style={styles.offer}>
+            {discountPercent}% OFF
+          </Text>
+        ) : (
+          <View />
+        )}
+        <View style={styles.actionContainer}>
+          {isOutOfStock ? (
+            <View style={styles.outOfStockBadge}>
+              <Text style={styles.outOfStockText}>Out of Stock</Text>
+            </View>
+          ) : qty > 0 ? (
+            <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
+              <TouchableOpacity
+                style={styles.qtyBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={onDecreaseQty}>
+                <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
+              </TouchableOpacity>
+
+              <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{qty}</Text>
+
+              <TouchableOpacity
+                style={styles.qtyBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={onIncreaseQty}>
+                <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}
+              onPress={onAddToCart}>
+              <Ionicons
+                name="cart"
+                size={20}
+                color={AllColors.primary}
+              />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+});
 
 export default function DashBoard() {
   const Navigation = useNavigation();
@@ -1752,8 +1968,9 @@ export default function DashBoard() {
     setBannersLoading(true);
     try {
       const data = await getBannersApi();
-      if (data?.status === 200 && data?.data && data.data.length > 0) {
-        setBanners(data.data);
+      const list = data?.data || (Array.isArray(data) ? data : []);
+      if (Array.isArray(list) && list.length > 0) {
+        setBanners(list);
       } else {
         await fetchLegacyBanners();
       }
@@ -1768,8 +1985,9 @@ export default function DashBoard() {
   const fetchLegacyBanners = async () => {
     try {
       const data = await getLegacyBannerApi();
-      if (data?.data) {
-        setBanners(data.data);
+      const list = data?.data || (Array.isArray(data) ? data : []);
+      if (Array.isArray(list) && list.length > 0) {
+        setBanners(list);
       }
     } catch (err) {
       console.error('Legacy fallback error:', err);
@@ -1915,10 +2133,14 @@ export default function DashBoard() {
     const selectedSubId = subCatId !== undefined ? subCatId : selectedSubCategoryId;
 
     const params = {
+      categoryId: selectedCategoryId && selectedCategoryId !== 'all' ? selectedCategoryId : null,
       category_id: selectedCategoryId && selectedCategoryId !== 'all' ? selectedCategoryId : null,
+      subCategoryId: selectedSubId && selectedSubId !== 'all' ? selectedSubId : null,
       sub_category_id: selectedSubId && selectedSubId !== 'all' ? selectedSubId : null,
+      childCategoryId: childCatId && childCatId !== 'all' ? childCatId : null,
       child_category_id: childCatId && childCatId !== 'all' ? childCatId : null,
       gender: genderParam && genderParam !== 'all' ? genderParam : null,
+      perPage: 12,
       per_page: 12,
       page: pageNum,
     };
@@ -2193,28 +2415,30 @@ export default function DashBoard() {
     return (
       <View style={styles.swiperContainer}>
         <Swiper
-          autoplay
+          key={`banner_swiper_${banners.length}`}
+          autoplay={banners.length > 1}
           autoplayTimeout={4}
-          showsPagination={true}
+          showsPagination={banners.length > 1}
+          removeClippedSubviews={false}
           dotStyle={styles.swiperDot}
           activeDotStyle={styles.swiperActiveDot}
           paginationStyle={styles.swiperPagination}
           height={160}
         >
-          {banners.map((item) => (
+          {banners.map((item, index) => (
             <TouchableOpacity
-              key={item.id}
+              key={item.id ? `banner_${item.id}` : `banner_idx_${index}`}
               activeOpacity={0.9}
-              style={styles.slide}
+              style={[styles.slide, { width: '100%', height: 160 }]}
               onPress={() => {
-                if (item.link) {
-                  // console.log('Banner pressed link:', item.link);
+                if (item.category_id) {
+                  getcategoriesProduct({ id: item.category_id, name: item.category_name || item.name });
                 }
               }}
             >
               <Image
                 source={{ uri: item.image }}
-                style={styles.bannerImage}
+                style={[styles.bannerImage, { width: '100%', height: 160 }]}
                 resizeMode="cover"
               />
               {(item.title || item.name) ? (
@@ -2300,6 +2524,61 @@ export default function DashBoard() {
       </View>
     );
   };
+
+  const renderCategoryItem = useCallback(({ item }) => {
+    const isSelected = String(catagoriesId) === String(item.id);
+    const imgSrc = item?.image || item?.icon || item?.cat_image || item?.category_image;
+    return (
+      <TouchableOpacity
+        onPress={() => getcategoriesProduct(item)}
+        style={[
+          styles.categoryBtn,
+          {
+            backgroundColor: isDarkMode
+              ? (isSelected ? 'rgba(247, 22, 112, 0.25)' : theme.cardBg)
+              : (isSelected ? AllColors.softPinkBg : AllColors.white),
+            borderColor: isDarkMode
+              ? (isSelected ? AllColors.primary : '#334155')
+              : (isSelected ? AllColors.primary : AllColors.divider),
+          },
+        ]}
+      >
+        {imgSrc ? (
+          <Image
+            source={{ uri: imgSrc }}
+            style={styles.catImageStyle}
+            resizeMode="contain"
+          />
+        ) : (
+          <Ionicons
+            name={item.id === 'all' ? 'grid-outline' : 'pricetag-outline'}
+            size={24}
+            color={isSelected ? AllColors.primary : (isDarkMode ? '#CBD5E1' : '#64748B')}
+            style={styles.catIconMargin}
+          />
+        )}
+
+        <Text
+          style={[
+            styles.catNameText,
+            isSelected
+              ? styles.catNameSelected
+              : { color: theme.textPrimary, fontWeight: '600' },
+          ]}
+        >
+          {item.name}
+        </Text>
+      </TouchableOpacity>
+    );
+  }, [catagoriesId, isDarkMode, theme]);
+
+  const renderSubCategoryItem = useCallback(({ item }) => (
+    <SubCategoryCardItem
+      item={item}
+      isSelected={String(selectedSubCategoryId) === String(item.id)}
+      onPress={() => handleSubCategoryClick(item.id)}
+    />
+  ), [selectedSubCategoryId]);
 
   const renderHeader = () => {
     return (
@@ -2457,6 +2736,9 @@ export default function DashBoard() {
           showsHorizontalScrollIndicator={false}
           keyExtractor={(item) => item.id.toString()}
           extraData={catagoriesId}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          windowSize={3}
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingVertical: 12,
@@ -2465,52 +2747,7 @@ export default function DashBoard() {
           directionalLockEnabled={true}
           bounces={false}
           scrollEventThrottle={16}
-          renderItem={({ item }) => {
-            const isSelected = String(catagoriesId) === String(item.id);
-            const imgSrc = item?.image || item?.icon || item?.cat_image || item?.category_image;
-            return (
-              <TouchableOpacity
-                onPress={() => getcategoriesProduct(item)}
-                style={[
-                  styles.categoryBtn,
-                  {
-                    backgroundColor: isDarkMode
-                      ? (isSelected ? 'rgba(247, 22, 112, 0.25)' : theme.cardBg)
-                      : (isSelected ? AllColors.softPinkBg : AllColors.white),
-                    borderColor: isDarkMode
-                      ? (isSelected ? AllColors.primary : '#334155')
-                      : (isSelected ? AllColors.primary : AllColors.divider),
-                  },
-                ]}
-              >
-                {imgSrc ? (
-                  <Image
-                    source={{ uri: imgSrc }}
-                    style={styles.catImageStyle}
-                    resizeMode="contain"
-                  />
-                ) : (
-                  <Ionicons
-                    name={item.id === 'all' ? 'grid-outline' : 'pricetag-outline'}
-                    size={24}
-                    color={isSelected ? AllColors.primary : (isDarkMode ? '#CBD5E1' : '#64748B')}
-                    style={styles.catIconMargin}
-                  />
-                )}
-
-                <Text
-                  style={[
-                    styles.catNameText,
-                    isSelected
-                      ? styles.catNameSelected
-                      : { color: theme.textPrimary, fontWeight: '600' },
-                  ]}
-                >
-                  {item.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          }}
+          renderItem={renderCategoryItem}
         />
 
         {/* SUB CATEGORY LIST */}
@@ -2526,17 +2763,14 @@ export default function DashBoard() {
                 showsHorizontalScrollIndicator={false}
                 keyExtractor={(item) => item.id.toString()}
                 extraData={selectedSubCategoryId}
+                initialNumToRender={6}
+                maxToRenderPerBatch={6}
+                windowSize={3}
                 contentContainerStyle={styles.subCatContentContainer}
                 nestedScrollEnabled={true}
                 directionalLockEnabled={true}
                 bounces={false}
-                renderItem={({ item }) => (
-                  <SubCategoryCardItem
-                    item={item}
-                    isSelected={String(selectedSubCategoryId) === String(item.id)}
-                    onPress={() => handleSubCategoryClick(item.id)}
-                  />
-                )}
+                renderItem={renderSubCategoryItem}
               />
             </View>
           )
@@ -2602,103 +2836,48 @@ export default function DashBoard() {
     );
   };
 
-  const renderProductCard = ({ item }) => {
+  const listExtraData = useMemo(
+    () => `${cartItems.length}_${cartQty}_${wishlistIds.length}_${isDarkMode ? 1 : 0}`,
+    [cartItems.length, cartQty, wishlistIds.length, isDarkMode]
+  );
+
+  const renderProductCard = useCallback(({ item }) => {
     return (
-      <View
-        style={[styles.gridCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
-      >
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={() => gotoProductDetails(item)}
-        >
-          <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
-            <Image
-              source={{ uri: item.image }}
-              style={styles.dealImage}
-            />
-            <TouchableOpacity
-              style={[
-                styles.wishlistButton,
-                {
-                  backgroundColor: isDarkMode
-                    ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
-                    : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
-                },
-              ]}
-              onPress={() => toggleWishlist(item)}
-            >
-              <Ionicons
-                name={isItemWishlisted(item) ? "heart" : "heart-outline"}
-                size={18}
-                color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
-              />
-            </TouchableOpacity>
-          </View>
-
-          <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
-            {item.name}
-          </Text>
-
-          {(item.discount_price !== undefined && item.discount_price !== null) || (item.price !== undefined && item.price !== null) || (item.actual_price !== undefined && item.actual_price !== null) ? (
-            <View style={styles.priceRow}>
-              <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.discount_price ?? item.price ?? item.actual_price}</Text>
-              {item.actual_price && (item.discount_price || item.price) && item.actual_price !== (item.discount_price ?? item.price) ? (
-                <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.actual_price}</Text>
-              ) : null}
-            </View>
-          ) : null}
-        </TouchableOpacity>
-
-        <View style={styles.cardFooterRow}>
-          {(() => {
-            const discountPercent = getProductDiscountPercent(item);
-            return discountPercent ? (
-              <Text style={styles.offer}>
-                {discountPercent}% OFF
-              </Text>
-            ) : (
-              <View />
-            );
-          })()}
-          <View style={styles.actionContainer}>
-            {isOutOfStock(item) ? (
-              <View style={styles.outOfStockBadge}>
-                <Text style={styles.outOfStockText}>Out of Stock</Text>
-              </View>
-            ) : getQtyForItem(item) > 0 ? (
-              <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
-                <TouchableOpacity
-                  style={styles.qtyBtn}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  onPress={() => decreaseQty(item)}>
-                  <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
-                </TouchableOpacity>
-
-                <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{getQtyForItem(item)}</Text>
-
-                <TouchableOpacity
-                  style={styles.qtyBtn}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  onPress={() => increaseQty(item)}>
-                  <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}
-                onPress={() => IsUser(item)}>
-                <Ionicons
-                  name="cart"
-                  size={22}
-                  color={AllColors.primary}
-                />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      </View>
+      <ProductGridCard
+        item={item}
+        isDarkMode={isDarkMode}
+        theme={theme}
+        isWishlisted={isItemWishlisted(item)}
+        qty={getQtyForItem(item)}
+        isOutOfStock={isOutOfStock(item)}
+        discountPercent={getProductDiscountPercent(item)}
+        onPress={() => gotoProductDetails(item)}
+        onToggleWishlist={() => toggleWishlist(item)}
+        onAddToCart={() => IsUser(item)}
+        onIncreaseQty={() => increaseQty(item)}
+        onDecreaseQty={() => decreaseQty(item)}
+      />
     );
-  };
+  }, [isDarkMode, theme, wishlistIds, wishlistData, cartItems, cartQty]);
+
+  const renderHorizontalProductItem = useCallback(({ item }) => {
+    return (
+      <HorizontalProductCard
+        item={item}
+        isDarkMode={isDarkMode}
+        theme={theme}
+        isWishlisted={isItemWishlisted(item)}
+        qty={getQtyForItem(item)}
+        isOutOfStock={isOutOfStock(item)}
+        discountPercent={getProductDiscountPercent(item)}
+        onPress={() => gotoProductDetails(item)}
+        onToggleWishlist={() => toggleWishlist(item)}
+        onAddToCart={() => IsUser(item)}
+        onIncreaseQty={() => increaseQty(item)}
+        onDecreaseQty={() => decreaseQty(item)}
+      />
+    );
+  }, [isDarkMode, theme, wishlistIds, wishlistData, cartItems, cartQty]);
 
   const renderFooter = () => {
     if (searchText.trim() || isFilterActive) return null;
@@ -2720,94 +2899,13 @@ export default function DashBoard() {
               showsHorizontalScrollIndicator={false}
               data={dealOfTheDay.slice(0, 5)}
               keyExtractor={(item, index) => String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${item.product_sku_id || item.sku_id || item.id}` : `${item.product_sku_id || item.id}_${index}`))}
-              extraData={{ cartItems, cartQty, wishlistIds, wishlistData }}
+              extraData={listExtraData}
+              initialNumToRender={4}
+              maxToRenderPerBatch={4}
+              windowSize={3}
+              removeClippedSubviews={Platform.OS === 'android'}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
-              renderItem={({ item }) => (
-                <View style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
-                  <TouchableOpacity activeOpacity={0.9} onPress={() => gotoProductDetails(item)}>
-                    <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
-                      <Image
-                        source={{ uri: item.image }}
-                        style={styles.dealImage}
-                      />
-                      <TouchableOpacity
-                        style={[
-                          styles.wishlistButton,
-                          {
-                            backgroundColor: isDarkMode
-                              ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
-                              : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
-                          },
-                        ]}
-                        onPress={() => toggleWishlist(item)}
-                      >
-                        <Ionicons
-                          name={isItemWishlisted(item) ? "heart" : "heart-outline"}
-                          size={16}
-                          color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
-                        />
-                      </TouchableOpacity>
-                    </View>
-
-                    <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
-                      {item.name}
-                    </Text>
-
-                    <View style={styles.priceRow}>
-                      <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.originalPrice}</Text>
-                      <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.price}</Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  <View style={styles.cardFooterRow}>
-                    {(() => {
-                      const discountPercent = getProductDiscountPercent(item);
-                      return discountPercent ? (
-                        <Text style={styles.offer}>
-                          {discountPercent}% OFF
-                        </Text>
-                      ) : (
-                        <View />
-                      );
-                    })()}
-                    <View style={styles.actionContainer}>
-                      {isOutOfStock(item) ? (
-                        <View style={styles.outOfStockBadge}>
-                          <Text style={styles.outOfStockText}>Out of Stock</Text>
-                        </View>
-                      ) : getQtyForItem(item) > 0 ? (
-                        <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
-                          <TouchableOpacity
-                            style={styles.qtyBtn}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            onPress={() => decreaseQty(item)}>
-                            <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
-                          </TouchableOpacity>
-
-                          <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{getQtyForItem(item)}</Text>
-
-                          <TouchableOpacity
-                            style={styles.qtyBtn}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            onPress={() => increaseQty(item)}>
-                            <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}
-                          onPress={() => IsUser(item)}>
-                          <Ionicons
-                            name="cart"
-                            size={20}
-                            color={AllColors.primary}
-                          />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-                </View>
-              )}
+              renderItem={renderHorizontalProductItem}
             />
           </>
         )}
@@ -2827,94 +2925,13 @@ export default function DashBoard() {
               showsHorizontalScrollIndicator={false}
               data={popularProduct.slice(0, 5)}
               keyExtractor={(item, index) => String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${item.product_sku_id || item.sku_id || item.id}` : `${item.product_sku_id || item.id}_${index}`))}
-              extraData={{ cartItems, cartQty, wishlistIds, wishlistData }}
+              extraData={listExtraData}
+              initialNumToRender={4}
+              maxToRenderPerBatch={4}
+              windowSize={3}
+              removeClippedSubviews={Platform.OS === 'android'}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
-              renderItem={({ item }) => (
-                <View style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
-                  <TouchableOpacity activeOpacity={0.9} onPress={() => gotoProductDetails(item)}>
-                    <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
-                      <Image
-                        source={{ uri: item.image }}
-                        style={styles.dealImage}
-                      />
-                      <TouchableOpacity
-                        style={[
-                          styles.wishlistButton,
-                          {
-                            backgroundColor: isDarkMode
-                              ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
-                              : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
-                          },
-                        ]}
-                        onPress={() => toggleWishlist(item)}
-                      >
-                        <Ionicons
-                          name={isItemWishlisted(item) ? "heart" : "heart-outline"}
-                          size={16}
-                          color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
-                        />
-                      </TouchableOpacity>
-                    </View>
-
-                    <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
-                      {item.name}
-                    </Text>
-
-                    <View style={styles.priceRow}>
-                      <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.price}</Text>
-                      <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.originalPrice}</Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  <View style={styles.cardFooterRow}>
-                    {(() => {
-                      const discountPercent = getProductDiscountPercent(item);
-                      return discountPercent ? (
-                        <Text style={styles.offer}>
-                          {discountPercent}% OFF
-                        </Text>
-                      ) : (
-                        <View />
-                      );
-                    })()}
-                    <View style={styles.actionContainer}>
-                      {isOutOfStock(item) ? (
-                        <View style={styles.outOfStockBadge}>
-                          <Text style={styles.outOfStockText}>Out of Stock</Text>
-                        </View>
-                      ) : getQtyForItem(item) > 0 ? (
-                        <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
-                          <TouchableOpacity
-                            style={styles.qtyBtn}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            onPress={() => decreaseQty(item)}>
-                            <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
-                          </TouchableOpacity>
-
-                          <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{getQtyForItem(item)}</Text>
-
-                          <TouchableOpacity
-                            style={styles.qtyBtn}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            onPress={() => increaseQty(item)}>
-                            <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}
-                          onPress={() => IsUser(item)}>
-                          <Ionicons
-                            name="cart"
-                            size={20}
-                            color={AllColors.primary}
-                          />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-                </View>
-              )}
+              renderItem={renderHorizontalProductItem}
             />
           </>
         )}
@@ -2934,94 +2951,13 @@ export default function DashBoard() {
               showsHorizontalScrollIndicator={false}
               data={bestsellingProduct.slice(0, 5)}
               keyExtractor={(item, index) => String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${item.product_sku_id || item.sku_id || item.id}` : `${item.product_sku_id || item.id}_${index}`))}
-              extraData={{ cartItems, cartQty, wishlistIds, wishlistData }}
+              extraData={listExtraData}
+              initialNumToRender={4}
+              maxToRenderPerBatch={4}
+              windowSize={3}
+              removeClippedSubviews={Platform.OS === 'android'}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
-              renderItem={({ item }) => (
-                <View style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
-                  <TouchableOpacity activeOpacity={0.9} onPress={() => gotoProductDetails(item)}>
-                    <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
-                      <Image
-                        source={{ uri: item.image }}
-                        style={styles.dealImage}
-                      />
-                      <TouchableOpacity
-                        style={[
-                          styles.wishlistButton,
-                          {
-                            backgroundColor: isDarkMode
-                              ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
-                              : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
-                          },
-                        ]}
-                        onPress={() => toggleWishlist(item)}
-                      >
-                        <Ionicons
-                          name={isItemWishlisted(item) ? "heart" : "heart-outline"}
-                          size={16}
-                          color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
-                        />
-                      </TouchableOpacity>
-                    </View>
-
-                    <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
-                      {item.name}
-                    </Text>
-
-                    <View style={styles.priceRow}>
-                      <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.originalPrice}</Text>
-                      <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.price}</Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  <View style={styles.cardFooterRow}>
-                    {(() => {
-                      const discountPercent = getProductDiscountPercent(item);
-                      return discountPercent ? (
-                        <Text style={styles.offer}>
-                          {discountPercent}% OFF
-                        </Text>
-                      ) : (
-                        <View />
-                      );
-                    })()}
-                    <View style={styles.actionContainer}>
-                      {isOutOfStock(item) ? (
-                        <View style={styles.outOfStockBadge}>
-                          <Text style={styles.outOfStockText}>Out of Stock</Text>
-                        </View>
-                      ) : getQtyForItem(item) > 0 ? (
-                        <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
-                          <TouchableOpacity
-                            style={styles.qtyBtn}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            onPress={() => decreaseQty(item)}>
-                            <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
-                          </TouchableOpacity>
-
-                          <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{getQtyForItem(item)}</Text>
-
-                          <TouchableOpacity
-                            style={styles.qtyBtn}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            onPress={() => increaseQty(item)}>
-                            <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}
-                          onPress={() => IsUser(item)}>
-                          <Ionicons
-                            name="cart"
-                            size={20}
-                            color={AllColors.primary}
-                          />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-                </View>
-              )}
+              renderItem={renderHorizontalProductItem}
             />
           </>
         )}
@@ -3041,94 +2977,13 @@ export default function DashBoard() {
               showsHorizontalScrollIndicator={false}
               data={featuredproducts.slice(0, 5)}
               keyExtractor={(item, index) => String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${item.product_sku_id || item.sku_id || item.id}` : `${item.product_sku_id || item.id}_${index}`))}
-              extraData={{ cartItems, cartQty, wishlistIds, wishlistData }}
+              extraData={listExtraData}
+              initialNumToRender={4}
+              maxToRenderPerBatch={4}
+              windowSize={3}
+              removeClippedSubviews={Platform.OS === 'android'}
               contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
-              renderItem={({ item }) => (
-                <View style={[styles.dealCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
-                  <TouchableOpacity activeOpacity={0.9} onPress={() => gotoProductDetails(item)}>
-                    <View style={[styles.cardImageContainer, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}>
-                      <Image
-                        source={{ uri: item.image }}
-                        style={styles.dealImage}
-                      />
-                      <TouchableOpacity
-                        style={[
-                          styles.wishlistButton,
-                          {
-                            backgroundColor: isDarkMode
-                              ? (isItemWishlisted(item) ? AllColors.primary : 'rgba(30, 41, 59, 0.9)')
-                              : (isItemWishlisted(item) ? AllColors.primary : 'rgba(255, 255, 255, 0.9)'),
-                          },
-                        ]}
-                        onPress={() => toggleWishlist(item)}
-                      >
-                        <Ionicons
-                          name={isItemWishlisted(item) ? "heart" : "heart-outline"}
-                          size={16}
-                          color={isItemWishlisted(item) ? "#fff" : AllColors.primary}
-                        />
-                      </TouchableOpacity>
-                    </View>
-
-                    <Text numberOfLines={2} style={[styles.productName, { color: theme.textPrimary }]}>
-                      {item.name}
-                    </Text>
-
-                    <View style={styles.priceRow}>
-                      <Text style={[styles.price, { color: theme.textPrimary }]}>₹{item.originalPrice}</Text>
-                      <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>₹{item.price}</Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  <View style={styles.cardFooterRow}>
-                    {(() => {
-                      const discountPercent = getProductDiscountPercent(item);
-                      return discountPercent ? (
-                        <Text style={styles.offer}>
-                          {discountPercent}% OFF
-                        </Text>
-                      ) : (
-                        <View />
-                      );
-                    })()}
-                    <View style={styles.actionContainer}>
-                      {isOutOfStock(item) ? (
-                        <View style={styles.outOfStockBadge}>
-                          <Text style={styles.outOfStockText}>Out of Stock</Text>
-                        </View>
-                      ) : getQtyForItem(item) > 0 ? (
-                        <View style={[styles.qtyContainer, { backgroundColor: isDarkMode ? '#0F172A' : undefined }]}>
-                          <TouchableOpacity
-                            style={styles.qtyBtn}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            onPress={() => decreaseQty(item)}>
-                            <Text style={[styles.qtyText, { color: theme.textPrimary }]}>-</Text>
-                          </TouchableOpacity>
-
-                          <Text style={[styles.qtyCount, { color: theme.textPrimary }]}>{getQtyForItem(item)}</Text>
-
-                          <TouchableOpacity
-                            style={styles.qtyBtn}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                            onPress={() => increaseQty(item)}>
-                            <Text style={[styles.qtyPlusText, { color: theme.textPrimary }]}>+</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={[styles.iconButton, { backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : AllColors.softPinkBg }]}
-                          onPress={() => IsUser(item)}>
-                          <Ionicons
-                            name="cart"
-                            size={20}
-                            color={AllColors.primary}
-                          />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-                </View>
-              )}
+              renderItem={renderHorizontalProductItem}
             />
           </>
         )}
@@ -3151,7 +3006,12 @@ export default function DashBoard() {
         data={isFilterActive ? filteredProducts : (searchText.trim() ? searchProducts : product)}
         numColumns={2}
         keyExtractor={(item, index) => String(item.seller_sku_id || (item.seller_id ? `${item.seller_id}_${item.product_sku_id || item.sku_id || item.id}` : `${item.product_sku_id || item.id}_${index}`))}
-        extraData={{ cartItems, cartQty, wishlistIds, wishlistData }}
+        extraData={listExtraData}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        updateCellsBatchingPeriod={50}
+        removeClippedSubviews={Platform.OS === 'android'}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: cartItems.length > 0 ? 100 : 20 }}
         columnWrapperStyle={{
@@ -3168,9 +3028,9 @@ export default function DashBoard() {
             tintColor={AllColors.primary}
           />
         }
-        ListHeaderComponent={renderHeader()}
+        ListHeaderComponent={renderHeader}
         renderItem={renderProductCard}
-        ListFooterComponent={renderFooter()}
+        ListFooterComponent={renderFooter}
       />
 
       {/* Floating Cart Bar (Blinkit-style) */}

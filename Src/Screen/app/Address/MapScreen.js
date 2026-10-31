@@ -14,6 +14,7 @@ import {
   StatusBar,
   Keyboard,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import MapView, { Marker } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
 import AllColors from '../../../Constants/Color';
@@ -114,7 +115,10 @@ export default function MapScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const isFromSaveAddress = Boolean(route?.params?.fromSaveAddress);
-  const isFromCart = Boolean(route?.params?.fromCart || route?.params?.returnScreen === 'CartPage');
+  const isFromCart = Boolean(
+    (route?.params?.fromCart || route?.params?.returnScreen === 'CartPage') &&
+    !route?.params?.fromAddressList
+  );
   const { theme, isDarkMode } = useTheme();
 
   // Coordinates & Permission state (no default lat/lng)
@@ -467,6 +471,9 @@ export default function MapScreen() {
       if (isValidCoordinate(finalLat, finalLng)) {
         payload.latitude = Number(Number(finalLat).toFixed(6));
         payload.longitude = Number(Number(finalLng).toFixed(6));
+      } else {
+        payload.latitude = 22.5726;
+        payload.longitude = 88.3639;
       }
 
       const res = await saveAddressApi(payload);
@@ -514,20 +521,31 @@ export default function MapScreen() {
         res?.address_id ||
         res?.data?.address_id ||
         res?.data?.data?.id ||
+        res?.address?.id ||
+        res?.data?.address?.id ||
         null;
       setLastSavedId(savedAddressId);
 
       if (isOk) {
         setModalVisible(false);
-        setIsSuccess(true);
-        setTimeout(() => {
-          setIsSuccess(false);
-          if (isFromCart) {
-            navigation.navigate('CartPage', savedAddressId ? { selectedAddressId: savedAddressId } : undefined);
-          } else {
-            navigation.navigate('AllAddress');
+        if (isFromCart) {
+          if (navigation.canGoBack()) {
+            navigation.goBack();
           }
-        }, 1200);
+          navigation.navigate('CartPage', savedAddressId ? { selectedAddressId: savedAddressId } : undefined);
+        } else {
+          setIsSuccess(true);
+          setTimeout(() => {
+            setIsSuccess(false);
+            navigation.reset({
+              index: 1,
+              routes: [
+                { name: 'AppTab', state: { routes: [{ name: 'Account' }] } },
+                { name: 'AllAddress' },
+              ],
+            });
+          }, 1200);
+        }
       } else {
         Alert.alert("Error", getApiErrorMessage(res, "Unable to save address."));
       }
@@ -1296,27 +1314,8 @@ export default function MapScreen() {
                 />
               )}
 
-              {/* Location Action Buttons (Upor Niche / Stacked Vertically) */}
+              {/* Location Action Buttons */}
               <View style={{ flexDirection: 'column', gap: 12, marginBottom: 16 }}>
-                <TouchableOpacity
-                  style={[
-                    styles.locationBtn,
-                    {
-                      marginBottom: 0,
-                      backgroundColor: isDarkMode ? '#0F172A' : AllColors.divider,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingVertical: 15,
-                      borderRadius: 12,
-                    },
-                  ]}
-                  onPress={getCurrentLocation}
-                  activeOpacity={0.85}>
-                  <Ionicons name="navigate" size={18} color={AllColors.primary} style={{ marginRight: 8 }} />
-                  <Text style={[styles.locationText, { color: theme.textPrimary, fontSize: 15, fontWeight: '700' }]}>Use Live Location</Text>
-                </TouchableOpacity>
-
                 <TouchableOpacity
                   style={[
                     styles.locationBtn,
@@ -1365,9 +1364,21 @@ export default function MapScreen() {
         onClose={() => {
           setIsSuccess(false);
           if (isFromCart) {
+            if (lastSavedId) {
+              AsyncStorage.setItem('SELECTED_CART_ADDRESS_ID', String(lastSavedId)).catch(() => {});
+            }
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            }
             navigation.navigate('CartPage', lastSavedId ? { selectedAddressId: lastSavedId } : undefined);
           } else {
-            navigation.navigate('AllAddress');
+            navigation.reset({
+              index: 1,
+              routes: [
+                { name: 'AppTab', state: { routes: [{ name: 'Account' }] } },
+                { name: 'AllAddress' },
+              ],
+            });
           }
         }}
       />

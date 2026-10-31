@@ -1573,10 +1573,15 @@
 //   "status": 200,
 //   "message": "Cart View",
 //   "extra_data": {
-//     "sub_total": 2664,
-//     "discount": 405,
-//     "delivery_charge": 111.44,
-//     "total_amount": 2775.44
+//     "actual_total": 1381,
+//     "sub_total": 1194,
+//     "discount": 187,
+//     "cgst": 101.25,
+//     "sgst": 101.25,
+//     "igst": 0,
+//     "total_gst": 202.5,
+//     "delivery_charge": 0,
+//     "total_payable_amount": 1396.5
 //   },
 //   "address_data": {
 //     "id": 2,
@@ -1664,17 +1669,25 @@
 //           ],
 //           "variant_text": "Red / 32GB / 4GB / 6.1\" / 6000mAh / Snapdragon 888 / 64MP / Android / 5G / 250 Gm",
 //           "qty": 1,
-//           "actual_price": 70,
-//           "discount_price": 65,
-//           "actual_total": 70,
-//           "discount_total": 65,
+//           "actual_price": 123,
+//           "after_discount_price": 69,
+//           "discount_price": 54,
+//           "actual_total": 123,
+//           "after_discount_total": 69,
+//           "discount_total": 54,
 //           "short_desc": null,
-//           "image": "https://deebazar.com/admin/images/uploads/skus/12/JghmdpZz022t5rVHCNeV_1791454315.png",
+//           "image": "https://deebazar.com/admin/images/uploads/skus/1/LMj14lCedtAjpEWO0bmQ_1792994817.png",
 //           "available": true,
-//           "available_stock": 100
+//           "available_stock": 18
 //         }
 //       ],
-//       "seller_subtotal": 65,
+//       "seller_subtotal": 69,
+//       "seller_gst": {
+//         "cgst": 0,
+//         "sgst": 0,
+//         "igst": 0,
+//         "total": 0
+//       },
 //       "modes": [
 //         "pickup",
 //         "delivery"
@@ -2201,13 +2214,14 @@
 //     "message": "Order List",
 //     "data": [
 //         {
-//             "id": 1,
-//             "order_id": 1,
-//             "order_number": "841440",
-//             "name": "Test SKU 2",
-//             "selling_price": "799.00",
-//             "amount": "1598.00",
-//             "image": "https://deebazar.com/admin/images/uploads/skus/2/t2Fm5Y8ELQRBBUslIDPM_1790582828.png",
+//             "id": 8,
+//             "order_id": 8,
+//             "order_number": "159832",
+//             "name": "Women Printed Kurti Soild Red L",
+//             "selling_price": "999.00",
+//             "amount": "999.00",
+//             "payable_amount": "1178.82",
+//             "image": "https://deebazar.com/admin/images/uploads/skus/13/G2sif3wBLCI5ymolPr3o_1793091157.png",
 //             "status": "pending"
 //         }
 //     ]
@@ -2228,7 +2242,7 @@
 
 // **Request Body:**
 // ```
-// order_id: 1
+// order_id: 8
 // ```
 
 // **Response (200):**
@@ -2237,17 +2251,20 @@
 //     "status": 200,
 //     "message": "Order Details",
 //     "data_order": {
-//         "id": 1,
-//         "order_id": 1,
-//         "order_number": "841440",
-//         "name": "Test SKU 2",
-//         "img": "https://deebazar.com/admin/images/uploads/skus/2/t2Fm5Y8ELQRBBUslIDPM_1790582828.png",
-//         "selling_price": "799.00",
+//         "id": 8,
+//         "order_id": 8,
+//         "order_number": "159832",
+//         "name": "Women Printed Kurti Soild Red L",
+//         "img": "https://deebazar.com/admin/images/uploads/skus/13/G2sif3wBLCI5ymolPr3o_1793091157.png",
+//         "selling_price": "999.00",
 //         "extra_discount": 0,
 //         "shipping_fee": 0,
-//         "total_amount": "1598",
+//         "total_amount": "999.00",
+//         "taxable_amount": "999.00",
+//         "total_line_gst_amount": "179.82",
+//         "line_total": "1178.82",
 //         "status": "pending",
-//         "order_date": "2026-Sep-29",
+//         "order_date": "2026-Oct-27",
 //         "seller_policy": {
 //             "id": 5,
 //             "policy_type": "return",
@@ -2258,15 +2275,15 @@
 //         }
 //     },
 //     "data_user": {
-//         "name": "Ananya",
+//         "name": "Anu",
 //         "mobile": "8240804149",
-//         "pin": "700150",
+//         "pin": "743503",
 //         "state": "West Bengal",
-//         "city": "Rajpur Sonarpur",
-//         "house_no": "Hj",
-//         "road_name": "Dhelua",
-//         "landmark": "Hc uugugigi",
-//         "address_type": "Work"
+//         "city": "Baruipur",
+//         "house_no": "Near baba boro kacharir  mandir",
+//         "road_name": "julpiya",
+//         "landmark": "Matsya khali",
+//         "address_type": "Home"
 //     }
 // }
 // ```

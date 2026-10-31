@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   RefreshControl,
   StatusBar,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Rating } from '@kolking/react-native-rating';
 import AllColors from '../../../Constants/Color';
 import AntDesign from 'react-native-vector-icons/AntDesign'
@@ -51,6 +52,42 @@ import {
   isCartItemMatching,
   extractCartItems,
 } from '../../../Common/sellerUtils';
+
+const formatDeliveryEstimate = (opt) => {
+  const dateStr = opt?.delivery_date || opt?.date || opt?.estimated_delivery_date || opt?.expected_date || opt?.etd;
+  const daysNum = opt?.days ?? opt?.estimated_days ?? opt?.delivery_days ?? opt?.transit_time;
+
+  if (dateStr) {
+    return {
+      title: `Delivery by ${dateStr}`,
+      subtitle: daysNum ? `Estimated in ${daysNum} ${Number(daysNum) === 1 ? 'Day' : 'Days'}` : null,
+    };
+  }
+
+  const days = Number(daysNum);
+  if (!isNaN(days) && days > 0) {
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + days);
+    const dateFormatted = targetDate.toLocaleDateString('en-IN', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+    return {
+      title: `Delivery by ${dateFormatted}`,
+      subtitle: `Estimated in ${days} ${days === 1 ? 'Day' : 'Days'}`,
+    };
+  }
+
+  return {
+    title: 'Standard Delivery',
+    subtitle: 'Estimated in 2-4 Days',
+  };
+};
+
+const SELECTED_CART_ADDR_ID_KEY = 'SELECTED_CART_ADDRESS_ID';
+const SELECTED_CART_ADDR_DATA_KEY = 'SELECTED_CART_ADDRESS_DATA';
+
 const CartPage = () => {
   const route = useRoute();
   const { theme, isDarkMode } = useTheme();
@@ -77,41 +114,72 @@ const CartPage = () => {
 
   const billSummary = useMemo(() => {
     try {
+      const serverActualTotal = extraData?.actual_total != null ? Number(extraData.actual_total) : null;
       const serverSubTotal = extraData?.sub_total != null ? Number(extraData.sub_total) : null;
       const serverDiscount = extraData?.discount != null ? Number(extraData.discount) : null;
       const serverDelivery = extraData?.delivery_charge != null ? Number(extraData.delivery_charge) : null;
-      const serverTotal = extraData?.total_amount != null ? Number(extraData.total_amount) : null;
-
-      const discountedSum = cartItems.reduce(
-        (sum, it) => sum + Number(it.discount_total ?? it.discount_price ?? 0),
-        0
-      );
+      const serverTotalGst = extraData?.total_gst != null ? Number(extraData.total_gst) : null;
+      const serverCgst = extraData?.cgst != null ? Number(extraData.cgst) : 0;
+      const serverSgst = extraData?.sgst != null ? Number(extraData.sgst) : 0;
+      const serverIgst = extraData?.igst != null ? Number(extraData.igst) : 0;
+      const serverTotal = extraData?.total_payable_amount != null
+        ? Number(extraData.total_payable_amount)
+        : (extraData?.total_amount != null ? Number(extraData.total_amount) : null);
 
       const actualSum = cartItems.reduce(
         (sum, it) => sum + Number(it.actual_total ?? (Number(it.actual_price || 0) * Number(it.qty || 1))),
         0
       );
 
-      const discount = serverDiscount !== null ? serverDiscount : Number((actualSum - discountedSum).toFixed(2));
-      const sub_total = serverSubTotal !== null ? serverSubTotal : Number(actualSum.toFixed(2));
+      const sellingSum = cartItems.reduce(
+        (sum, it) => sum + Number(
+          it.after_discount_total ??
+          it.after_discount_price ??
+          (it.discount_total != null && it.discount_total !== it.actual_total ? it.discount_total : null) ??
+          it.actual_price ??
+          0
+        ),
+        0
+      );
+
+      const discountSum = cartItems.reduce(
+        (sum, it) => sum + Number(it.discount_total ?? it.discount_price ?? 0),
+        0
+      );
+
+      const actual_total = serverActualTotal !== null ? serverActualTotal : Number(actualSum.toFixed(2));
+      const sub_total = serverSubTotal !== null ? serverSubTotal : Number(sellingSum.toFixed(2));
+      const discount = serverDiscount !== null ? serverDiscount : Number((discountSum > 0 ? discountSum : Math.max(0, actual_total - sub_total)).toFixed(2));
       const delivery_charge = serverDelivery !== null ? serverDelivery : Number(extraData?.delivery_charge ?? 0);
+      const total_gst = serverTotalGst !== null ? serverTotalGst : 0;
+
       const calculatedTotal = serverTotal !== null
         ? Math.max(0, serverTotal - couponDiscount)
-        : Math.max(0, discountedSum + delivery_charge - couponDiscount);
+        : Math.max(0, sub_total + total_gst + delivery_charge - couponDiscount);
 
       return {
+        actual_total: Number(actual_total.toFixed(2)),
         sub_total: Number(sub_total.toFixed(2)),
         discount: Number(discount.toFixed(2)),
         coupon_discount: Number(couponDiscount.toFixed(2)),
         delivery_charge: Number(delivery_charge.toFixed(2)),
+        total_gst: Number(total_gst.toFixed(2)),
+        cgst: Number(serverCgst.toFixed(2)),
+        sgst: Number(serverSgst.toFixed(2)),
+        igst: Number(serverIgst.toFixed(2)),
         total_amount: Number(calculatedTotal.toFixed(2)),
       };
     } catch (e) {
       return {
+        actual_total: 0,
         sub_total: 0,
         discount: 0,
         coupon_discount: 0,
         delivery_charge: 0,
+        total_gst: 0,
+        cgst: 0,
+        sgst: 0,
+        igst: 0,
         total_amount: 0,
       };
     }
@@ -124,6 +192,8 @@ const CartPage = () => {
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [menuId, setMenuId] = useState(null);
   const [addressId, setAddresId] = useState('')
+  const selectedAddressIdRef = useRef('');
+  const selectedAddressDataRef = useRef(null);
   const [isPaymentModalVisible, setIsPaymentModalVisible] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cod');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
@@ -159,25 +229,40 @@ const CartPage = () => {
   };
   const computeExtraDataFromCart = (items) => {
     try {
-      const discountedSum = items.reduce(
-        (sum, it) => sum + Number(it.discount_total ?? it.discount_price ?? 0),
-        0
-      );
-
       const actualSum = items.reduce(
         (sum, it) => sum + Number(it.actual_total ?? (Number(it.actual_price || 0) * Number(it.qty || 1))),
         0
       );
 
-      const discount = actualSum - discountedSum;
+      const sellingSum = items.reduce(
+        (sum, it) => sum + Number(
+          it.after_discount_total ??
+          it.after_discount_price ??
+          it.unit_price ??
+          it.actual_price ??
+          0
+        ),
+        0
+      );
+
+      const discountSum = items.reduce(
+        (sum, it) => sum + Number(it.discount_total ?? it.discount_price ?? 0),
+        0
+      );
+
+      const total_gst = Number(extraData?.total_gst) || 0;
       const delivery_charge = Number(extraData?.delivery_charge) || 0;
-      const total_amount = discountedSum + delivery_charge;
+      const total_payable_amount = Number((sellingSum + total_gst + delivery_charge).toFixed(2));
 
       return {
-        sub_total: Number(actualSum.toFixed(2)),
-        discount: Number(discount.toFixed(2)),
+        ...extraData,
+        actual_total: Number(actualSum.toFixed(2)),
+        sub_total: Number(sellingSum.toFixed(2)),
+        discount: Number(discountSum.toFixed(2)),
+        total_gst,
         delivery_charge,
-        total_amount: Number(total_amount.toFixed(2)),
+        total_payable_amount,
+        total_amount: total_payable_amount,
       };
     } catch (e) {
       return extraData || {};
@@ -196,19 +281,33 @@ const CartPage = () => {
         if (!isMatch) return item;
 
         const prevQty = Number(item.qty) || 1;
-        const perUnitFromDiscount =
-          item.unit_price || (Number(item.discount_price) / prevQty) || Number(item.actual_price) || 0;
-        const unitPrice = Number(perUnitFromDiscount) || Number(item.actual_price || 0);
-        const actualTotal = Number(item.actual_price || 0) * newQty;
-        const discountTotal = Number((unitPrice * newQty).toFixed(2));
+        const unitActual = Number(item.actual_price ?? (item.actual_total ? Number(item.actual_total) / prevQty : null) ?? 0);
+        const unitSelling = Number(
+          item.after_discount_price ??
+          (item.after_discount_total != null ? Number(item.after_discount_total) / prevQty : null) ??
+          item.unit_price ??
+          unitActual
+        );
+        const unitDiscount = Number(
+          item.discount_price ??
+          (item.discount_total != null ? Number(item.discount_total) / prevQty : null) ??
+          Math.max(0, unitActual - unitSelling)
+        );
+
+        const newActualTotal = Number((unitActual * newQty).toFixed(2));
+        const newAfterDiscountTotal = Number((unitSelling * newQty).toFixed(2));
+        const newDiscountTotal = Number((unitDiscount * newQty).toFixed(2));
 
         return {
           ...item,
-          unit_price: unitPrice,
           qty: newQty,
-          actual_total: Number(actualTotal.toFixed(2)),
-          discount_total: discountTotal,
-          discount_price: discountTotal,
+          unit_price: unitSelling,
+          actual_price: unitActual,
+          after_discount_price: unitSelling,
+          discount_price: unitDiscount,
+          actual_total: newActualTotal,
+          after_discount_total: newAfterDiscountTotal,
+          discount_total: newDiscountTotal,
         };
       });
 
@@ -220,25 +319,52 @@ const CartPage = () => {
     setSellerGroups((prev) => {
       if (!Array.isArray(prev)) return [];
       return prev.map((seller) => {
+        let sellerSubtotal = 0;
         const updatedItems = (seller.items || []).map((item) => {
-          if (!isCartItemMatching(item, product)) return item;
+          if (!isCartItemMatching(item, product)) {
+            sellerSubtotal += Number(item.after_discount_total ?? item.after_discount_price ?? item.actual_price ?? 0);
+            return item;
+          }
           const prevQty = Number(item.qty) || 1;
-          const perUnitFromDiscount =
-            item.unit_price || (Number(item.discount_price) / prevQty) || Number(item.actual_price) || 0;
-          const unitPrice = Number(perUnitFromDiscount) || Number(item.actual_price || 0);
-          const actualTotal = Number(item.actual_price || 0) * newQty;
-          const discountTotal = Number((unitPrice * newQty).toFixed(2));
+          const unitActual = Number(item.actual_price ?? (item.actual_total ? Number(item.actual_total) / prevQty : null) ?? 0);
+          const unitSelling = Number(
+            item.after_discount_price ??
+            (item.after_discount_total != null ? Number(item.after_discount_total) / prevQty : null) ??
+            item.unit_price ??
+            unitActual
+          );
+          const unitDiscount = Number(
+            item.discount_price ??
+            (item.discount_total != null ? Number(item.discount_total) / prevQty : null) ??
+            Math.max(0, unitActual - unitSelling)
+          );
+
+          const newActualTotal = Number((unitActual * newQty).toFixed(2));
+          const newAfterDiscountTotal = Number((unitSelling * newQty).toFixed(2));
+          const newDiscountTotal = Number((unitDiscount * newQty).toFixed(2));
+          sellerSubtotal += newAfterDiscountTotal;
 
           return {
             ...item,
-            unit_price: unitPrice,
             qty: newQty,
-            actual_total: Number(actualTotal.toFixed(2)),
-            discount_total: discountTotal,
-            discount_price: discountTotal,
+            unit_price: unitSelling,
+            actual_price: unitActual,
+            after_discount_price: unitSelling,
+            discount_price: unitDiscount,
+            actual_total: newActualTotal,
+            after_discount_total: newAfterDiscountTotal,
+            discount_total: newDiscountTotal,
           };
         });
-        return { ...seller, items: updatedItems };
+
+        const gstTotal = Number(seller.seller_gst?.total || 0);
+        const delCharge = Number(seller.delivery_charge || 0);
+        return {
+          ...seller,
+          items: updatedItems,
+          seller_subtotal: Number(sellerSubtotal.toFixed(2)),
+          seller_total: Number((sellerSubtotal + gstTotal + delCharge).toFixed(2)),
+        };
       });
     });
 
@@ -262,19 +388,33 @@ const CartPage = () => {
         if (!isMatch) return item;
 
         const prevQty = Number(item.qty) || 1;
-        const perUnitFromDiscount =
-          item.unit_price || (Number(item.discount_price) / prevQty) || Number(item.actual_price) || 0;
-        const unitPrice = Number(perUnitFromDiscount) || Number(item.actual_price || 0);
-        const actualTotal = Number(item.actual_price || 0) * newQty;
-        const discountTotal = Number((unitPrice * newQty).toFixed(2));
+        const unitActual = Number(item.actual_price ?? (item.actual_total ? Number(item.actual_total) / prevQty : null) ?? 0);
+        const unitSelling = Number(
+          item.after_discount_price ??
+          (item.after_discount_total != null ? Number(item.after_discount_total) / prevQty : null) ??
+          item.unit_price ??
+          unitActual
+        );
+        const unitDiscount = Number(
+          item.discount_price ??
+          (item.discount_total != null ? Number(item.discount_total) / prevQty : null) ??
+          Math.max(0, unitActual - unitSelling)
+        );
+
+        const newActualTotal = Number((unitActual * newQty).toFixed(2));
+        const newAfterDiscountTotal = Number((unitSelling * newQty).toFixed(2));
+        const newDiscountTotal = Number((unitDiscount * newQty).toFixed(2));
 
         return {
           ...item,
-          unit_price: unitPrice,
           qty: newQty,
-          actual_total: Number(actualTotal.toFixed(2)),
-          discount_total: discountTotal,
-          discount_price: discountTotal,
+          unit_price: unitSelling,
+          actual_price: unitActual,
+          after_discount_price: unitSelling,
+          discount_price: unitDiscount,
+          actual_total: newActualTotal,
+          after_discount_total: newAfterDiscountTotal,
+          discount_total: newDiscountTotal,
         };
       });
 
@@ -286,25 +426,52 @@ const CartPage = () => {
     setSellerGroups((prev) => {
       if (!Array.isArray(prev)) return [];
       return prev.map((seller) => {
+        let sellerSubtotal = 0;
         const updatedItems = (seller.items || []).map((item) => {
-          if (!isCartItemMatching(item, product)) return item;
+          if (!isCartItemMatching(item, product)) {
+            sellerSubtotal += Number(item.after_discount_total ?? item.after_discount_price ?? item.actual_price ?? 0);
+            return item;
+          }
           const prevQty = Number(item.qty) || 1;
-          const perUnitFromDiscount =
-            item.unit_price || (Number(item.discount_price) / prevQty) || Number(item.actual_price) || 0;
-          const unitPrice = Number(perUnitFromDiscount) || Number(item.actual_price || 0);
-          const actualTotal = Number(item.actual_price || 0) * newQty;
-          const discountTotal = Number((unitPrice * newQty).toFixed(2));
+          const unitActual = Number(item.actual_price ?? (item.actual_total ? Number(item.actual_total) / prevQty : null) ?? 0);
+          const unitSelling = Number(
+            item.after_discount_price ??
+            (item.after_discount_total != null ? Number(item.after_discount_total) / prevQty : null) ??
+            item.unit_price ??
+            unitActual
+          );
+          const unitDiscount = Number(
+            item.discount_price ??
+            (item.discount_total != null ? Number(item.discount_total) / prevQty : null) ??
+            Math.max(0, unitActual - unitSelling)
+          );
+
+          const newActualTotal = Number((unitActual * newQty).toFixed(2));
+          const newAfterDiscountTotal = Number((unitSelling * newQty).toFixed(2));
+          const newDiscountTotal = Number((unitDiscount * newQty).toFixed(2));
+          sellerSubtotal += newAfterDiscountTotal;
 
           return {
             ...item,
-            unit_price: unitPrice,
             qty: newQty,
-            actual_total: Number(actualTotal.toFixed(2)),
-            discount_total: discountTotal,
-            discount_price: discountTotal,
+            unit_price: unitSelling,
+            actual_price: unitActual,
+            after_discount_price: unitSelling,
+            discount_price: unitDiscount,
+            actual_total: newActualTotal,
+            after_discount_total: newAfterDiscountTotal,
+            discount_total: newDiscountTotal,
           };
         });
-        return { ...seller, items: updatedItems };
+
+        const gstTotal = Number(seller.seller_gst?.total || 0);
+        const delCharge = Number(seller.delivery_charge || 0);
+        return {
+          ...seller,
+          items: updatedItems,
+          seller_subtotal: Number(sellerSubtotal.toFixed(2)),
+          seller_total: Number((sellerSubtotal + gstTotal + delCharge).toFixed(2)),
+        };
       });
     });
 
@@ -429,7 +596,7 @@ const CartPage = () => {
       return;
     }
     const cartTotal = cartItems.reduce(
-      (sum, it) => sum + Number(it.discount_total ?? it.discount_price ?? 0), 0
+      (sum, it) => sum + Number(it.after_discount_total ?? it.after_discount_price ?? it.discount_total ?? it.discount_price ?? 0), 0
     );
     if (cartTotal < matched.minSpend) {
       const neededAmount = (matched.minSpend - cartTotal).toFixed(2);
@@ -462,7 +629,7 @@ const CartPage = () => {
   };
 
   const onBuyNowPressed = () => {
-    const currentAddressId = addressId || addressData?.id;
+    const currentAddressId = addressId || addressData?.id || selectedAddressIdRef.current;
     if (!currentAddressId) {
       Alert.alert(
         "Select Delivery Address",
@@ -534,7 +701,7 @@ const CartPage = () => {
   };
 
   const requestForOder = async (selectedMethod = paymentMethod) => {
-    const currentAddressId = addressId || addressData?.id;
+    const currentAddressId = addressId || addressData?.id || selectedAddressIdRef.current;
     if (!currentAddressId) {
       Alert.alert("Address Required", "Please select a delivery address.");
       setIsModal(true);
@@ -616,25 +783,27 @@ const CartPage = () => {
       if (isSuccess) {
         const orderedCartItems = [...cartItems];
         const currentSummary = { ...billSummary };
+        const chosenFromList = Array.isArray(addressList)
+          ? addressList.find((a) => String(a.id) === String(currentAddressId))
+          : null;
         const activeDeliveryAddress =
-          addressData && Object.keys(addressData).length > 0
-            ? addressData
-            : (selectedAddress || {
-                name: userProfile?.name || 'Customer',
-                mobile: userProfile?.mobile || '',
-                address: '',
-              });
+          chosenFromList ||
+          (addressData && Object.keys(addressData).length > 0 ? addressData : null) ||
+          selectedAddress ||
+          {};
 
         setCartItems([]);
         setAppliedCoupon(null);
         setCouponDiscount(0);
 
         if (selectedMethod === "cashfree" || selectedMethod === "online") {
-          const targetUrl = checkoutUrl || result.payment_url;
+          const targetUrl = checkoutUrl || result.payment_url || result.data?.payment_url || result.checkout_url;
           if (targetUrl) {
             Linking.openURL(targetUrl).catch(() => {
               openRazorpay();
             });
+          } else {
+            openRazorpay();
           }
         }
 
@@ -655,8 +824,8 @@ const CartPage = () => {
           order_status: "Processing",
           status: "Processing",
           delivery_status: "Processing",
-          payment_method: selectedMethod === 'cod' ? 'Cash on Delivery (COD)' : selectedMethod,
-          payment_mode: selectedMethod === 'cod' ? 'Cash on Delivery (COD)' : selectedMethod,
+          payment_method: selectedMethod === 'cod' ? 'Cash on Delivery (COD)' : 'Online Payment (Prepaid)',
+          payment_mode: selectedMethod === 'cod' ? 'Cash on Delivery (COD)' : 'Online Payment (Prepaid)',
           payment_type: selectedMethod,
           items: orderedCartItems.map((item, idx) => ({
             id: item.id || item.product_id || idx,
@@ -665,18 +834,13 @@ const CartPage = () => {
             product_name: item.name || item.product_name || item.title || 'Product',
             img: item.img || item.image || item.product_image || item.thumbnail,
             image: item.img || item.image || item.product_image || item.thumbnail,
-            selling_price: item.discount_price ?? item.selling_price ?? item.price ?? 0,
-            price: item.discount_price ?? item.selling_price ?? item.price ?? 0,
+            selling_price: item.after_discount_price ?? item.discount_price ?? item.selling_price ?? item.price ?? 0,
+            price: item.after_discount_price ?? item.discount_price ?? item.selling_price ?? item.price ?? 0,
             actual_price: item.actual_price ?? item.selling_price ?? item.price ?? 0,
             qty: item.qty || item.quantity || 1,
             seller_policy: item.seller_policy || item.policy || null,
             return_days: item.return_days,
           })),
-          address_user: activeDeliveryAddress,
-          data_user: activeDeliveryAddress,
-          shipping_address: activeDeliveryAddress,
-          delivery_address: activeDeliveryAddress,
-          user: activeDeliveryAddress,
           selling_price: currentSummary.sub_total || 0,
           subtotal: currentSummary.sub_total || 0,
           amount: currentSummary.sub_total || 0,
@@ -693,6 +857,11 @@ const CartPage = () => {
           order_date: new Date().toISOString(),
           ...(result.data && typeof result.data === 'object' ? result.data : {}),
           ...(result.order && typeof result.order === 'object' ? result.order : {}),
+          address_user: activeDeliveryAddress,
+          data_user: activeDeliveryAddress,
+          shipping_address: activeDeliveryAddress,
+          delivery_address: activeDeliveryAddress,
+          user: activeDeliveryAddress,
         };
 
         navigation.navigate("OrderDetails", {
@@ -731,31 +900,31 @@ const CartPage = () => {
       image: 'https://your-logo.com/logo.png',
       currency: 'INR',
       key: 'rzp_test_SSIXQ48CfHlnJs',
-      amount: Math.round(Number(extraData?.total_amount) * 100),
+      amount: Math.round(Number(billSummary.total_amount) * 100),
       name: 'DeeBazer',
       prefill: {
-        email: 'test@test.com',
-        contact: addressData?.mobile || '',
-        name: addressData?.name || '',
+        email: userProfile?.email || addressData?.email || 'customer@deebazar.com',
+        contact: addressData?.mobile || userProfile?.mobile || '',
+        name: addressData?.name || userProfile?.name || '',
       },
       theme: {
         color: '#291a5a',
       },
     };
-    // console.log("Total Amount:", extraData?.total_amount);
-    // console.log("Razorpay Amount:", Math.round(Number(extraData?.total_amount) * 100));
     RazorpayCheckout.open(options)
       .then(async (payment) => {
-        // console.log('Payment Success', payment);
-
-        await requestForOder("cashfree");
+        if (Platform.OS === 'android') {
+          ToastAndroid.show('Payment Successful!', ToastAndroid.SHORT);
+        } else {
+          Alert.alert('Payment Successful', 'Your payment was completed successfully.');
+        }
       })
       .catch((error) => {
         console.log('Payment Failed', error);
 
         Alert.alert(
-          'Payment Failed',
-          error.description || 'Payment Cancelled'
+          'Payment Incomplete',
+          error.description || 'Payment was cancelled or failed.'
         );
       });
   };
@@ -774,14 +943,92 @@ const CartPage = () => {
 
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
       setLoading(true);
-      const passedAddressId = route?.params?.selectedAddressId;
-      CartView(passedAddressId || null);
-      getUserId();
       setIsModal(false);
+      setAddressModal(false);
+
+      const initCartFocus = async () => {
+        try {
+          const ID = await getuserId();
+          setIsUser(ID);
+          if (!ID) {
+            if (isMounted) setLoading(false);
+            return;
+          }
+
+          // 1. Resolve delivery address ID (Route params > AsyncStorage > State/Ref)
+          let targetAddrId = route?.params?.selectedAddressId;
+          if (targetAddrId) {
+            targetAddrId = String(targetAddrId);
+            selectedAddressIdRef.current = targetAddrId;
+            setAddresId(targetAddrId);
+            await AsyncStorage.setItem(SELECTED_CART_ADDR_ID_KEY, targetAddrId).catch(() => {});
+            navigation.setParams({ selectedAddressId: undefined });
+          } else {
+            const savedAddrId = await AsyncStorage.getItem(SELECTED_CART_ADDR_ID_KEY).catch(() => null);
+            if (savedAddrId) {
+              targetAddrId = String(savedAddrId);
+              selectedAddressIdRef.current = targetAddrId;
+              setAddresId(targetAddrId);
+            } else if (selectedAddressIdRef.current) {
+              targetAddrId = selectedAddressIdRef.current;
+            }
+          }
+
+          // Preload saved address data if present
+          try {
+            const savedDataStr = await AsyncStorage.getItem(SELECTED_CART_ADDR_DATA_KEY);
+            if (savedDataStr) {
+              const parsed = JSON.parse(savedDataStr);
+              if (parsed && typeof parsed === 'object' && parsed.id) {
+                if (isMounted) {
+                  setAddressData(parsed);
+                  selectedAddressDataRef.current = parsed;
+                }
+              }
+            }
+          } catch {}
+
+          // 2. Request CartView with target address
+          if (isMounted) {
+            await CartView(targetAddrId || null);
+          }
+
+          // 3. Fetch address list in background
+          try {
+            const res = await getAddressListApi(ID);
+            const list = parseAddressList(res.data);
+            if (isMounted) {
+              setAddressList(list || []);
+              const currentId = targetAddrId || selectedAddressIdRef.current || addressId;
+              if (currentId && Array.isArray(list)) {
+                const matched = list.find((a) => String(a.id) === String(currentId));
+                if (matched) {
+                  setAddressData(matched);
+                  selectedAddressDataRef.current = matched;
+                  AsyncStorage.setItem(SELECTED_CART_ADDR_DATA_KEY, JSON.stringify(matched)).catch(() => {});
+                }
+              }
+            }
+          } catch (err) {
+            console.log('Error fetching address list in focus effect:', err);
+          }
+        } catch (err) {
+          console.log('initCartFocus error:', err);
+          if (isMounted) setLoading(false);
+        }
+      };
+
+      initCartFocus();
+
+      return () => {
+        isMounted = false;
+      };
     }, [route?.params?.selectedAddressId])
   );
   const handleSelectMode = (sellerId, mode) => {
+    console.log(`🚚 [handleSelectMode] Seller ID: ${sellerId} selected mode: "${mode}"`);
     const sKey = String(sellerId);
     const current = sellerSelections[sKey] || {};
     if (current.mode === mode) return;
@@ -817,10 +1064,17 @@ const CartPage = () => {
   };
 
   const handleSelectDeliveryOption = (sellerId, optionCode) => {
+    console.log(`🚚 [handleSelectDeliveryOption] Seller ID: ${sellerId} selected option code: "${optionCode}"`);
     const sKey = String(sellerId);
     const current = sellerSelections[sKey] || {};
     const chosenOption = optionCode || 'seller';
     if (current.option === chosenOption) return;
+
+    const sellerObj = Array.isArray(sellerGroups) ? sellerGroups.find((s) => String(s.seller_id) === sKey) : null;
+    const selectedOptObj = sellerObj?.delivery_options?.find((o) => (o?.code || o?.id) === chosenOption);
+    if (selectedOptObj) {
+      console.log(`🚚 [handleSelectDeliveryOption] Option object:`, JSON.stringify(selectedOptObj, null, 2));
+    }
 
     const updatedForSeller = {
       mode: 'delivery',
@@ -857,7 +1111,13 @@ const CartPage = () => {
       return;
     }
 
-    const currentAddressId = selectedAddrId || addressId || addressData?.id;
+    let currentAddressId = selectedAddrId || selectedAddressIdRef.current || addressId || addressData?.id;
+    if (!currentAddressId) {
+      try {
+        currentAddressId = await AsyncStorage.getItem(SELECTED_CART_ADDR_ID_KEY);
+      } catch {}
+    }
+
     if (targetSellerId) {
       setUpdatingSellerId(targetSellerId);
     }
@@ -866,11 +1126,53 @@ const CartPage = () => {
 
     try {
       const data = await getCartViewApi(currentAddressId, activeSelections);
-      if (data?.address_data?.id) {
-        setAddresId(data.address_data.id);
+
+      console.log('================ [CartView] DELIVERY OPTIONS LOG ================');
+      console.log('Address ID:', currentAddressId);
+      console.log('Active Selections:', JSON.stringify(activeSelections));
+      if (Array.isArray(data?.data)) {
+        data.data.forEach((seller, idx) => {
+          console.log(`\n📦 Seller [${idx + 1}] ID: ${seller?.seller_id} | Name: "${seller?.seller_name}"`);
+          console.log(`   - modes:`, seller?.modes);
+          console.log(`   - selected_mode:`, seller?.selected_mode);
+          console.log(`   - selected_option:`, seller?.selected_option);
+          console.log(`   - delivery_charge:`, seller?.delivery_charge);
+          console.log(`   - delivery_error:`, seller?.delivery_error);
+          console.log(`   - delivery_options count:`, seller?.delivery_options ? seller.delivery_options.length : 0);
+          console.log(`   - delivery_options:`, JSON.stringify(seller?.delivery_options, null, 2));
+        });
+      }
+      console.log('=================================================================');
+
+      // Resolve final address: protect selected address from being overwritten by backend default address
+      let finalAddressObj = null;
+      if (data?.address_data && typeof data.address_data === 'object' && Object.keys(data.address_data).length > 0) {
+        if (currentAddressId && String(data.address_data.id) !== String(currentAddressId)) {
+          const matchedFromList = Array.isArray(addressList)
+            ? addressList.find((a) => String(a.id) === String(currentAddressId))
+            : null;
+          finalAddressObj = matchedFromList || selectedAddressDataRef.current || data.address_data;
+        } else {
+          finalAddressObj = data.address_data;
+        }
+      } else {
+        const matchedFromList = Array.isArray(addressList)
+          ? addressList.find((a) => String(a.id) === String(currentAddressId))
+          : null;
+        finalAddressObj = matchedFromList || selectedAddressDataRef.current || (addressData?.id ? addressData : null);
       }
 
-      setAddressData(data?.address_data || {});
+      if (finalAddressObj && finalAddressObj.id) {
+        setAddresId(finalAddressObj.id);
+        setAddressData(finalAddressObj);
+        selectedAddressIdRef.current = String(finalAddressObj.id);
+        selectedAddressDataRef.current = finalAddressObj;
+        AsyncStorage.setItem(SELECTED_CART_ADDR_ID_KEY, String(finalAddressObj.id)).catch(() => {});
+        AsyncStorage.setItem(SELECTED_CART_ADDR_DATA_KEY, JSON.stringify(finalAddressObj)).catch(() => {});
+      } else {
+        setAddressData({});
+      }
+
       setExtraData(data?.extra_data || {});
       setUnavailableItems(Array.isArray(data?.unavailable) ? data.unavailable : []);
 
@@ -984,6 +1286,26 @@ const CartPage = () => {
     setAddressModal(true);
     setIsModal(true);
   };
+
+  const handleSelectAddress = async (item) => {
+    if (!item?.id) return;
+    const itemAddrId = String(item.id);
+    selectedAddressIdRef.current = itemAddrId;
+    selectedAddressDataRef.current = item;
+    setAddressData(item);
+    setAddresId(item.id);
+    setIsModal(false);
+    setAddressModal(false);
+
+    try {
+      await AsyncStorage.setItem(SELECTED_CART_ADDR_ID_KEY, itemAddrId);
+      await AsyncStorage.setItem(SELECTED_CART_ADDR_DATA_KEY, JSON.stringify(item));
+    } catch (e) {
+      console.log('Error saving address to AsyncStorage:', e);
+    }
+
+    CartView(item.id);
+  };
   const navigation = useNavigation()
   const gotoMAP = () => {
     setIsModal(false);
@@ -1040,6 +1362,17 @@ const CartPage = () => {
           setSelectedAddress(null);
         }
 
+        if (String(addressId) === String(addressData?.id) || String(addressId) === String(selectedAddressIdRef.current)) {
+          selectedAddressIdRef.current = '';
+          selectedAddressDataRef.current = null;
+          setAddresId('');
+          setAddressData({});
+          await AsyncStorage.removeItem(SELECTED_CART_ADDR_ID_KEY).catch(() => {});
+          await AsyncStorage.removeItem(SELECTED_CART_ADDR_DATA_KEY).catch(() => {});
+          CartView();
+        }
+
+        requestForChangeAddress();
       } else {
         Alert.alert('Error', result?.data?.message || 'Failed to delete address.');
       }
@@ -1096,7 +1429,7 @@ const CartPage = () => {
 
           <TouchableOpacity
             style={loginStyles.continueShopBtn}
-            onPress={() => navigation.navigate('Profile')}>
+            onPress={() => navigation.navigate('AppTab', { screen: 'Profile' })}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <AntDesign
                 name="shoppingcart"
@@ -1154,7 +1487,7 @@ const CartPage = () => {
 
             <TouchableOpacity
               style={loginStyles.loginBtn}
-              onPress={() => navigation.navigate("Profile")}
+              onPress={() => navigation.navigate("AppTab", { screen: "Profile" })}
               activeOpacity={0.8}
             >
               <Text style={loginStyles.loginText}>Add Products</Text>
@@ -1368,17 +1701,33 @@ const CartPage = () => {
                             </View>
 
                             <View style={styles.priceContainer}>
-                              <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>
-                                ₹
-                                {Number(
-                                  prodItem.actual_total ??
-                                  Number(prodItem.actual_price || 0) * Number(prodItem.qty || 1)
-                                ).toFixed(2)}
-                              </Text>
+                              {Number(
+                                prodItem.actual_total ??
+                                Number(prodItem.actual_price || 0) * Number(prodItem.qty || 1)
+                              ) >
+                                Number(
+                                  prodItem.after_discount_total ??
+                                  prodItem.after_discount_price ??
+                                  prodItem.discount_total ??
+                                  prodItem.discount_price ??
+                                  0
+                                ) && (
+                                  <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>
+                                    ₹
+                                    {Number(
+                                      prodItem.actual_total ??
+                                      Number(prodItem.actual_price || 0) * Number(prodItem.qty || 1)
+                                    ).toFixed(2)}
+                                  </Text>
+                                )}
                               <Text style={[styles.newPrice, { color: theme.textPrimary }]}>
                                 ₹
                                 {Number(
-                                  prodItem.discount_total ?? prodItem.discount_price ?? 0
+                                  prodItem.after_discount_total ??
+                                  prodItem.after_discount_price ??
+                                  prodItem.discount_total ??
+                                  prodItem.discount_price ??
+                                  0
                                 ).toFixed(2)}
                               </Text>
                             </View>
@@ -1475,10 +1824,11 @@ const CartPage = () => {
                         {Array.isArray(seller.delivery_options) && seller.delivery_options.length > 0 ? (
                           <>
                             <Text style={[styles.chooseCourierText, { color: theme.textSecondary }]}>
-                              Choose Courier Partner:
+                              Estimated Delivery Date:
                             </Text>
                             {seller.delivery_options.map((opt) => {
                               const isOptSelected = seller.selected_option === opt.code;
+                              const estimate = formatDeliveryEstimate(opt);
                               return (
                                 <TouchableOpacity
                                   key={opt.code}
@@ -1514,13 +1864,13 @@ const CartPage = () => {
                                       <Text
                                         style={[styles.courierName, { color: theme.textPrimary }]}
                                       >
-                                        {opt.name || opt.code}
+                                        {estimate.title}
                                       </Text>
-                                      {opt.days ? (
+                                      {estimate.subtitle ? (
                                         <Text
                                           style={[styles.courierDays, { color: theme.textSecondary }]}
                                         >
-                                          Estimated delivery: {opt.days} Days
+                                          {estimate.subtitle}
                                         </Text>
                                       ) : null}
                                     </View>
@@ -1530,11 +1880,15 @@ const CartPage = () => {
                                       styles.courierCharge,
                                       {
                                         color:
-                                          Number(opt.charge) === 0 ? '#10B981' : theme.textPrimary,
+                                          Number(opt?.charge ?? opt?.rate ?? opt?.delivery_charge ?? 0) === 0
+                                            ? '#10B981'
+                                            : theme.textPrimary,
                                       },
                                     ]}
                                   >
-                                    {Number(opt.charge) === 0 ? 'FREE' : `₹${opt.charge}`}
+                                    {Number(opt?.charge ?? opt?.rate ?? opt?.delivery_charge ?? 0) === 0
+                                      ? 'FREE'
+                                      : `₹${opt?.charge ?? opt?.rate ?? opt?.delivery_charge ?? 0}`}
                                   </Text>
                                 </TouchableOpacity>
                               );
@@ -1543,7 +1897,7 @@ const CartPage = () => {
                         ) : updatingSellerId === seller.seller_id ? (
                           <View style={{ paddingVertical: 8, alignItems: 'center' }}>
                             <Text style={{ fontSize: 12, color: theme.textSecondary }}>
-                              Calculating available couriers...
+                              Calculating delivery date...
                             </Text>
                           </View>
                         ) : null}
@@ -1569,6 +1923,29 @@ const CartPage = () => {
                         </Text>
                       </View>
                     ) : null}
+
+                    {/* Seller Subtotal Summary (Commented out as requested)
+                    {(seller.seller_subtotal != null || seller.seller_total != null) && (
+                      <View
+                        style={{
+                          marginTop: 12,
+                          paddingTop: 10,
+                          borderTopWidth: 1,
+                          borderTopColor: isDarkMode ? '#334155' : '#F1F5F9',
+                          flexDirection: 'row',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: theme.textSecondary }}>
+                          Seller Subtotal ({seller.items?.length || 0} item{(seller.items?.length || 0) > 1 ? 's' : ''})
+                        </Text>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: theme.textPrimary }}>
+                          ₹{Number(seller.seller_total ?? seller.seller_subtotal).toFixed(2)}
+                        </Text>
+                      </View>
+                    )}
+                    */}
 
 
 
@@ -1647,11 +2024,14 @@ const CartPage = () => {
                     </View>
 
                     <View style={styles.priceContainer}>
-                      <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>
-                        ₹{Number(item.actual_total ?? (Number(item.actual_price || 0) * Number(item.qty || 1))).toFixed(2)}
-                      </Text>
+                      {Number(item.actual_total ?? (Number(item.actual_price || 0) * Number(item.qty || 1))) >
+                        Number(item.after_discount_total ?? item.after_discount_price ?? item.discount_total ?? item.discount_price ?? 0) && (
+                          <Text style={[styles.oldPrice, { color: theme.textSecondary }]}>
+                            ₹{Number(item.actual_total ?? (Number(item.actual_price || 0) * Number(item.qty || 1))).toFixed(2)}
+                          </Text>
+                        )}
                       <Text style={[styles.newPrice, { color: theme.textPrimary }]}>
-                        ₹{Number(item.discount_total ?? item.discount_price ?? 0).toFixed(2)}
+                        ₹{Number(item.after_discount_total ?? item.after_discount_price ?? item.discount_total ?? item.discount_price ?? 0).toFixed(2)}
                       </Text>
                     </View>
                   </View>
@@ -1774,15 +2154,30 @@ const CartPage = () => {
 
                 <View style={styles.billRow}>
                   <Text style={[styles.billLabel, { color: theme.textSecondary }]}>Item Total</Text>
-                  <Text style={[styles.billValue, { color: theme.textPrimary }]}>₹{billSummary.sub_total}</Text>
-                </View>
-
-                <View style={styles.billRow}>
-                  <Text style={[styles.billLabel, { color: theme.textSecondary }]}>Product Discount</Text>
-                  <Text style={styles.discountValue}>
-                    - ₹{billSummary.discount}
+                  <Text style={[styles.billValue, { color: theme.textPrimary }]}>
+                    ₹{billSummary.actual_total || billSummary.sub_total}
                   </Text>
                 </View>
+
+                {billSummary.discount > 0 && (
+                  <View style={styles.billRow}>
+                    <Text style={[styles.billLabel, { color: theme.textSecondary }]}>Product Discount</Text>
+                    <Text style={styles.discountValue}>
+                      - ₹{billSummary.discount}
+                    </Text>
+                  </View>
+                )}
+
+                {billSummary.total_gst > 0 && (
+                  <View style={styles.billRow}>
+                    <Text style={[styles.billLabel, { color: theme.textSecondary }]}>
+                      Taxes & GST {billSummary.cgst > 0 && billSummary.sgst > 0 ? `(CGST+SGST)` : ''}
+                    </Text>
+                    <Text style={[styles.billValue, { color: theme.textPrimary }]}>
+                      + ₹{billSummary.total_gst}
+                    </Text>
+                  </View>
+                )}
 
                 {billSummary.coupon_discount > 0 && (
                   <View style={styles.billRow}>
@@ -1805,7 +2200,7 @@ const CartPage = () => {
                 <View style={[styles.billDivider, { backgroundColor: isDarkMode ? '#334155' : '#F0F0F0' }]} />
 
                 <View style={styles.billRow}>
-                  <Text style={[styles.totalLabel, { color: theme.textPrimary }]}>Total Amount</Text>
+                  <Text style={[styles.totalLabel, { color: theme.textPrimary }]}>Total Payable</Text>
                   <Text style={styles.totalValue}>
                     ₹{billSummary.total_amount}
                   </Text>
@@ -1886,6 +2281,7 @@ const CartPage = () => {
               style={styles.addAddressMargin}
               onPress={() => {
                 setIsModal(false);
+                setAddressModal(false);
                 navigation.navigate('SaveAddress', { fromCart: true, returnScreen: 'CartPage' });
               }}
             >
@@ -1896,49 +2292,47 @@ const CartPage = () => {
               data={addressList}
               keyExtractor={(item) => item.id.toString()}
               showsVerticalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.modalAddressCard,
-                    { backgroundColor: isDarkMode ? '#334155' : '#fff', borderColor: isDarkMode ? '#475569' : '#E8E8E8' },
-                    addressData?.id === item.id && styles.selectedCard,
-                  ]}
-                  onPress={() => {
-                    setAddressData(item);
-                    setAddresId(item?.id || '');
-                    setIsModal(false);
-                    CartView(item?.id);
-                  }}
-                >
-                  <View style={styles.addressTop}>
-                    <View style={[styles.typeBadge, { backgroundColor: isDarkMode ? '#1E293B' : '#F5F5F5' }]}>
-                      <Text style={[styles.typeText, { color: isDarkMode ? '#CBD5E1' : '#444' }]}>
-                        {item.type}
-                      </Text>
+              renderItem={({ item }) => {
+                const isSelected = String(addressId || addressData?.id || selectedAddressIdRef.current) === String(item.id);
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.modalAddressCard,
+                      { backgroundColor: isDarkMode ? '#334155' : '#fff', borderColor: isDarkMode ? '#475569' : '#E8E8E8' },
+                      isSelected && styles.selectedCard,
+                    ]}
+                    onPress={() => handleSelectAddress(item)}
+                  >
+                    <View style={styles.addressTop}>
+                      <View style={[styles.typeBadge, { backgroundColor: isDarkMode ? '#1E293B' : '#F5F5F5' }]}>
+                        <Text style={[styles.typeText, { color: isDarkMode ? '#CBD5E1' : '#444' }]}>
+                          {item.type}
+                        </Text>
+                      </View>
+
+                      {isSelected && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={24}
+                          color={AllColors.primary}
+                        />
+                      )}
                     </View>
 
-                    {addressData?.id === item.id && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={24}
-                        color={AllColors.primary}
-                      />
-                    )}
-                  </View>
+                    <Text style={[styles.modalAddressName, { color: theme.textPrimary }]}>
+                      {item.name} • {item.mobile}
+                    </Text>
 
-                  <Text style={[styles.modalAddressName, { color: theme.textPrimary }]}>
-                    {item.name} • {item.mobile}
-                  </Text>
-
-                  <Text style={[styles.modalAddressText, { color: theme.textSecondary }]}>
-                    {item.house_no}, {item.road_name},
-                    {"\n"}
-                    {item.landmark},
-                    {"\n"}
-                    {item.city}, {item.state} - {item.pin}
-                  </Text>
-                </TouchableOpacity>
-              )}
+                    <Text style={[styles.modalAddressText, { color: theme.textSecondary }]}>
+                      {item.house_no}, {item.road_name},
+                      {"\n"}
+                      {item.landmark},
+                      {"\n"}
+                      {item.city}, {item.state} - {item.pin}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }}
             />
             {/* Live Location */}
             <TouchableOpacity style={styles.liveLocationBtn} onPress={gotoMAP}>
@@ -2007,7 +2401,37 @@ const CartPage = () => {
                 />
               </TouchableOpacity>
 
-
+              {/* Online Payment Option */}
+              <TouchableOpacity
+                style={[
+                  styles.paymentOptionCard,
+                  {
+                    backgroundColor: isDarkMode ? '#334155' : '#F8FAFC',
+                    borderColor: isDarkMode ? '#475569' : '#E2E8F0',
+                  },
+                  paymentMethod === 'cashfree' && {
+                    borderColor: AllColors.primary,
+                    backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : '#FFF1F7',
+                  },
+                ]}
+                onPress={() => setPaymentMethod('cashfree')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.paymentOptionLeft}>
+                  <View style={[styles.paymentIconBox, { backgroundColor: isDarkMode ? 'rgba(7, 89, 133, 0.25)' : '#E0F2FE' }]}>
+                    <MaterialCommunityIcons name="credit-card-outline" size={24} color={isDarkMode ? '#38BDF8' : '#075985'} />
+                  </View>
+                  <View style={styles.paymentTextWrapper}>
+                    <Text style={[styles.paymentOptionTitle, { color: theme.textPrimary }]}>Online Payment</Text>
+                    <Text style={[styles.paymentOptionSub, { color: theme.textSecondary }]}>Pay via UPI, Cards, Net Banking & Wallets</Text>
+                  </View>
+                </View>
+                <Ionicons
+                  name={paymentMethod === 'cashfree' ? 'radio-button-on' : 'radio-button-off'}
+                  size={22}
+                  color={paymentMethod === 'cashfree' ? AllColors.primary : (isDarkMode ? '#64748B' : '#94A3B8')}
+                />
+              </TouchableOpacity>
             </View>
 
             {/* Total Summary */}
@@ -2027,7 +2451,7 @@ const CartPage = () => {
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <Text style={styles.confirmOrderText}>
-                  {paymentMethod === 'cod' ? 'Confirm & Place Order (COD)' : 'Proceed to Pay'}
+                  {paymentMethod === 'cod' ? 'Confirm & Place Order (COD)' : 'Proceed to Pay Online'}
                 </Text>
               )}
             </TouchableOpacity>

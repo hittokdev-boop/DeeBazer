@@ -9,6 +9,7 @@ import {
   RefreshControl,
   ScrollView,
   StatusBar,
+  BackHandler,
 } from 'react-native';
 import { getAddressListApi, deleteAddressApi, getToken, getuserId } from '../../../Api/Api';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -26,9 +27,29 @@ export default function AllAddress() {
   const [menuId, setMenuId] = useState(null);
   const Navigation = useNavigation();
 
+  const handleGoBack = () => {
+    const routes = Navigation.getState()?.routes || [];
+    const prevRoute = routes.length > 1 ? routes[routes.length - 2]?.name : null;
+    if (prevRoute && prevRoute !== 'MapScreen' && prevRoute !== 'SaveAddress' && Navigation.canGoBack()) {
+      Navigation.goBack();
+    } else {
+      Navigation.navigate('AppTab', { screen: 'Account' });
+    }
+  };
+
+  useEffect(() => {
+    const onBackPress = () => {
+      handleGoBack();
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandler.remove();
+  }, [Navigation]);
+
   const handleUpdate = (item) => {
     setMenuId(null);
-    Navigation.navigate('SaveAddress', { addressData: item, isEdit: true });
+    Navigation.navigate('SaveAddress', { addressData: item, isEdit: true, fromAddressList: true });
   };
 
   const confirmDelete = (addressId) => {
@@ -82,11 +103,11 @@ export default function AllAddress() {
   );
 
   const openAddAddress = () => {
-    Navigation.navigate('MapScreen');
+    Navigation.navigate('MapScreen', { fromAddressList: true });
   };
 
   const openAddOtherAddress = () => {
-    Navigation.navigate('SaveAddress');
+    Navigation.navigate('SaveAddress', { fromAddressList: true });
   };
 
   const parseAddressList = (data) => {
@@ -177,7 +198,15 @@ export default function AllAddress() {
       />
       {/* Header */}
       <View style={styles.headerContainer}>
-        <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>My Addresses</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <TouchableOpacity
+            style={[styles.backBtn, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}
+            onPress={handleGoBack}
+            activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={22} color={theme.textPrimary} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: theme.textPrimary }]}>My Addresses</Text>
+        </View>
 
         {/* Show only when address list has data */}
         {addressList?.length > 0 && (
@@ -397,6 +426,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 15,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyScroll: {
     flexGrow: 1,

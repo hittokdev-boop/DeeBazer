@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,10 @@ import {
   Modal,
   TextInput,
   Linking,
+  PermissionsAndroid,
 } from 'react-native';
+import MapView, { Marker, Polyline } from 'react-native-maps';
+import Geolocation from '@react-native-community/geolocation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Feather from 'react-native-vector-icons/Feather';
@@ -32,6 +35,13 @@ import ProductReviewModal, {
   getRatingColor,
   getRatingColorConfig,
 } from './ProductReviewModal';
+import {
+  isValidCoordinate,
+  calculateDistanceKm,
+  formatDistance,
+  darkMapStyle,
+  getCoordinatesFromAddress,
+} from '../../../Common/geocodeUtils';
 
 export default function OrderDetails() {
   const navigation = useNavigation();
@@ -83,6 +93,14 @@ export default function OrderDetails() {
   const [selectedExistingReview, setSelectedExistingReview] = useState(null);
   const [selectedInitialRating, setSelectedInitialRating] = useState(0);
 
+  // Map, Live Location & Navigation State
+  const [userLocation, setUserLocation] = useState(null);
+  const [distanceKm, setDistanceKm] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [geocodedCoord, setGeocodedCoord] = useState(null);
+  const [routeCoordinates, setRouteCoordinates] = useState([]);
+  const mapRef = useRef(null);
+
   useEffect(() => {
     getStoredReviews().then((revs) => {
       if (revs && typeof revs === 'object') {
@@ -107,6 +125,56 @@ export default function OrderDetails() {
       [key]: newReview,
     }));
   };
+
+  const fetchUserLiveLocation = useCallback(async () => {
+    setLocationLoading(true);
+    try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+        ]);
+        const isGranted =
+          granted[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED ||
+          granted[PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION] === PermissionsAndroid.RESULTS.GRANTED;
+
+        if (!isGranted) {
+          setLocationLoading(false);
+          return;
+        }
+      }
+
+      Geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos?.coords?.latitude;
+          const lng = pos?.coords?.longitude;
+          if (isValidCoordinate(lat, lng)) {
+            setUserLocation({ latitude: lat, longitude: lng });
+          }
+          setLocationLoading(false);
+        },
+        () => {
+          Geolocation.getCurrentPosition(
+            (pos) => {
+              const lat = pos?.coords?.latitude;
+              const lng = pos?.coords?.longitude;
+              if (isValidCoordinate(lat, lng)) {
+                setUserLocation({ latitude: lat, longitude: lng });
+              }
+              setLocationLoading(false);
+            },
+            () => {
+              setLocationLoading(false);
+            },
+            { enableHighAccuracy: false, timeout: 10000, maximumAge: 10000 }
+          );
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    } catch {
+      setLocationLoading(false);
+    }
+  }, []);
 
   const targetOrderId =
     params.order_id ||
@@ -186,10 +254,12 @@ export default function OrderDetails() {
             ? Number(targetId)
             : targetId;
 
-        const result = await getOrderDetailsApi({
+        const orderNumParam = targetOrderNumber || (isNaN(targetOrderId) ? targetOrderId : null);
+
+        let result = await getOrderDetailsApi({
           order_id: parsedOrderId || parsedId,
           id: parsedId,
-          order_number: targetOrderNumber,
+          order_number: orderNumParam,
           user_id: userId,
         });
 
@@ -200,6 +270,58 @@ export default function OrderDetails() {
           result?.order ||
           result?.order_details ||
           (result?.id || result?.order_id || result?.order_number ? result : null);
+
+        let rawUserData = result?.data_user || null;
+
+        // Fallback: If no full order or no address found (e.g. targetOrderId was order_number not DB id), lookup real DB id via getOrderListApi
+        if (!rawOrderData || !rawUserData || !rawOrderData.name) {
+          try {
+            const listRes = await getOrderListApi(userId);
+            const ordersList = extractOrdersArray(listRes);
+            const sTargetId = String(targetOrderId || targetId || '').trim();
+            const sTargetNum = String(targetOrderNumber || '').trim();
+
+            let foundOrder = ordersList.find((o) => {
+              const oId = String(o?.order_id || o?.id || '').trim();
+              const oNum = String(o?.order_number || o?.order_id_generate || '').trim();
+              return (
+                (sTargetId && (oId === sTargetId || oNum === sTargetId)) ||
+                (sTargetNum && (oId === sTargetNum || oNum === sTargetNum))
+              );
+            });
+
+            // If not found by exact ID and we came right after creating an order, newest order is ordersList[0]
+            if (!foundOrder && ordersList.length > 0 && params.order) {
+              foundOrder = ordersList[0];
+            }
+
+            if (foundOrder && typeof foundOrder === 'object') {
+              const realDbId = foundOrder.order_id || foundOrder.id;
+              if (realDbId) {
+                try {
+                  const detailedRes = await getOrderDetailsApi({
+                    order_id: realDbId,
+                    id: realDbId,
+                    user_id: userId,
+                  });
+                  if (detailedRes?.data_order || detailedRes?.data || detailedRes?.data_user) {
+                    result = detailedRes;
+                    rawOrderData = detailedRes.data_order || detailedRes.data?.order || detailedRes.data || rawOrderData;
+                    rawUserData = detailedRes.data_user || rawUserData;
+                  }
+                } catch (retryErr) {
+                  console.log('Retry getOrderDetailsApi with realDbId error:', retryErr);
+                }
+              }
+
+              if (!rawOrderData) {
+                rawOrderData = foundOrder;
+              }
+            }
+          } catch (listErr) {
+            console.log('OrderDetails fallback getOrderListApi error:', listErr);
+          }
+        }
 
         let extractedItems = [];
         if (rawOrderData && typeof rawOrderData === 'object') {
@@ -221,59 +343,16 @@ export default function OrderDetails() {
                           : [];
         }
 
-        // Fallback: If no items found from getOrderDetailsApi, try getOrderListApi
-        if (extractedItems.length === 0) {
-          try {
-            const listRes = await getOrderListApi(userId);
-            const ordersList = extractOrdersArray(listRes);
-            const sTargetId = String(targetOrderId || targetId || '').trim();
-            const sTargetNum = String(targetOrderNumber || '').trim();
-
-            const foundOrder = ordersList.find((o) => {
-              const oId = String(o?.order_id || o?.id || '').trim();
-              const oNum = String(o?.order_number || o?.order_id_generate || '').trim();
-              return (
-                (sTargetId && (oId === sTargetId || oNum === sTargetId)) ||
-                (sTargetNum && (oId === sTargetNum || oNum === sTargetNum))
-              );
-            });
-
-            if (foundOrder && typeof foundOrder === 'object') {
-              rawOrderData = {
-                ...(rawOrderData || {}),
-                ...foundOrder,
-              };
-              const listItems =
-                Array.isArray(foundOrder.items) && foundOrder.items.length > 0
-                  ? foundOrder.items
-                  : Array.isArray(foundOrder.order_items) && foundOrder.order_items.length > 0
-                    ? foundOrder.order_items
-                    : Array.isArray(foundOrder.products) && foundOrder.products.length > 0
-                      ? foundOrder.products
-                      : Array.isArray(foundOrder.order_details) && foundOrder.order_details.length > 0
-                        ? foundOrder.order_details
-                        : (foundOrder.name || foundOrder.img || foundOrder.image)
-                          ? [foundOrder]
-                          : [];
-              if (listItems.length > 0) {
-                extractedItems = listItems;
-              }
-            }
-          } catch (listErr) {
-            console.log('OrderDetails fallback getOrderListApi error:', listErr);
-          }
-        }
-
         if (rawOrderData && typeof rawOrderData === 'object') {
           const rawUser =
+            rawUserData ||
             result?.data_user ||
-            result?.user ||
-            rawOrderData?.address_user ||
             rawOrderData?.data_user ||
+            rawOrderData?.address_user ||
             rawOrderData?.shipping_address ||
             rawOrderData?.delivery_address ||
             rawOrderData?.user_address ||
-            rawOrderData?.user ||
+            result?.user ||
             (typeof rawOrderData?.address === 'object' ? rawOrderData.address : null);
 
           setOrder((prev) => {
@@ -287,21 +366,29 @@ export default function OrderDetails() {
             const finalAddress =
               (typeof rawUser === 'object' && rawUser !== null && Object.keys(rawUser).length > 0)
                 ? rawUser
-                : (prev?.address_user || prev?.delivery_address || prev?.shipping_address || prev?.data_user || prev?.user || null);
+                : (prev?.data_user || prev?.address_user || prev?.delivery_address || prev?.shipping_address || prev?.user || null);
 
             const updated = {
               ...(prev || {}),
               ...rawOrderData,
               items: finalItems,
-              address_user: finalAddress,
               data_user: finalAddress,
+              address_user: finalAddress,
               shipping_address: finalAddress,
               delivery_address: finalAddress,
               user: finalAddress,
+              ismapShow: rawOrderData?.ismapShow ?? result?.data_order?.ismapShow ?? prev?.ismapShow ?? false,
+              status: rawOrderData?.status || prev?.status || 'pending',
+              order_status: rawOrderData?.status || rawOrderData?.order_status || prev?.order_status || 'pending',
+              delivery_status: rawOrderData?.status || rawOrderData?.delivery_status || prev?.delivery_status || 'pending',
+              order_date: rawOrderData?.order_date || rawOrderData?.created_at || prev?.order_date || new Date().toISOString(),
               selling_price: rawOrderData?.selling_price ?? rawOrderData?.amount ?? rawOrderData?.total_amount ?? prev?.selling_price ?? prev?.subtotal ?? 0,
-              subtotal: rawOrderData?.subtotal ?? rawOrderData?.sub_total ?? rawOrderData?.selling_price ?? prev?.subtotal ?? prev?.selling_price ?? 0,
-              total_amount: rawOrderData?.total_amount ?? rawOrderData?.net_amount ?? prev?.total_amount ?? prev?.net_amount ?? 0,
-              net_amount: rawOrderData?.net_amount ?? rawOrderData?.total_amount ?? prev?.net_amount ?? prev?.total_amount ?? 0,
+              subtotal: rawOrderData?.subtotal ?? rawOrderData?.sub_total ?? rawOrderData?.taxable_amount ?? rawOrderData?.selling_price ?? prev?.subtotal ?? prev?.selling_price ?? 0,
+              taxable_amount: rawOrderData?.taxable_amount ?? rawOrderData?.selling_price ?? prev?.taxable_amount ?? 0,
+              total_line_gst_amount: rawOrderData?.total_line_gst_amount ?? rawOrderData?.gst_amount ?? rawOrderData?.total_gst ?? rawOrderData?.gst ?? prev?.total_line_gst_amount ?? 0,
+              line_total: rawOrderData?.line_total ?? rawOrderData?.payable_amount ?? rawOrderData?.total_amount ?? prev?.line_total ?? 0,
+              total_amount: rawOrderData?.line_total ?? rawOrderData?.payable_amount ?? rawOrderData?.total_amount ?? prev?.total_amount ?? prev?.net_amount ?? 0,
+              net_amount: rawOrderData?.line_total ?? rawOrderData?.payable_amount ?? rawOrderData?.net_amount ?? prev?.net_amount ?? prev?.total_amount ?? 0,
               shipping_fee: rawOrderData?.shipping_fee ?? rawOrderData?.shipping_charge ?? rawOrderData?.delivery_charge ?? prev?.shipping_fee ?? prev?.delivery_charge ?? 0,
               delivery_charge: rawOrderData?.delivery_charge ?? rawOrderData?.shipping_fee ?? prev?.delivery_charge ?? prev?.shipping_fee ?? 0,
               extra_discount: rawOrderData?.extra_discount ?? rawOrderData?.coupon_discount ?? rawOrderData?.discount ?? prev?.extra_discount ?? prev?.coupon_discount ?? 0,
@@ -791,31 +878,39 @@ export default function OrderDetails() {
     0
   );
   const subTotal = Number(
+    currentOrder.taxable_amount ??
     currentOrder.selling_price ??
-    currentOrder.amount ??
-    currentOrder.total_amount ??
     currentOrder.subtotal ??
     currentOrder.sub_total ??
+    currentOrder.amount ??
+    0
+  );
+  const totalGst = Number(
+    currentOrder.total_line_gst_amount ??
+    currentOrder.gst_amount ??
+    currentOrder.total_gst ??
+    currentOrder.gst ??
     0
   );
   const netTotal = Number(
-    currentOrder.total_amount ??
+    currentOrder.line_total ??
+    currentOrder.payable_amount ??
     currentOrder.net_amount ??
+    currentOrder.total_amount ??
     currentOrder.grand_total ??
-    currentOrder.selling_price ??
-    currentOrder.amount ??
+    (subTotal + totalGst + deliveryCharge - discountAmount) ??
     0
   );
 
   // Address parsing
   const addressObj =
-    (typeof currentOrder.address_user === 'object' && currentOrder.address_user !== null ? currentOrder.address_user : null) ||
-    (typeof currentOrder.data_user === 'object' && currentOrder.data_user !== null ? currentOrder.data_user : null) ||
-    (typeof currentOrder.shipping_address === 'object' && currentOrder.shipping_address !== null ? currentOrder.shipping_address : null) ||
-    (typeof currentOrder.delivery_address === 'object' && currentOrder.delivery_address !== null ? currentOrder.delivery_address : null) ||
-    (typeof currentOrder.user_address === 'object' && currentOrder.user_address !== null ? currentOrder.user_address : null) ||
-    (typeof currentOrder.user === 'object' && currentOrder.user !== null ? currentOrder.user : null) ||
-    (typeof currentOrder.address === 'object' && currentOrder.address !== null ? currentOrder.address : null);
+    (typeof currentOrder.data_user === 'object' && currentOrder.data_user !== null && Object.keys(currentOrder.data_user).length > 0 ? currentOrder.data_user : null) ||
+    (typeof currentOrder.address_user === 'object' && currentOrder.address_user !== null && Object.keys(currentOrder.address_user).length > 0 ? currentOrder.address_user : null) ||
+    (typeof currentOrder.shipping_address === 'object' && currentOrder.shipping_address !== null && Object.keys(currentOrder.shipping_address).length > 0 ? currentOrder.shipping_address : null) ||
+    (typeof currentOrder.delivery_address === 'object' && currentOrder.delivery_address !== null && Object.keys(currentOrder.delivery_address).length > 0 ? currentOrder.delivery_address : null) ||
+    (typeof currentOrder.user_address === 'object' && currentOrder.user_address !== null && Object.keys(currentOrder.user_address).length > 0 ? currentOrder.user_address : null) ||
+    (typeof currentOrder.address === 'object' && currentOrder.address !== null && Object.keys(currentOrder.address).length > 0 ? currentOrder.address : null) ||
+    (typeof currentOrder.user === 'object' && currentOrder.user !== null && (currentOrder.user.house_no || currentOrder.user.road_name || currentOrder.user.pin) ? currentOrder.user : null);
 
   const customerName =
     addressObj?.name ||
@@ -839,9 +934,8 @@ export default function OrderDetails() {
 
   const addressString = addressObj
     ? (
-      addressObj.address && typeof addressObj.address === 'string' && addressObj.address.trim().length > 0
-        ? addressObj.address
-        : [
+      (addressObj.house_no || addressObj.road_name || addressObj.city || addressObj.pin || addressObj.pincode)
+        ? [
           addressObj.house_no || addressObj.flat_no || addressObj.building,
           addressObj.road_name || addressObj.street || addressObj.area || addressObj.address_line_1,
           addressObj.landmark ? `Near ${addressObj.landmark}` : null,
@@ -852,6 +946,9 @@ export default function OrderDetails() {
         ]
           .filter(Boolean)
           .join(', ')
+        : (typeof addressObj.address === 'string' && addressObj.address.trim().length > 0
+          ? addressObj.address
+          : '')
     )
     : typeof currentOrder.address === 'string' &&
       currentOrder.address.trim().length > 0
@@ -861,7 +958,248 @@ export default function OrderDetails() {
       'Address not available';
 
   const addressType =
-    addressObj?.address_type || currentOrder.address_type || '';
+    addressObj?.address_type || addressObj?.type || currentOrder.address_type || currentOrder.selected_mode || currentOrder.delivery_mode || '';
+
+  const isMapShow = Boolean(
+    currentOrder.ismapShow === true ||
+    currentOrder.ismapShow === 'true' ||
+    currentOrder.ismapShow === 1 ||
+    currentOrder.ismapShow === '1' ||
+    currentOrder.data_order?.ismapShow === true ||
+    currentOrder.data_order?.ismapShow === 'true' ||
+    currentOrder.is_map_show === true ||
+    currentOrder.is_map_show === 'true' ||
+    order?.ismapShow === true ||
+    order?.ismapShow === 'true'
+  );
+
+  const rawLat =
+    addressObj?.latitude ??
+    addressObj?.lat ??
+    currentOrder.data_user?.latitude ??
+    currentOrder.latitude ??
+    currentOrder.lat ??
+    geocodedCoord?.latitude;
+
+  const rawLng =
+    addressObj?.longitude ??
+    addressObj?.lng ??
+    addressObj?.long ??
+    currentOrder.data_user?.longitude ??
+    currentOrder.longitude ??
+    currentOrder.lng ??
+    currentOrder.long ??
+    geocodedCoord?.longitude;
+
+  const hasValidDestination = isValidCoordinate(rawLat, rawLng);
+  const destLat = hasValidDestination ? Number(rawLat) : null;
+  const destLng = hasValidDestination ? Number(rawLng) : null;
+
+  useEffect(() => {
+    if (isMapShow) {
+      fetchUserLiveLocation();
+    }
+  }, [isMapShow, fetchUserLiveLocation]);
+
+  useEffect(() => {
+    if (isMapShow && !hasValidDestination) {
+      const house = addressObj?.house_no || currentOrder.house_no || '';
+      const road = addressObj?.road_name || currentOrder.road_name || '';
+      const landmark = addressObj?.landmark || currentOrder.landmark || '';
+      const city = addressObj?.city || currentOrder.city || '';
+      const state = addressObj?.state || currentOrder.state || '';
+      const pin = addressObj?.pin || addressObj?.pincode || currentOrder.pin || '';
+
+      if (city || pin || road || house) {
+        getCoordinatesFromAddress(house, road, landmark, city, state, pin).then((coord) => {
+          if (coord && isValidCoordinate(coord.latitude, coord.longitude)) {
+            setGeocodedCoord(coord);
+          }
+        });
+      }
+    }
+  }, [isMapShow, hasValidDestination, addressObj, currentOrder]);
+
+  useEffect(() => {
+    if (userLocation && destLat !== null && destLng !== null) {
+      const dist = calculateDistanceKm(
+        userLocation.latitude,
+        userLocation.longitude,
+        destLat,
+        destLng
+      );
+      setDistanceKm(dist);
+    }
+  }, [userLocation, destLat, destLng]);
+
+  const mapRegion = useMemo(() => {
+    if (destLat !== null && destLng !== null && userLocation?.latitude && userLocation?.longitude) {
+      const midLat = (destLat + userLocation.latitude) / 2;
+      const midLng = (destLng + userLocation.longitude) / 2;
+      const dLat = Math.abs(destLat - userLocation.latitude) * 1.6;
+      const dLng = Math.abs(destLng - userLocation.longitude) * 1.6;
+      return {
+        latitude: midLat,
+        longitude: midLng,
+        latitudeDelta: Math.max(dLat, 0.02),
+        longitudeDelta: Math.max(dLng, 0.02),
+      };
+    }
+    if (destLat !== null && destLng !== null) {
+      return {
+        latitude: destLat,
+        longitude: destLng,
+        latitudeDelta: 0.015,
+        longitudeDelta: 0.015,
+      };
+    }
+    return undefined;
+  }, [destLat, destLng, userLocation]);
+
+  // Route coordinates connecting userLocation (Start Point) and destLat/destLng (End Point)
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (
+      userLocation?.latitude &&
+      userLocation?.longitude &&
+      destLat !== null &&
+      destLng !== null
+    ) {
+      // Immediate straight fallback route line
+      const directLine = [
+        { latitude: userLocation.latitude, longitude: userLocation.longitude },
+        { latitude: destLat, longitude: destLng },
+      ];
+      setRouteCoordinates(directLine);
+
+      // Fetch actual road geometry from OSRM
+      const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${userLocation.longitude},${userLocation.latitude};${destLng},${destLat}?overview=full&geometries=geojson`;
+
+      fetch(osrmUrl, {
+        headers: {
+          'User-Agent': 'DeeBazer-App/1.0',
+        },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (isCancelled) return;
+          if (data?.routes?.[0]?.geometry?.coordinates?.length) {
+            const roadPoints = data.routes[0].geometry.coordinates.map((coord) => ({
+              latitude: Number(coord[1]),
+              longitude: Number(coord[0]),
+            }));
+            if (roadPoints.length > 0) {
+              setRouteCoordinates(roadPoints);
+            }
+          }
+        })
+        .catch(() => {
+          // Keep straight line fallback on error
+        });
+    } else {
+      setRouteCoordinates([]);
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [userLocation?.latitude, userLocation?.longitude, destLat, destLng]);
+
+  const fitMapToRoute = useCallback(() => {
+    if (mapRef.current && destLat !== null && destLng !== null) {
+      if (userLocation?.latitude && userLocation?.longitude) {
+        mapRef.current.fitToCoordinates(
+          [
+            { latitude: userLocation.latitude, longitude: userLocation.longitude },
+            { latitude: destLat, longitude: destLng },
+          ],
+          {
+            edgePadding: { top: 40, right: 40, bottom: 40, left: 40 },
+            animated: true,
+          }
+        );
+      } else if (mapRegion) {
+        mapRef.current.animateToRegion(mapRegion, 300);
+      }
+    }
+  }, [destLat, destLng, userLocation, mapRegion]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fitMapToRoute();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [fitMapToRoute, routeCoordinates.length]);
+
+  const currentRegionRef = useRef(mapRegion);
+
+  const handleRegionChangeComplete = useCallback((reg) => {
+    if (reg && reg.latitude && reg.longitude) {
+      currentRegionRef.current = reg;
+    }
+  }, []);
+
+  const handleZoomIn = useCallback(() => {
+    if (mapRef.current) {
+      const reg = currentRegionRef.current || mapRegion;
+      if (reg) {
+        const nextLatDelta = Math.max(reg.latitudeDelta / 2, 0.001);
+        const nextLngDelta = Math.max(reg.longitudeDelta / 2, 0.001);
+        const newRegion = {
+          latitude: reg.latitude,
+          longitude: reg.longitude,
+          latitudeDelta: nextLatDelta,
+          longitudeDelta: nextLngDelta,
+        };
+        currentRegionRef.current = newRegion;
+        mapRef.current.animateToRegion(newRegion, 250);
+      }
+    }
+  }, [mapRegion]);
+
+  const handleZoomOut = useCallback(() => {
+    if (mapRef.current) {
+      const reg = currentRegionRef.current || mapRegion;
+      if (reg) {
+        const nextLatDelta = Math.min(reg.latitudeDelta * 2, 80);
+        const nextLngDelta = Math.min(reg.longitudeDelta * 2, 80);
+        const newRegion = {
+          latitude: reg.latitude,
+          longitude: reg.longitude,
+          latitudeDelta: nextLatDelta,
+          longitudeDelta: nextLngDelta,
+        };
+        currentRegionRef.current = newRegion;
+        mapRef.current.animateToRegion(newRegion, 250);
+      }
+    }
+  }, [mapRegion]);
+
+  const handleOpenNavigation = () => {
+    if (destLat === null || destLng === null) {
+      Alert.alert('Location Error', 'Destination coordinates are not available for navigation.');
+      return;
+    }
+    const label = encodeURIComponent(customerName || 'Delivery Location');
+    const scheme = Platform.select({
+      ios: `maps:0,0?q=${label}@${destLat},${destLng}`,
+      android: `google.navigation:q=${destLat},${destLng}`,
+    });
+    const webFallback = `https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}`;
+
+    Linking.canOpenURL(scheme)
+      .then((supported) => {
+        if (supported) {
+          Linking.openURL(scheme);
+        } else {
+          Linking.openURL(webFallback);
+        }
+      })
+      .catch(() => {
+        Linking.openURL(webFallback);
+      });
+  };
 
   // Items parsing
   const rawItems =
@@ -888,11 +1226,19 @@ export default function OrderDetails() {
         ? [currentOrder]
         : [];
 
-  const paymentMethodText =
+  const rawPaymentMethod =
     currentOrder.payment_method ||
     currentOrder.payment_type ||
     currentOrder.payment_mode ||
-    (params.payment_method === 'cod' ? 'Cash on Delivery (COD)' : 'Online / Prepaid');
+    params.payment_method ||
+    '';
+
+  const paymentMethodText = (() => {
+    const pm = String(rawPaymentMethod).toLowerCase();
+    if (pm === 'cod' || pm.includes('cash on delivery')) return 'Cash on Delivery (COD)';
+    if (pm === 'cashfree' || pm === 'online' || pm.includes('prepaid')) return 'Online Payment (Prepaid)';
+    return rawPaymentMethod || 'Cash on Delivery (COD)';
+  })();
 
   const steps = [
     { title: 'Order Placed', icon: 'bag-check-outline' },
@@ -1321,6 +1667,283 @@ export default function OrderDetails() {
           ) : null}
         </View>
 
+        {/* Delivery / Pickup Location Map & Navigation (displayed when ismapShow is true) */}
+        {isMapShow && (
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: theme.cardBg,
+                borderColor: theme.borderColor,
+                paddingBottom: 16,
+              },
+            ]}
+          >
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.cardTitleWithIcon}>
+                <Ionicons
+                  name="navigate-circle-outline"
+                  size={20}
+                  color={AllColors.primary}
+                />
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    { color: theme.textPrimary, marginLeft: 8 },
+                  ]}
+                >
+                  Location Map & Navigation
+                </Text>
+              </View>
+
+              {addressType ? (
+                <View
+                  style={[
+                    styles.miniStatusBadge,
+                    {
+                      backgroundColor: isDarkMode
+                        ? 'rgba(247, 22, 112, 0.15)'
+                        : AllColors.softPinkBg,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.miniStatusText,
+                      { color: AllColors.primary, textTransform: 'capitalize' },
+                    ]}
+                  >
+                    {addressType}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: theme.divider }]} />
+
+            {/* Map Container - Small Version, Clickable to Navigate */}
+            {destLat !== null && destLng !== null ? (
+              <View style={[styles.mapBoxContainer, { borderColor: theme.borderColor }]}>
+                <MapView
+                  ref={mapRef}
+                  style={styles.mapElement}
+                  initialRegion={mapRegion}
+                  onMapReady={fitMapToRoute}
+                  onRegionChangeComplete={handleRegionChangeComplete}
+                  customMapStyle={isDarkMode ? darkMapStyle : undefined}
+                  nestedScrollEnabled={true}
+                  scrollEnabled={true}
+                  zoomEnabled={true}
+                  zoomControlEnabled={false}
+                  pitchEnabled={true}
+                  rotateEnabled={true}
+                >
+                  {/* Start Point: User Current Live Location */}
+                  {userLocation?.latitude && userLocation?.longitude ? (
+                    <Marker
+                      coordinate={{
+                        latitude: userLocation.latitude,
+                        longitude: userLocation.longitude,
+                      }}
+                      title="Start Point (Your Location)"
+                      pinColor="#0284C7"
+                      onPress={handleOpenNavigation}
+                    />
+                  ) : null}
+
+                  {/* Destination Route Polyline (Start Point to End Point) */}
+                  {routeCoordinates.length > 0 ? (
+                    <>
+                      {/* Outline for clear contrast */}
+                      <Polyline
+                        coordinates={routeCoordinates}
+                        strokeColor={isDarkMode ? 'rgba(15, 23, 42, 0.7)' : 'rgba(255, 255, 255, 0.9)'}
+                        strokeWidth={6}
+                        lineCap="round"
+                        lineJoin="round"
+                        tappable={true}
+                        onPress={handleOpenNavigation}
+                      />
+                      {/* Main Destination Route Line */}
+                      <Polyline
+                        coordinates={routeCoordinates}
+                        strokeColor={AllColors.primary || '#F71670'}
+                        strokeWidth={3.8}
+                        lineCap="round"
+                        lineJoin="round"
+                        tappable={true}
+                        onPress={handleOpenNavigation}
+                      />
+                    </>
+                  ) : null}
+
+                  {/* End Point: Destination Order Location */}
+                  <Marker
+                    coordinate={{ latitude: destLat, longitude: destLng }}
+                    title="End Point (Delivery Location)"
+                    description={addressString}
+                    pinColor={AllColors.primary}
+                    onPress={handleOpenNavigation}
+                  />
+                </MapView>
+
+                {/* Floating Navigation Hint Pill */}
+                <TouchableOpacity
+                  style={styles.tapToNavigatePill}
+                  onPress={handleOpenNavigation}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="navigate" size={13} color="#FFF" />
+                  <Text style={styles.tapToNavigateText}>Open Navigation</Text>
+                </TouchableOpacity>
+
+                {/* Floating Zoom & Re-center Controls on the Right */}
+                <View style={styles.mapControlsColumn}>
+                  <TouchableOpacity
+                    style={[
+                      styles.mapControlBtn,
+                      {
+                        backgroundColor: isDarkMode
+                          ? 'rgba(30, 41, 59, 0.94)'
+                          : 'rgba(255, 255, 255, 0.96)',
+                        borderColor: theme.borderColor,
+                      },
+                    ]}
+                    onPress={handleZoomIn}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="add" size={18} color={theme.textPrimary} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.mapControlBtn,
+                      {
+                        backgroundColor: isDarkMode
+                          ? 'rgba(30, 41, 59, 0.94)'
+                          : 'rgba(255, 255, 255, 0.96)',
+                        borderColor: theme.borderColor,
+                      },
+                    ]}
+                    onPress={handleZoomOut}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="remove" size={18} color={theme.textPrimary} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.mapControlBtn,
+                      {
+                        backgroundColor: isDarkMode
+                          ? 'rgba(30, 41, 59, 0.94)'
+                          : 'rgba(255, 255, 255, 0.96)',
+                        borderColor: theme.borderColor,
+                      },
+                    ]}
+                    onPress={fitMapToRoute}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialCommunityIcons
+                      name="crosshairs-gps"
+                      size={16}
+                      color={AllColors.primary}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Start & End Point Legend */}
+                <View style={styles.mapPointsLegend} pointerEvents="none">
+                  {userLocation?.latitude && userLocation?.longitude ? (
+                    <View style={styles.pointChip}>
+                      <View style={[styles.pointDot, { backgroundColor: '#0284C7' }]} />
+                      <Text style={styles.pointText}>Start Point</Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.pointChip}>
+                    <View style={[styles.pointDot, { backgroundColor: AllColors.primary }]} />
+                    <Text style={styles.pointText}>End Point</Text>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <View
+                style={[
+                  styles.mapPlaceholder,
+                  {
+                    backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC',
+                    borderColor: theme.borderColor,
+                  },
+                ]}
+              >
+                <ActivityIndicator size="small" color={AllColors.primary} />
+                <Text
+                  style={[
+                    styles.mapPlaceholderText,
+                    { color: theme.textSecondary },
+                  ]}
+                >
+                  Loading location map...
+                </Text>
+              </View>
+            )}
+
+            {/* Distance Section */}
+            <View style={styles.distanceBadgeRow}>
+              <View
+                style={[
+                  styles.distanceBadge,
+                  {
+                    backgroundColor: isDarkMode
+                      ? 'rgba(235, 19, 109, 0.12)'
+                      : '#FFF0F5',
+                    borderColor: AllColors.primary,
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="map-marker-distance"
+                  size={18}
+                  color={AllColors.primary}
+                />
+                <Text
+                  style={[
+                    styles.distanceBadgeText,
+                    { color: AllColors.primary },
+                  ]}
+                >
+                  {distanceKm !== null
+                    ? `Distance: ${formatDistance(distanceKm)}`
+                    : locationLoading
+                    ? 'Calculating distance...'
+                    : 'Live distance calculating...'}
+                </Text>
+              </View>
+
+              {/* Refresh Distance Button */}
+              <TouchableOpacity
+                style={[
+                  styles.refreshLocBtn,
+                  { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' },
+                ]}
+                onPress={fetchUserLiveLocation}
+                disabled={locationLoading}
+                activeOpacity={0.7}
+              >
+                {locationLoading ? (
+                  <ActivityIndicator size="small" color={AllColors.primary} />
+                ) : (
+                  <Ionicons
+                    name="refresh"
+                    size={16}
+                    color={theme.textPrimary}
+                  />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Ordered Items Card */}
         <View
           style={[
@@ -1364,7 +1987,9 @@ export default function OrderDetails() {
                 prod.quantity ||
                 prod.count ||
                 prod.product_qty ||
-                (itemPrice > 0 && prod.total_amount ? Math.round(Number(prod.total_amount) / itemPrice) : 1)
+                (itemPrice > 0 && prod.amount && Number(prod.amount) > itemPrice ? Math.round(Number(prod.amount) / itemPrice) : null) ||
+                (itemPrice > 0 && prod.total_amount && Number(prod.total_amount) > itemPrice ? Math.round(Number(prod.total_amount) / itemPrice) : null) ||
+                1
               );
               const itemTotal = Number(
                 prod.total_amount ||
@@ -1847,7 +2472,7 @@ export default function OrderDetails() {
               Subtotal
             </Text>
             <Text style={[styles.priceValue, { color: theme.textPrimary }]}>
-              ₹{subTotal > 0 ? subTotal : netTotal}
+              ₹{subTotal > 0 ? subTotal.toFixed(2) : (netTotal - totalGst).toFixed(2)}
             </Text>
           </View>
 
@@ -1862,7 +2487,23 @@ export default function OrderDetails() {
                   { color: isDarkMode ? '#34D399' : '#15803D' },
                 ]}
               >
-                -₹{discountAmount}
+                -₹{discountAmount.toFixed(2)}
+              </Text>
+            </View>
+          ) : null}
+
+          {totalGst > 0 ? (
+            <View style={styles.priceRow}>
+              <Text style={[styles.priceLabel, { color: theme.textSecondary }]}>
+                Taxes & GST
+              </Text>
+              <Text
+                style={[
+                  styles.priceValue,
+                  { color: theme.textPrimary },
+                ]}
+              >
+                +₹{totalGst.toFixed(2)}
               </Text>
             </View>
           ) : null}
@@ -1878,7 +2519,7 @@ export default function OrderDetails() {
                   : [styles.priceValue, { color: theme.textPrimary }]
               }
             >
-              {deliveryCharge === 0 ? 'FREE' : `₹${deliveryCharge}`}
+              {deliveryCharge === 0 ? 'FREE' : `₹${deliveryCharge.toFixed(2)}`}
             </Text>
           </View>
 
@@ -1893,9 +2534,9 @@ export default function OrderDetails() {
             <Text
               style={[styles.priceLabelTotal, { color: theme.textPrimary }]}
             >
-              Total Amount
+              Total Payable
             </Text>
-            <Text style={styles.priceValueTotal}>₹{netTotal}</Text>
+            <Text style={styles.priceValueTotal}>₹{netTotal.toFixed(2)}</Text>
           </View>
         </View>
 
@@ -2913,5 +3554,133 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 11,
     fontWeight: '600',
+  },
+  mapBoxContainer: {
+    height: 200,
+    width: '100%',
+    position: 'relative',
+    marginTop: 6,
+    marginBottom: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  mapElement: {
+    width: '100%',
+    height: 200,
+  },
+  tapToNavigatePill: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    zIndex: 10,
+  },
+  tapToNavigateText: {
+    color: '#FFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  mapControlsColumn: {
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
+    flexDirection: 'column',
+    gap: 6,
+    zIndex: 10,
+  },
+  mapControlBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.16,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  mapPointsLegend: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pointChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  pointDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  pointText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  mapPlaceholder: {
+    height: 140,
+    width: '100%',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 6,
+    marginBottom: 12,
+  },
+  mapPlaceholderText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  distanceBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  distanceBadge: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  distanceBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  refreshLocBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

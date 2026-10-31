@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   StatusBar,
 } from "react-native";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Geolocation from '@react-native-community/geolocation';
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -27,7 +28,10 @@ export default function SaveAddress() {
   const route = useRoute();
   const editData = route?.params?.addressData || route?.params?.item || null;
   const isEdit = Boolean(route?.params?.isEdit || editData);
-  const isFromCart = Boolean(route?.params?.fromCart || route?.params?.returnScreen === 'CartPage');
+  const isFromCart = Boolean(
+    (route?.params?.fromCart || route?.params?.returnScreen === 'CartPage') &&
+    !route?.params?.fromAddressList
+  );
   const { theme, isDarkMode } = useTheme();
 
   const [latitude, setLatitude] = useState(
@@ -417,6 +421,9 @@ export default function SaveAddress() {
       if (isValidCoordinate(finalLat, finalLng)) {
         payload.latitude = Number(Number(finalLat).toFixed(6));
         payload.longitude = Number(Number(finalLng).toFixed(6));
+      } else {
+        payload.latitude = 22.5726;
+        payload.longitude = 88.3639;
       }
 
       const getApiErrorMessage = (res, fallback) => {
@@ -486,6 +493,8 @@ export default function SaveAddress() {
             saveRes?.address_id ||
             saveRes?.data?.address_id ||
             saveRes?.data?.data?.id ||
+            saveRes?.address?.id ||
+            saveRes?.data?.address?.id ||
             null;
         } else {
           errorMsg = getApiErrorMessage(saveRes, "Unable to save address.");
@@ -495,15 +504,27 @@ export default function SaveAddress() {
       setLastSavedId(savedId);
 
       if (success) {
-        setIsSuccess(true);
-        setTimeout(() => {
-          setIsSuccess(false);
-          if (isFromCart) {
-            navigation.navigate('CartPage', savedId ? { selectedAddressId: savedId } : undefined);
-          } else {
-            navigation.navigate('AllAddress');
+        if (isFromCart) {
+          if (savedId) {
+            AsyncStorage.setItem('SELECTED_CART_ADDRESS_ID', String(savedId)).catch(() => {});
           }
-        }, 1200);
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          }
+          navigation.navigate('CartPage', savedId ? { selectedAddressId: savedId } : undefined);
+        } else {
+          setIsSuccess(true);
+          setTimeout(() => {
+            setIsSuccess(false);
+            navigation.reset({
+              index: 1,
+              routes: [
+                { name: 'AppTab', state: { routes: [{ name: 'Account' }] } },
+                { name: 'AllAddress' },
+              ],
+            });
+          }, 1200);
+        }
       } else {
         Alert.alert("Error", errorMsg);
       }
@@ -821,9 +842,18 @@ export default function SaveAddress() {
           onClose={() => {
             setIsSuccess(false);
             if (isFromCart) {
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              }
               navigation.navigate('CartPage', lastSavedId ? { selectedAddressId: lastSavedId } : undefined);
             } else {
-              navigation.navigate('AllAddress');
+              navigation.reset({
+                index: 1,
+                routes: [
+                  { name: 'AppTab', state: { routes: [{ name: 'Account' }] } },
+                  { name: 'AllAddress' },
+                ],
+              });
             }
           }}
         />

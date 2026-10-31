@@ -341,12 +341,12 @@ export default function Orders() {
             const statusVal = item.order_status || item.status || item.delivery_status || item.orderStatus;
             const config = getStatusBadgeStyle(statusVal);
             const orderId = item.order_number || item.order_id_generate || item.order_id || item.id || 'ORD-000';
-            const amount = item.selling_price ?? item.net_amount ?? item.total_amount ?? item.amount ?? item.grand_total ?? item.total ?? item.price ?? 0;
+            const amount = item.payable_amount ?? item.line_total ?? item.total_amount ?? item.net_amount ?? item.amount ?? item.selling_price ?? item.price ?? 0;
             const rawItemsList = item.items || item.products || item.order_items || item.order_details || [];
             const itemsList =
               rawItemsList.length > 0
                 ? rawItemsList
-                : item.name || item.img || item.product_name
+                : item.name || item.img || item.image || item.product_name
                   ? [item]
                   : [];
             const dateText = formatDate(item.created_at || item.created_date || item.order_date || item.date || item.createdAt);
@@ -360,8 +360,8 @@ export default function Orders() {
                 style={[styles.orderCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
                 onPress={() =>
                   navigation.navigate('OrderDetails', {
-                    order_id: item.order_id,
-                    id: item.id,
+                    order_id: item.order_id || item.id,
+                    id: item.id || item.order_id,
                     order_number: item.order_number,
                     order: item,
                   })
@@ -399,7 +399,9 @@ export default function Orders() {
                         <Text style={[styles.productTitleText, { color: theme.textPrimary }]} numberOfLines={2}>
                           {prod.name || prod.product_name || prod.title || 'Item'}
                         </Text>
-                        <Text style={[styles.productQtyText, { color: theme.textSecondary }]}>Qty: {prod.qty || prod.quantity || 1}</Text>
+                        <Text style={[styles.productQtyText, { color: theme.textSecondary }]}>
+                          Qty: {prod.qty || prod.quantity || (Number(prod.selling_price) > 0 && Number(prod.amount) > Number(prod.selling_price) ? Math.round(Number(prod.amount) / Number(prod.selling_price)) : 1)}
+                        </Text>
                         <Text style={styles.productPriceText}>₹{prod.selling_price || prod.price || prod.total_amount || prod.net_amount || 0}</Text>
                       </View>
                     </View>

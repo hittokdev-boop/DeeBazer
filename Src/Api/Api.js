@@ -433,8 +433,9 @@ export const getBannersApi = async () => {
     requiresAuth: false,
   });
 
-  if (res.ok && res.data?.status === 200 && Array.isArray(res.data?.data) && res.data.data.length > 0) {
-    return res;
+  const list = res?.data || (Array.isArray(res) ? res : []);
+  if (Array.isArray(list) && list.length > 0) {
+    return { status: 200, data: list };
   }
 
   // Fallback to legacy banner endpoint
@@ -446,11 +447,13 @@ export const getBannersApi = async () => {
  * POST /api/banner
  */
 export const getLegacyBannerApi = async () => {
-  return await requestApi("banner", {
+  const res = await requestApi("banner", {
     method: "POST",
     body: new FormData(),
     requiresAuth: false,
   });
+  const list = res?.data || (Array.isArray(res) ? res : []);
+  return { status: 200, data: Array.isArray(list) ? list : [] };
 };
 
 // ================= PRODUCTS & SKU APIS =================
@@ -459,24 +462,32 @@ export const getLegacyBannerApi = async () => {
  * Get Product SKU List
  * POST /api/sku
  */
-export const getSkuListApi = async ({
-  categoryId = null,
-  subCategoryId = null,
-  childCategoryId = null,
-  productId = null,
-  skuId = null,
-  gender = null,
-  perPage = 10,
-  page = 1,
-} = {}) => {
+export const getSkuListApi = async (params = {}) => {
   try {
+    const categoryId = params?.categoryId ?? params?.category_id ?? null;
+    const subCategoryId = params?.subCategoryId ?? params?.sub_category_id ?? null;
+    const childCategoryId = params?.childCategoryId ?? params?.child_category_id ?? null;
+    const productId = params?.productId ?? params?.product_id ?? null;
+    const skuId = params?.skuId ?? params?.sku_id ?? null;
+    const gender = params?.gender ?? null;
+    const perPage = params?.perPage ?? params?.per_page ?? 10;
+    const page = params?.page ?? 1;
+
     const formData = new FormData();
-    if (categoryId && categoryId !== "all") formData.append("category_id", String(categoryId));
-    if (subCategoryId && subCategoryId !== "all" && subCategoryId !== "null") formData.append("sub_category_id", String(subCategoryId));
-    if (childCategoryId && childCategoryId !== "all" && childCategoryId !== "null") formData.append("child_category_id", String(childCategoryId));
+    if (categoryId && categoryId !== "all" && categoryId !== "null" && categoryId !== "undefined") {
+      formData.append("category_id", String(categoryId));
+    }
+    if (subCategoryId && subCategoryId !== "all" && subCategoryId !== "null" && subCategoryId !== "undefined") {
+      formData.append("sub_category_id", String(subCategoryId));
+    }
+    if (childCategoryId && childCategoryId !== "all" && childCategoryId !== "null" && childCategoryId !== "undefined") {
+      formData.append("child_category_id", String(childCategoryId));
+    }
     if (productId) formData.append("product_id", String(productId));
     if (skuId) formData.append("sku_id", String(skuId));
-    if (gender && gender !== "all") formData.append("gender", String(gender));
+    if (gender && gender !== "all" && gender !== "null" && gender !== "undefined") {
+      formData.append("gender", String(gender));
+    }
     formData.append("per_page", String(perPage));
     formData.append("page", String(page));
 
@@ -1130,6 +1141,9 @@ export const getOrderDetailsApi = async (orderIdOrParams) => {
     // 1. FormData POST
     const formData = new FormData();
     formData.append("order_id", String(orderId));
+    if (optionalParams?.order_number) {
+      formData.append("order_number", String(optionalParams.order_number));
+    }
 
     const response = await fetch(`${BASE_URL}order-details`, {
       method: "POST",

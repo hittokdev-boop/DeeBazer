@@ -102,6 +102,8 @@ export default function OrderSuccess() {
             ? rawOrderData.order_details
             : Array.isArray(result?.items) && result.items.length > 0
             ? result.items
+            : (rawOrderData.name || rawOrderData.img || rawOrderData.image)
+            ? [rawOrderData]
             : [];
 
         setOrder((prev) => ({
@@ -146,12 +148,20 @@ export default function OrderSuccess() {
 
   // Parse order details
   const displayOrderId = order?.order_id_generate || order?.order_number || order?.order_id || order?.id || order_id || '---';
-  const paymentText =
+  const rawPayment =
     order?.payment_method ||
     order?.payment_type ||
     order?.payment_mode ||
-    (payment_method === 'cod' ? 'Cash on Delivery (COD)' : 'Paid Online (Prepaid)');
-  const amount = Number(order?.total_amount ?? order?.net_amount ?? order?.amount ?? order?.selling_price ?? 0);
+    payment_method ||
+    '';
+
+  const paymentText = (() => {
+    const pm = String(rawPayment).toLowerCase();
+    if (pm === 'cod' || pm.includes('cash on delivery')) return 'Cash on Delivery (COD)';
+    if (pm === 'cashfree' || pm === 'online' || pm.includes('prepaid')) return 'Paid Online (Prepaid)';
+    return rawPayment || 'Cash on Delivery (COD)';
+  })();
+  const amount = Number(order?.line_total ?? order?.payable_amount ?? order?.total_amount ?? order?.net_amount ?? order?.amount ?? order?.selling_price ?? 0);
 
   const itemsList =
     Array.isArray(order?.items) && order.items.length > 0
@@ -162,6 +172,8 @@ export default function OrderSuccess() {
       ? order.order_items
       : Array.isArray(order?.details) && order.details.length > 0
       ? order.details
+      : (order?.name || order?.img || order?.image)
+      ? [order]
       : [];
 
   const addressObj =

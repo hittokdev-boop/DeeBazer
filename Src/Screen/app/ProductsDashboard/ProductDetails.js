@@ -89,10 +89,19 @@ export default function ProductDetails({ route }) {
   const [variants, setVariants] = useState([]);
   const [skuOptions, setSkuOptions] = useState([]);
   const [selectors, setSelectors] = useState([]);
-  const [selectedSkuId, setSelectedSkuId] = useState(
-    sku_id ?? product_sku_id ?? item?.product_sku_id ?? item?.sku_id ?? item?.sku?.id
-  );
-  const [selectedSellerId, setSelectedSellerId] = useState(
+
+  const initialSkuId =
+    sku_id ??
+    product_sku_id ??
+    id ??
+    item?.product_sku_id ??
+    item?.sku_id ??
+    item?.sku?.id ??
+    item?.product_id ??
+    item?.id ??
+    null;
+
+  const initialSellerId =
     seller_id ??
     sellerId ??
     vendor_id ??
@@ -101,10 +110,15 @@ export default function ProductDetails({ route }) {
     item?.vendor_id ??
     item?.seller?.id ??
     item?.user_id ??
-    null
-  );
+    null;
+
+  const [selectedSkuId, setSelectedSkuId] = useState(initialSkuId);
+  const [selectedSellerId, setSelectedSellerId] = useState(initialSellerId);
   const [isHighlightsOpen, setIsHighlightsOpen] = useState(true);
   const [isAllDetailsOpen, setIsAllDetailsOpen] = useState(false);
+
+  const hasLoadedRef = React.useRef(false);
+  const isFetchingRef = React.useRef(false);
 
   const getProductImages = () => {
     const list = [];
@@ -149,21 +163,62 @@ export default function ProductDetails({ route }) {
 
   useFocusEffect(
     React.useCallback(() => {
-      getPrductDetails();
-      getWishlistStatus();
-      getCartStatus();
-
       const onBackPress = () => {
         handleBack();
         return true;
       };
 
       const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      // When returning from another screen (Cart / Wishlist), update cart & wishlist quietly without blinking
+      if (hasLoadedRef.current) {
+        getWishlistStatus();
+        getCartStatus();
+      }
+
       return () => subscription.remove();
-    }, [id, product_sku_id, sku_id, selectedSkuId, navigation])
+    }, [])
   );
 
+  // Initial load: fetch once, show loader, show page when ready
   useEffect(() => {
+    let isMounted = true;
+
+    const loadInitialData = async () => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+      setLoading(true);
+
+      try {
+        await Promise.all([
+          getPrductDetails(initialSkuId, initialSellerId, false, false),
+          getWishlistStatus(initialSkuId),
+          getCartStatus(),
+        ]);
+        if (isMounted) {
+          hasLoadedRef.current = true;
+        }
+      } catch (e) {
+        console.log('Error loading initial product details:', e);
+      } finally {
+        isFetchingRef.current = false;
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadInitialData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Handle route params updates when navigating between products on the same screen instance
+  useEffect(() => {
+    if (!hasLoadedRef.current) return;
+
     const incomingSkuId =
       route.params?.sku_id ??
       route.params?.product_sku_id ??
@@ -182,7 +237,10 @@ export default function ProductDetails({ route }) {
     if (incomingSkuId && String(incomingSkuId) !== String(selectedSkuId)) {
       setSelectedSkuId(incomingSkuId);
       if (incomingSellerId) setSelectedSellerId(incomingSellerId);
-      getPrductDetails(incomingSkuId, incomingSellerId);
+      setLoading(true);
+      getPrductDetails(incomingSkuId, incomingSellerId, false, false);
+      getWishlistStatus(incomingSkuId);
+      getCartStatus();
     }
   }, [
     route.params?.sku_id,
@@ -197,13 +255,13 @@ export default function ProductDetails({ route }) {
       getWishlistStatus();
     });
     return () => sub.remove();
-  }, [selectedSkuId, skuData, product]);
+  }, [selectedSkuId]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     try {
       await Promise.all([
-        getPrductDetails(selectedSkuId, selectedSellerId, true),
+        getPrductDetails(selectedSkuId, selectedSellerId, true, false),
         getWishlistStatus(),
         getCartStatus(),
       ]);
@@ -244,7 +302,7 @@ export default function ProductDetails({ route }) {
     if (varSellerId) {
       setSelectedSellerId(varSellerId);
     }
-    getPrductDetails(variant.product_sku_id, varSellerId);
+    getPrductDetails(variant.product_sku_id, varSellerId, false, true);
     getWishlistStatus(variant.product_sku_id, variant?.seller_sku_id);
   };
 
@@ -262,7 +320,7 @@ export default function ProductDetails({ route }) {
     if (varSellerId) {
       setSelectedSellerId(varSellerId);
     }
-    getPrductDetails(val.product_sku_id, varSellerId);
+    getPrductDetails(val.product_sku_id, varSellerId, false, true);
     getWishlistStatus(val.product_sku_id, matchedVariant?.seller_sku_id ?? val?.seller_sku_id);
   };
 
@@ -307,7 +365,7 @@ export default function ProductDetails({ route }) {
     if (targetSkuId && String(targetSkuId) !== String(selectedSkuId)) {
       setSelectedSkuId(targetSkuId);
       if (targetSellerId) setSelectedSellerId(targetSellerId);
-      getPrductDetails(targetSkuId, targetSellerId);
+      getPrductDetails(targetSkuId, targetSellerId, false, true);
       getWishlistStatus(targetSkuId, colorItem?.seller_sku_id);
     }
   };
@@ -327,22 +385,32 @@ export default function ProductDetails({ route }) {
       setSelectedSellerId(varSellerId);
     }
     setSelectedSkuId(targetSkuId);
-    getPrductDetails(targetSkuId, varSellerId);
+    getPrductDetails(targetSkuId, varSellerId, false, true);
     getWishlistStatus(targetSkuId, matchedVariant?.seller_sku_id ?? item?.seller_sku_id);
   };
 
-  const getPrductDetails = async (overrideSkuId, overrideSellerId, isPullToRefresh = false) => {
+  const getPrductDetails = async (
+    overrideSkuId,
+    overrideSellerId,
+    isPullToRefresh = false,
+    isVariantChange = false
+  ) => {
     const currentSkuId =
       overrideSkuId ??
       selectedSkuId ??
       sku_id ??
       product_sku_id ??
+      id ??
       route.params?.sku_id ??
-      route.params?.product_sku_id;
+      route.params?.product_sku_id ??
+      route.params?.id;
     const currentProductId =
       route.params?.item?.product_id ??
       route.params?.id ??
-      route.params?.item?.id;
+      route.params?.item?.id ??
+      product?.product_id ??
+      product?.id ??
+      id;
 
     if (!currentSkuId && !currentProductId) {
       setLoading(false);
@@ -365,7 +433,7 @@ export default function ProductDetails({ route }) {
       productInfo?.seller_id ??
       skuData?.seller_id;
 
-    if (!isPullToRefresh) {
+    if (!isPullToRefresh && !isVariantChange && !hasLoadedRef.current) {
       setLoading(true);
     }
     const token = await getToken();
@@ -490,7 +558,9 @@ export default function ProductDetails({ route }) {
     } catch (error) {
       console.log('Error fetching sku-details:', error);
     } finally {
-      setLoading(false);
+      if (!isVariantChange) {
+        setLoading(false);
+      }
     }
   };
 
