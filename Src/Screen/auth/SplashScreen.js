@@ -180,9 +180,13 @@ const SplashScreen = ({ navigation }) => {
       // Wait for splash screen duration to finish, then navigate
       timer = setTimeout(() => {
         if (isMounted) {
-          navigation.replace('AppTab');
-          if (productId) {
-            navigation.navigate('ProductDetails', { id: productId });
+          const currentRoutes = navigation.getState()?.routes || [];
+          const hasProductDetails = currentRoutes.some((r) => r.name === 'ProductDetails');
+          if (!hasProductDetails) {
+            navigation.replace('AppTab');
+            if (productId) {
+              navigation.navigate('ProductDetails', { id: productId });
+            }
           }
         }
       }, 2800);

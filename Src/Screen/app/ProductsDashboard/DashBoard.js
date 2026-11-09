@@ -84,10 +84,8 @@ const { width } = Dimensions.get('window');
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 
-const DEFAULT_SUB_CAT_IMAGE = 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=300';
-
 const formatSubCategoryImageUri = (item) => {
-  if (!item) return DEFAULT_SUB_CAT_IMAGE;
+  if (!item) return null;
   let raw =
     item?.image ||
     item?.sub_category_image ||
@@ -100,9 +98,9 @@ const formatSubCategoryImageUri = (item) => {
     item?.photo ||
     item?.thumbnail;
 
-  if (!raw || typeof raw !== 'string') return DEFAULT_SUB_CAT_IMAGE;
+  if (!raw || typeof raw !== 'string') return null;
   raw = raw.trim();
-  if (!raw) return DEFAULT_SUB_CAT_IMAGE;
+  if (!raw) return null;
 
   if (raw.startsWith('http://deebazar.com')) {
     raw = raw.replace('http://deebazar.com', 'https://deebazar.com');
@@ -408,6 +406,7 @@ export default function DashBoard() {
   const [wishlistData, setWishlistData] = useState([]);
   const [cartQty, setCartQty] = useState({});
   const [cartItems, setCartItems] = useState([]);
+  const [isCartLoaded, setIsCartLoaded] = useState(false);
   const [sellerModalVisible, setSellerModalVisible] = useState(false);
   const [sellerModalData, setSellerModalData] = useState({
     cartSellerName: '',
@@ -871,27 +870,28 @@ export default function DashBoard() {
     setSelectedImageUri(uri);
     setIsScanningImage(true);
 
-    const sampleKeywords = ['Shoes', 'Fashion', 'Watch', 'Phone', 'Dress', 'Bag', 'Beauty', 'Gadgets', 'Fruits'];
+    const knownKeywords = ['Shoes', 'Fashion', 'Watch', 'Phone', 'Dress', 'Bag', 'Beauty', 'Gadgets', 'Fruits', 'Shirt', 'T-Shirt', 'Kurti', 'Saree', 'Jeans'];
     let detected = '';
 
     const lowerHint = String(hintName).toLowerCase();
-    for (const kw of sampleKeywords) {
+    for (const kw of knownKeywords) {
       if (lowerHint.includes(kw.toLowerCase())) {
         detected = kw;
         break;
       }
     }
-    if (!detected) {
-      detected = sampleKeywords[Math.floor(Math.random() * sampleKeywords.length)];
-    }
 
     setTimeout(() => {
       setIsScanningImage(false);
-      getSearchText(detected);
-      if (Platform.OS === 'android') {
-        ToastAndroid.show(`📷 Image Search Matched: "${detected}"`, ToastAndroid.LONG);
+      if (detected) {
+        getSearchText(detected);
+        if (Platform.OS === 'android') {
+          ToastAndroid.show(`📷 Search Keyword: "${detected}"`, ToastAndroid.LONG);
+        }
+      } else {
+        Alert.alert('Image Search', 'Could not detect any product keyword from the image. Please enter a product name in the search bar.');
       }
-    }, 1600);
+    }, 1200);
   };
 
   useEffect(() => {
@@ -1107,9 +1107,10 @@ export default function DashBoard() {
   };
 
   useEffect(() => {
-    // Purge any old mock/default notification history
+    // Purge any old mock/default notification history and old cached local cart
     AsyncStorage.removeItem('NOTIFICATION_HISTORY').catch(() => { });
     AsyncStorage.removeItem('DELETED_NOTIFICATION_IDS').catch(() => { });
+    AsyncStorage.removeItem('LOCAL_CART_DETAILS_V2').catch(() => { });
 
     // Load live unread count and real seller notifications on mount
     loadUnreadCount();
@@ -1185,12 +1186,31 @@ export default function DashBoard() {
       },
     );
 
+    // Listen for external cart changes
+    const cartSub = DeviceEventEmitter.addListener(
+      'CART_UPDATED',
+      () => {
+        getCartItems();
+      },
+    );
+
+    // Listen for login success
+    const loginSub = DeviceEventEmitter.addListener(
+      'LOGIN_SUCCESS',
+      () => {
+        getCartItems();
+        getWishlistItems();
+      },
+    );
+
     return () => {
       notificationSub.remove();
       countSub.remove();
       refreshSub.remove();
       openDrawerSub.remove();
       wishlistSub.remove();
+      cartSub.remove();
+      loginSub.remove();
       if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
     };
   }, [loadUnreadCount, loadNotifications, openNotificationDrawer, triggerNotificationBanner]);
@@ -1494,6 +1514,7 @@ export default function DashBoard() {
     if (!primaryId) return;
 
     // Optimistically remove from cart
+    updateProductCartState(itemOrId, 0);
     setCartQty(prev => {
       const updated = { ...prev };
       if (sellerSkuId) delete updated[String(sellerSkuId)];
@@ -1505,7 +1526,7 @@ export default function DashBoard() {
     const currentItems = cartItems;
     const remainingItems = currentItems.filter(ci => !isCartItemMatchingCard(ci, itemOrId));
     setCartItems(remainingItems);
-    await saveLocalCartDetails(remainingItems);
+    // saveLocalCartDetails removed
 
     try {
       await removeFromCartApi(primaryId, sellerSkuId);
@@ -1521,20 +1542,47 @@ export default function DashBoard() {
   };
 
   const increaseQty = async (itemOrId) => {
-    const token = await getToken();
-    const userId = await getuserId();
-    if (!token || !userId) {
-      Navigation.navigate('Login');
-      return;
+    let token = await getToken();
+    let userId = await getuserId();
+    if (token && !userId) {
+      try {
+        const prof = await getUserProfileApi();
+        userId = prof?.data?.user?.id || prof?.data?.id || prof?.user?.id;
+        if (userId) await setuserId(userId);
+      } catch (e) {}
     }
 
     const { skuId, sellerId, sellerSkuId, currentQty } = resolveItemKeys(itemOrId);
     const primaryId = skuId;
+
+    if (!token || !userId) {
+      const pendingAction = {
+        type: 'ADD_TO_CART',
+        product_sku_id: primaryId,
+        seller_sku_id: sellerSkuId,
+        product: typeof itemOrId === 'object' ? itemOrId : null,
+        qty: 1,
+      };
+      await AsyncStorage.setItem(
+        'PENDING_POST_LOGIN_ACTION',
+        JSON.stringify({
+          postLoginAction: pendingAction,
+          returnScreen: 'AppTab',
+        })
+      ).catch(() => {});
+
+      Navigation.navigate('Login', {
+        returnScreen: 'AppTab',
+        postLoginAction: pendingAction,
+      });
+      return;
+    }
     if (!primaryId) return;
 
     const nextQty = currentQty + 1;
 
     // Optimistically update
+    updateProductCartState(itemOrId, nextQty);
     setCartQty(prev => {
       const updated = { ...prev };
       if (sellerSkuId) updated[String(sellerSkuId)] = nextQty;
@@ -1545,7 +1593,7 @@ export default function DashBoard() {
 
     const updated = cartItems.map(ci => isCartItemMatchingCard(ci, itemOrId) ? { ...ci, qty: nextQty } : ci);
     setCartItems(updated);
-    await saveLocalCartDetails(updated);
+    // saveLocalCartDetails removed
 
     try {
       const data = await addToCartApi(
@@ -1587,6 +1635,7 @@ export default function DashBoard() {
     const nextQty = currentQty - 1;
 
     // Optimistically update
+    updateProductCartState(itemOrId, nextQty);
     setCartQty(prev => {
       const updated = { ...prev };
       if (sellerSkuId) updated[String(sellerSkuId)] = nextQty;
@@ -1600,7 +1649,7 @@ export default function DashBoard() {
       isCartItemMatchingCard(ci, itemOrId) ? { ...ci, qty: nextQty } : ci
     );
     setCartItems(updatedItems);
-    await saveLocalCartDetails(updatedItems);
+    // saveLocalCartDetails removed
 
     try {
       const data = await addToCartApi(
@@ -1624,6 +1673,12 @@ export default function DashBoard() {
 
   const isItemWishlisted = (item) => {
     if (!item) return false;
+
+    // 1. Direct API property from backend SKU response
+    if (item.is_wishlist !== undefined && item.is_wishlist !== null) {
+      return Boolean(item.is_wishlist);
+    }
+
     const sellerSkuId = item?.seller_sku_id ?? item?.sellerSkuId;
     const sellerId = item?.seller_id ?? item?.sellerId ?? item?.vendor_id;
     const targetSkuId =
@@ -1734,30 +1789,93 @@ export default function DashBoard() {
     return false;
   };
 
+  const syncProductListsWithCart = (currentCartItems = []) => {
+    const validCart = Array.isArray(currentCartItems) ? currentCartItems : [];
+    const syncInList = (list) => {
+      if (!Array.isArray(list) || list.length === 0) return list;
+      return list.map((p) => {
+        const match = validCart.find((ci) => isCartItemMatchingCard(ci, p));
+        if (match) {
+          const matchQty = Number(match.qty) || 1;
+          if (p.is_cart !== true || p.cart_qty !== matchQty) {
+            return { ...p, is_cart: true, cart_qty: matchQty };
+          }
+        } else {
+          if (p.is_cart !== false || p.cart_qty !== 0) {
+            return { ...p, is_cart: false, cart_qty: 0 };
+          }
+        }
+        return p;
+      });
+    };
+
+    setProduct(syncInList);
+    setPopularProduct(syncInList);
+    setDealOfTheDay(syncInList);
+    setBestsellingProduct(syncInList);
+    setFeaturedproducts(syncInList);
+    setSearchProducts(syncInList);
+    setFilteredProducts(syncInList);
+  };
+
+  const updateProductCartState = (item, newQty) => {
+    const isObj = typeof item === 'object' && item !== null;
+    const skuId = isObj ? getCartSkuId(item) : String(item);
+    const sellerSkuId = isObj ? (item.seller_sku_id ?? item.sellerSkuId) : null;
+    const sellerId = isObj ? (item.seller_id ?? item.sellerId) : null;
+
+    const updateInList = (list) =>
+      Array.isArray(list)
+        ? list.map((p) => {
+            const pSku = p.product_sku_id ?? p.sku_id ?? p.id;
+            const pSellerSku = p.seller_sku_id;
+            const pSellerId = p.seller_id;
+
+            const isMatch =
+              (sellerSkuId && pSellerSku && String(sellerSkuId) === String(pSellerSku)) ||
+              (skuId && pSku && String(skuId) === String(pSku) && (!sellerId || !pSellerId || String(sellerId) === String(pSellerId)));
+
+            if (isMatch) {
+              return { ...p, is_cart: newQty > 0, cart_qty: newQty };
+            }
+            return p;
+          })
+        : [];
+
+    setProduct(updateInList);
+    setPopularProduct(updateInList);
+    setDealOfTheDay(updateInList);
+    setBestsellingProduct(updateInList);
+    setFeaturedproducts(updateInList);
+    setSearchProducts(updateInList);
+    setFilteredProducts(updateInList);
+  };
+
   const getQtyForItem = (item) => {
     if (!item) return 0;
-    const sellerSkuId = item?.seller_sku_id;
-    const sellerId = item?.seller_id ?? item?.sellerId ?? item?.vendor_id;
-    const skuId = getCartSkuId(item);
 
-    // Check directly in cartItems for precise seller match
-    if (cartItems && cartItems.length > 0) {
-      const match = cartItems.find((ci) => isCartItemMatchingCard(ci, item));
-      if (match) {
-        return Number(match.qty) || 1;
+    // 1. When cart is loaded from server, cartItems is the true live source of truth for items in cart!
+    if (isCartLoaded) {
+      if (cartItems && cartItems.length > 0) {
+        const match = cartItems.find((ci) => isCartItemMatchingCard(ci, item));
+        if (match) {
+          return Number(match.qty) || 1;
+        }
       }
       return 0;
     }
 
-    if (sellerSkuId && (cartQty[sellerSkuId] || cartQty[String(sellerSkuId)])) {
-      return Number(cartQty[sellerSkuId] || cartQty[String(sellerSkuId)]);
+    // 2. Before cart is loaded (initial render before getCartItems finishes):
+    if (item.is_cart === false || item.cart_qty === 0) {
+      return 0;
     }
-    if (sellerId && skuId && cartQty[`${sellerId}_${skuId}`]) {
-      return Number(cartQty[`${sellerId}_${skuId}`]);
+    if (item.cart_qty !== undefined && item.cart_qty !== null && Number(item.cart_qty) > 0) {
+      return Number(item.cart_qty);
     }
-    if (!sellerId && !sellerSkuId && skuId && (cartQty[skuId] || cartQty[String(skuId)])) {
-      return Number(cartQty[skuId] || cartQty[String(skuId)]);
+    if (item.is_cart === true) {
+      return 1;
     }
+
     return 0;
   };
 
@@ -1819,17 +1937,41 @@ export default function DashBoard() {
   };
 
   const toggleWishlist = async (item) => {
-    const token = await getToken();
-    const userId = await getuserId();
-
-    if (!token || !userId) {
-      Navigation.navigate('Login');
-      return;
+    let token = await getToken();
+    let userId = await getuserId();
+    if (token && !userId) {
+      try {
+        const prof = await getUserProfileApi();
+        userId = prof?.data?.user?.id || prof?.data?.id || prof?.user?.id;
+        if (userId) await setuserId(userId);
+      } catch (e) {}
     }
 
     const sellerSkuId = item?.seller_sku_id ?? item?.sellerSkuId;
     const sellerId = item?.seller_id ?? item?.sellerId ?? item?.vendor_id;
     const skuId = item?.product_sku_id ?? item?.sku_id ?? item?.id ?? item?.product_id;
+
+    if (!token || !userId) {
+      const pendingAction = {
+        type: 'TOGGLE_WISHLIST',
+        product_sku_id: skuId,
+        seller_sku_id: sellerSkuId,
+        product: item,
+      };
+      await AsyncStorage.setItem(
+        'PENDING_POST_LOGIN_ACTION',
+        JSON.stringify({
+          postLoginAction: pendingAction,
+          returnScreen: 'AppTab',
+        })
+      ).catch(() => {});
+
+      Navigation.navigate('Login', {
+        returnScreen: 'AppTab',
+        postLoginAction: pendingAction,
+      });
+      return;
+    }
 
     if (!skuId) {
       Alert.alert('Error', 'Product SKU is missing');
@@ -1843,6 +1985,30 @@ export default function DashBoard() {
       : (sellerId && skuId ? `${sellerId}_${skuId}` : String(skuId));
 
     // Optimistically update
+    const nextWishlistState = !isWishlisted;
+    const updateWishlistInList = (list) =>
+      Array.isArray(list)
+        ? list.map((p) => {
+            const pSku = p.product_sku_id ?? p.sku_id ?? p.id;
+            const pSellerSku = p.seller_sku_id;
+            if (
+              (sellerSkuId && pSellerSku && String(sellerSkuId) === String(pSellerSku)) ||
+              (skuId && pSku && String(skuId) === String(pSku))
+            ) {
+              return { ...p, is_wishlist: nextWishlistState };
+            }
+            return p;
+          })
+        : [];
+
+    setProduct(updateWishlistInList);
+    setPopularProduct(updateWishlistInList);
+    setDealOfTheDay(updateWishlistInList);
+    setBestsellingProduct(updateWishlistInList);
+    setFeaturedproducts(updateWishlistInList);
+    setSearchProducts(updateWishlistInList);
+    setFilteredProducts(updateWishlistInList);
+
     setWishlistIds((prev) =>
       isWishlisted
         ? prev.filter((id) =>
@@ -2175,6 +2341,7 @@ export default function DashBoard() {
       console.error('Error fetching sku list:', error);
       if (pageNum === 1) {
         setProduct([]);
+        Alert.alert('Network Error', 'Unable to load products. Please check your internet connection.');
       }
     } finally {
       setProductLoading(false);
@@ -2237,29 +2404,28 @@ export default function DashBoard() {
     if (!userId) {
       setCartItems([]);
       setCartQty({});
-      await saveLocalCartDetails([]);
+      setIsCartLoaded(true);
+      syncProductListsWithCart([]);
       return;
     }
 
     try {
       const result = await getCartViewApi();
       const itemsList = extractCartItems(result?.data);
+      setIsCartLoaded(true);
 
       if (itemsList.length === 0) {
         setCartItems([]);
         setCartQty({});
-        await saveLocalCartDetails([]);
+        syncProductListsWithCart([]);
         await clearActiveCartSeller();
         return;
       }
 
-      const mergedItems = await updateLocalCartDetails((localItems) =>
-        syncCartItemsWithServer(itemsList, localItems)
-      );
-      setCartItems(mergedItems);
+      setCartItems(itemsList);
 
       let qtyObj = {};
-      mergedItems.forEach(item => {
+      itemsList.forEach(item => {
         const qty = Number(item.qty) || 1;
         const skuId = getCartSkuId(item);
         const sSkuId = item.seller_sku_id;
@@ -2277,8 +2443,10 @@ export default function DashBoard() {
       });
 
       setCartQty(qtyObj);
-      await saveActiveCartSeller(mergedItems[0]);
+      syncProductListsWithCart(itemsList);
+      await saveActiveCartSeller(itemsList[0]);
     } catch (e) {
+      setIsCartLoaded(true);
       // console.log(e);
     }
   };
@@ -2299,12 +2467,37 @@ export default function DashBoard() {
     }
     cartOperationLock.current[cardLockKey] = true;
 
-    const token = await getToken();
+    let token = await getToken();
+    let userId = await getuserId();
+    if (token && !userId) {
+      try {
+        const prof = await getUserProfileApi();
+        userId = prof?.data?.user?.id || prof?.data?.id || prof?.user?.id;
+        if (userId) await setuserId(userId);
+      } catch (e) {}
+    }
 
-    const userId = await getuserId();
     if (!token || !userId) {
       delete cartOperationLock.current[cardLockKey];
-      Navigation.navigate('Login');
+      const pendingAction = {
+        type: 'ADD_TO_CART',
+        product_sku_id: targetSku,
+        seller_sku_id: sellerSkuId,
+        product: item,
+        qty: 1,
+      };
+      await AsyncStorage.setItem(
+        'PENDING_POST_LOGIN_ACTION',
+        JSON.stringify({
+          postLoginAction: pendingAction,
+          returnScreen: 'AppTab',
+        })
+      ).catch(() => {});
+
+      Navigation.navigate('Login', {
+        returnScreen: 'AppTab',
+        postLoginAction: pendingAction,
+      });
       return;
     }
 
@@ -2321,6 +2514,9 @@ export default function DashBoard() {
       discount_price: item.discount_price ?? item.price ?? 0,
       image: item.image || item.cat_image || '',
     };
+
+    // Optimistically update card view
+    updateProductCartState(item, 1);
 
     // Optimistically update quantity ONLY for this specific card
     setCartQty(prev => {
@@ -2360,15 +2556,11 @@ export default function DashBoard() {
           if (!sellerSkuId && !sellerId) delete updated[String(targetSku)];
           return updated;
         });
+        updateProductCartState(item, 0);
         setCartItems(prev => prev.filter(ci => !isCartItemMatchingCard(ci, item)));
         Alert.alert('Error', data?.message || 'Something went wrong');
       } else {
-        await updateLocalCartDetails((currentLocal) => [
-          ...currentLocal.filter(ci => !isCartItemMatchingCard(ci, item)),
-          newCartItem,
-        ]);
         await saveActiveCartSeller(item);
-        // Background sync
         await getCartItems();
       }
     } catch (error) {
@@ -2837,8 +3029,8 @@ export default function DashBoard() {
   };
 
   const listExtraData = useMemo(
-    () => `${cartItems.length}_${cartQty}_${wishlistIds.length}_${isDarkMode ? 1 : 0}`,
-    [cartItems.length, cartQty, wishlistIds.length, isDarkMode]
+    () => `${cartItems.length}_${JSON.stringify(cartQty)}_${wishlistIds.join(',')}_${isDarkMode ? 1 : 0}_${isCartLoaded ? 1 : 0}`,
+    [cartItems, cartQty, wishlistIds, isDarkMode, isCartLoaded]
   );
 
   const renderProductCard = useCallback(({ item }) => {
@@ -2858,7 +3050,7 @@ export default function DashBoard() {
         onDecreaseQty={() => decreaseQty(item)}
       />
     );
-  }, [isDarkMode, theme, wishlistIds, wishlistData, cartItems, cartQty]);
+  }, [isDarkMode, theme, wishlistIds, wishlistData, cartItems, cartQty, isCartLoaded]);
 
   const renderHorizontalProductItem = useCallback(({ item }) => {
     return (
@@ -2877,7 +3069,7 @@ export default function DashBoard() {
         onDecreaseQty={() => decreaseQty(item)}
       />
     );
-  }, [isDarkMode, theme, wishlistIds, wishlistData, cartItems, cartQty]);
+  }, [isDarkMode, theme, wishlistIds, wishlistData, cartItems, cartQty, isCartLoaded]);
 
   const renderFooter = () => {
     if (searchText.trim() || isFilterActive) return null;

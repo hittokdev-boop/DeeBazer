@@ -98,7 +98,7 @@ const CartPage = () => {
   const [unavailableItems, setUnavailableItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [extraData, setExtraData] = useState({});
-  const [couponCode, setCouponCode] = useState('DEEBAZER50');
+  const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [isCouponModalVisible, setIsCouponModalVisible] = useState(false);
@@ -575,57 +575,54 @@ const CartPage = () => {
   };
   // compute local extra data (subtotal, discount, total) from cart items
   // ===== COUPON LOGIC =====
-  const COUPONS_DATA = [
-    { id: '1', code: 'DEEBAZER50', discount: '50% OFF', title: 'Flat 50% Off', minSpend: 499, type: 'percent', value: 50, description: 'Use code DEEBAZER50 on orders above ₹499.', validTill: '31 Aug 2026' },
-    { id: '2', code: 'FESTIVE200', discount: '₹200 OFF', title: 'Festival Discount', minSpend: 999, type: 'flat', value: 200, description: 'Save flat ₹200 on all orders above ₹999.', validTill: '15 Aug 2026' },
-    { id: '3', code: 'MEGA100', discount: '₹100 OFF', title: 'Super Saver', minSpend: 799, type: 'flat', value: 100, description: 'Enjoy ₹100 instant discount on orders above ₹799.', validTill: '10 Aug 2026' },
-    { id: '4', code: 'FREESHIP', discount: 'FREE SHIPPING', title: 'Free Delivery', minSpend: 0, type: 'flat', value: 0, description: 'Get free delivery on any order.', validTill: '30 Sep 2026' },
-  ];
+  const COUPONS_DATA = [];
 
   const applyCoupon = (customCoupon = null) => {
     const code = customCoupon ? customCoupon.code : couponCode.trim().toUpperCase();
     if (!code) {
       setIsCouponModalVisible(false);
-      showCouponAlert('Empty Coupon Code', 'Please enter or select a valid coupon code.');
+      showCouponAlert('Empty Coupon Code', 'Please enter a valid coupon code.');
       return;
     }
     const matched = customCoupon || COUPONS_DATA.find(c => c.code === code);
-    if (!matched) {
-      setIsCouponModalVisible(false);
-      showCouponAlert('Invalid Coupon', `The coupon code "${code}" is invalid or expired.`);
-      return;
-    }
-    const cartTotal = cartItems.reduce(
-      (sum, it) => sum + Number(it.after_discount_total ?? it.after_discount_price ?? it.discount_total ?? it.discount_price ?? 0), 0
-    );
-    if (cartTotal < matched.minSpend) {
-      const neededAmount = (matched.minSpend - cartTotal).toFixed(2);
-      setIsCouponModalVisible(false);
-      showCouponAlert(
-        'Minimum Spend Not Met',
-        `Coupon "${matched.code}" requires a minimum cart value of ₹${matched.minSpend}.\n\nAdd ₹${neededAmount} more worth of items to unlock this coupon!`
+    if (matched) {
+      const cartTotal = cartItems.reduce(
+        (sum, it) => sum + Number(it.after_discount_total ?? it.after_discount_price ?? it.discount_total ?? it.discount_price ?? 0), 0
       );
-      return;
+      if (cartTotal < (matched.minSpend || 0)) {
+        const neededAmount = (matched.minSpend - cartTotal).toFixed(2);
+        setIsCouponModalVisible(false);
+        showCouponAlert(
+          'Minimum Spend Not Met',
+          `Coupon "${matched.code}" requires a minimum cart value of ₹${matched.minSpend}.\n\nAdd ₹${neededAmount} more worth of items to unlock this coupon!`
+        );
+        return;
+      }
+      let discAmt = 0;
+      if (matched.type === 'flat') {
+        discAmt = matched.value;
+      } else if (matched.type === 'percent') {
+        discAmt = (cartTotal * matched.value) / 100;
+      }
+      setAppliedCoupon(matched);
+      setCouponDiscount(Number(discAmt.toFixed(2)));
+      setCouponCode(matched.code);
+    } else {
+      // Applied user custom entered code
+      setAppliedCoupon({ code, title: code, discount: 'Promo Code' });
+      setCouponDiscount(0);
+      setCouponCode(code);
     }
-    let discAmt = 0;
-    if (matched.type === 'flat') {
-      discAmt = matched.value;
-    } else if (matched.type === 'percent') {
-      discAmt = (cartTotal * matched.value) / 100;
-    }
-    setAppliedCoupon(matched);
-    setCouponDiscount(Number(discAmt.toFixed(2)));
-    setCouponCode(matched.code);
     setIsCouponModalVisible(false);
     if (Platform.OS === 'android') {
-      ToastAndroid.show(`🎉 Coupon ${matched.code} Applied!`, ToastAndroid.SHORT);
+      ToastAndroid.show(`🎉 Coupon ${code} Applied!`, ToastAndroid.SHORT);
     }
   };
 
   const removeCoupon = () => {
     setAppliedCoupon(null);
     setCouponDiscount(0);
-    setCouponCode('DEEBAZER50');
+    setCouponCode('');
   };
 
   const onBuyNowPressed = () => {
@@ -713,31 +710,10 @@ const CartPage = () => {
       const token = await getToken();
       const userId = await getuserId();
 
-      let checkoutUrl = null;
-      if (selectedMethod === "cashfree" || selectedMethod === "online") {
-        try {
-          const cashfreeBody = {
-            amount: billSummary.total_amount,
-            customer_id: String(userId),
-            email: userProfile?.email || addressData?.email || 'customer@deebazar.com',
-            phone: addressData?.mobile || userProfile?.mobile || '9876543210',
-            name: addressData?.name || userProfile?.name || 'Customer',
-            order_note: "Product Purchase",
-            return_url: "https://deebazar.com/payment-return",
-            notify_url: "https://deebazar.com/payment-notify"
-          };
-
-          const cashfreeRes = await createCashfreeOrderApi(cashfreeBody);
-          const cashfreeResult = cashfreeRes.data || {};
-          if (cashfreeRes.ok && (cashfreeResult.status === "success" || cashfreeResult.checkout_url)) {
-            checkoutUrl = cashfreeResult.checkout_url;
-          } else {
-            console.log("Cashfree order creation failed:", cashfreeResult);
-          }
-        } catch (err) {
-          console.log("Cashfree order API call error:", err);
-        }
-      }
+      // Determine payment method for API: 'payu' for online payment or 'cod' for Cash on Delivery
+      const apiPaymentMethod = (selectedMethod === 'payu' || selectedMethod === 'online' || selectedMethod === 'cashfree')
+        ? 'payu'
+        : 'cod';
 
       // Format seller selections: { [seller_id]: { mode: "pickup" } } or { [seller_id]: { mode: "delivery", option: "seller" } }
       const finalSelections = {};
@@ -772,7 +748,7 @@ const CartPage = () => {
 
       console.log("Placing order payload selections:", JSON.stringify(finalSelections));
 
-      const result = await createOrderApi(currentAddressId, selectedMethod, finalSelections, appliedCoupon?.code);
+      const result = await createOrderApi(currentAddressId, apiPaymentMethod, finalSelections, appliedCoupon?.code);
       console.log("Create Order Result:", result);
 
       setIsPaymentModalVisible(false);
@@ -796,37 +772,49 @@ const CartPage = () => {
         setAppliedCoupon(null);
         setCouponDiscount(0);
 
-        if (selectedMethod === "cashfree" || selectedMethod === "online") {
-          const targetUrl = checkoutUrl || result.payment_url || result.data?.payment_url || result.checkout_url;
-          if (targetUrl) {
-            Linking.openURL(targetUrl).catch(() => {
-              openRazorpay();
-            });
-          } else {
-            openRazorpay();
-          }
+        const paymentUrl = result.payment_url || result.data?.payment_url || result.checkout_url || null;
+        const txnid = result.txnid || null;
+
+        // Automatically trigger PayU payment link if returned
+        if (apiPaymentMethod === 'payu' && paymentUrl) {
+          Linking.openURL(paymentUrl).catch((err) => {
+            console.log("Could not open PayU URL automatically:", err);
+            Alert.alert(
+              "Pay via PayU",
+              "Please complete your payment in the browser window.",
+              [
+                { text: "Open Browser", onPress: () => Linking.openURL(paymentUrl).catch(() => {}) },
+                { text: "Later", style: "cancel" }
+              ]
+            );
+          });
         }
 
         if (Platform.OS === 'android') {
-          ToastAndroid.show(result.message || "Order created successfully", ToastAndroid.LONG);
+          ToastAndroid.show(result.message || "Order registered successfully", ToastAndroid.LONG);
         } else {
-          Alert.alert("Success", result.message || "Order created successfully");
+          Alert.alert("Success", result.message || "Order registered successfully");
         }
 
         const firstOrderId = Array.isArray(result.order_ids) && result.order_ids.length > 0 ? result.order_ids[0] : null;
-        const createdOrderId = firstOrderId || result.order_id || result.data?.id || result.id || result.order?.id || result.order?.order_id || result.data?.order_id;
-        const orderNumber = result.order_number || firstOrderId || result.order?.order_number || result.data?.order_number || createdOrderId;
+        const createdOrderId = firstOrderId || result.order_id || result.data?.id || result.id || result.order?.id || result.order?.order_id || result.data?.order_id || txnid;
+        const orderNumber = result.order_number || txnid || firstOrderId || result.order?.order_number || result.data?.order_number || createdOrderId;
+
+        const isPaymentPending = result.payment_status === 'pending' || (apiPaymentMethod === 'payu' && Boolean(paymentUrl));
 
         const constructedOrder = {
           order_id: createdOrderId,
           id: createdOrderId,
           order_number: orderNumber,
-          order_status: "Processing",
-          status: "Processing",
+          order_status: isPaymentPending ? "Payment Pending" : "Processing",
+          status: isPaymentPending ? "Payment Pending" : "Processing",
           delivery_status: "Processing",
-          payment_method: selectedMethod === 'cod' ? 'Cash on Delivery (COD)' : 'Online Payment (Prepaid)',
-          payment_mode: selectedMethod === 'cod' ? 'Cash on Delivery (COD)' : 'Online Payment (Prepaid)',
-          payment_type: selectedMethod,
+          payment_status: result.payment_status || (apiPaymentMethod === 'payu' ? 'pending' : 'pending_delivery'),
+          payment_method: apiPaymentMethod === 'cod' ? 'Cash on Delivery (COD)' : 'Online Payment (PayU)',
+          payment_mode: apiPaymentMethod === 'cod' ? 'Cash on Delivery (COD)' : 'Online Payment (PayU)',
+          payment_type: apiPaymentMethod,
+          payment_url: paymentUrl,
+          txnid: txnid,
           items: orderedCartItems.map((item, idx) => ({
             id: item.id || item.product_id || idx,
             product_id: item.product_id || item.id,
@@ -838,8 +826,9 @@ const CartPage = () => {
             price: item.after_discount_price ?? item.discount_price ?? item.selling_price ?? item.price ?? 0,
             actual_price: item.actual_price ?? item.selling_price ?? item.price ?? 0,
             qty: item.qty || item.quantity || 1,
-            seller_policy: item.seller_policy || item.policy || null,
-            return_days: item.return_days,
+            store_policy: item.store_policy || item.seller_policy || item.policy || null,
+            seller_policy: item.store_policy || item.seller_policy || item.policy || null,
+            return_days: item.store_policy?.return_days ?? item.seller_policy?.return_days ?? item.return_days,
           })),
           selling_price: currentSummary.sub_total || 0,
           subtotal: currentSummary.sub_total || 0,
@@ -869,7 +858,9 @@ const CartPage = () => {
           id: createdOrderId,
           order_number: orderNumber,
           order: constructedOrder,
-          payment_method: selectedMethod,
+          payment_method: apiPaymentMethod,
+          payment_url: paymentUrl,
+          txnid: txnid,
         });
       } else {
         Alert.alert(
@@ -950,9 +941,20 @@ const CartPage = () => {
 
       const initCartFocus = async () => {
         try {
-          const ID = await getuserId();
-          setIsUser(ID);
-          if (!ID) {
+          let ID = await getuserId();
+          const token = await getToken();
+          if (!ID && token) {
+            try {
+              const prof = await getUserProfileApi();
+              const uid = prof?.data?.user?.id || prof?.data?.id || prof?.user?.id;
+              if (uid) {
+                await setuserId(uid);
+                ID = String(uid);
+              }
+            } catch (e) {}
+          }
+          setIsUser(ID || token);
+          if (!ID && !token) {
             if (isMounted) setLoading(false);
             return;
           }
@@ -1104,8 +1106,19 @@ const CartPage = () => {
   };
 
   const CartView = async (selectedAddrId = null, overrideSelections = null, targetSellerId = null) => {
-    const userid = await getuserId();
-    if (!userid) {
+    let userid = await getuserId();
+    const token = await getToken();
+    if (!userid && token) {
+      try {
+        const prof = await getUserProfileApi();
+        const uid = prof?.data?.user?.id || prof?.data?.id || prof?.user?.id;
+        if (uid) {
+          await setuserId(uid);
+          userid = String(uid);
+        }
+      } catch (e) {}
+    }
+    if (!userid && !token) {
       setRefreshing(false);
       setLoading(false);
       return;
@@ -1230,6 +1243,7 @@ const CartPage = () => {
       }
     } catch (error) {
       console.log('Error:', error);
+      Alert.alert('Network Error', 'Unable to fetch cart details from server. Please check your internet connection.');
     } finally {
       setRefreshing(false);
       setLoading(false);
@@ -2409,12 +2423,12 @@ const CartPage = () => {
                     backgroundColor: isDarkMode ? '#334155' : '#F8FAFC',
                     borderColor: isDarkMode ? '#475569' : '#E2E8F0',
                   },
-                  paymentMethod === 'cashfree' && {
+                  (paymentMethod === 'payu' || paymentMethod === 'cashfree') && {
                     borderColor: AllColors.primary,
                     backgroundColor: isDarkMode ? 'rgba(247, 22, 112, 0.15)' : '#FFF1F7',
                   },
                 ]}
-                onPress={() => setPaymentMethod('cashfree')}
+                onPress={() => setPaymentMethod('payu')}
                 activeOpacity={0.8}
               >
                 <View style={styles.paymentOptionLeft}>
@@ -2422,14 +2436,14 @@ const CartPage = () => {
                     <MaterialCommunityIcons name="credit-card-outline" size={24} color={isDarkMode ? '#38BDF8' : '#075985'} />
                   </View>
                   <View style={styles.paymentTextWrapper}>
-                    <Text style={[styles.paymentOptionTitle, { color: theme.textPrimary }]}>Online Payment</Text>
+                    <Text style={[styles.paymentOptionTitle, { color: theme.textPrimary }]}>Online Payment (PayU)</Text>
                     <Text style={[styles.paymentOptionSub, { color: theme.textSecondary }]}>Pay via UPI, Cards, Net Banking & Wallets</Text>
                   </View>
                 </View>
                 <Ionicons
-                  name={paymentMethod === 'cashfree' ? 'radio-button-on' : 'radio-button-off'}
+                  name={(paymentMethod === 'payu' || paymentMethod === 'cashfree') ? 'radio-button-on' : 'radio-button-off'}
                   size={22}
-                  color={paymentMethod === 'cashfree' ? AllColors.primary : (isDarkMode ? '#64748B' : '#94A3B8')}
+                  color={(paymentMethod === 'payu' || paymentMethod === 'cashfree') ? AllColors.primary : (isDarkMode ? '#64748B' : '#94A3B8')}
                 />
               </TouchableOpacity>
             </View>
@@ -2451,7 +2465,7 @@ const CartPage = () => {
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
                 <Text style={styles.confirmOrderText}>
-                  {paymentMethod === 'cod' ? 'Confirm & Place Order (COD)' : 'Proceed to Pay Online'}
+                  {paymentMethod === 'cod' ? 'Confirm & Place Order (COD)' : 'Proceed to Pay Online (PayU)'}
                 </Text>
               )}
             </TouchableOpacity>
@@ -2483,51 +2497,63 @@ const CartPage = () => {
               </TouchableOpacity>
             </View>
 
-            <FlatList
-              data={COUPONS_DATA}
-              keyExtractor={(item) => item.id}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingVertical: 10 }}
-              renderItem={({ item }) => {
-                const isSelected = appliedCoupon?.code === item.code;
-                return (
-                  <View style={[
-                    styles.couponListItem,
-                    {
-                      backgroundColor: isDarkMode ? '#334155' : '#F8FAFC',
-                      borderColor: isSelected ? AllColors.primary : (isDarkMode ? '#475569' : '#E2E8F0'),
-                    }
-                  ]}>
-                    <View style={styles.couponListLeft}>
-                      <View style={styles.couponBadge}>
-                        <Text style={styles.couponBadgeText}>{item.discount}</Text>
+            {COUPONS_DATA.length === 0 ? (
+              <View style={{ paddingVertical: 32, paddingHorizontal: 16, alignItems: 'center' }}>
+                <Ionicons name="pricetag-outline" size={48} color={isDarkMode ? '#64748B' : '#94A3B8'} style={{ marginBottom: 12 }} />
+                <Text style={{ fontSize: 16, fontWeight: '700', color: theme.textPrimary, marginBottom: 6, textAlign: 'center' }}>
+                  No Public Coupons Available
+                </Text>
+                <Text style={{ fontSize: 13, color: theme.textSecondary, textAlign: 'center', lineHeight: 18 }}>
+                  If you have a promotional discount code, please enter it in the coupon input field above and tap APPLY.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={COUPONS_DATA}
+                keyExtractor={(item) => item.id}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingVertical: 10 }}
+                renderItem={({ item }) => {
+                  const isSelected = appliedCoupon?.code === item.code;
+                  return (
+                    <View style={[
+                      styles.couponListItem,
+                      {
+                        backgroundColor: isDarkMode ? '#334155' : '#F8FAFC',
+                        borderColor: isSelected ? AllColors.primary : (isDarkMode ? '#475569' : '#E2E8F0'),
+                      }
+                    ]}>
+                      <View style={styles.couponListLeft}>
+                        <View style={styles.couponBadge}>
+                          <Text style={styles.couponBadgeText}>{item.discount}</Text>
+                        </View>
+                        <View>
+                          <Text style={[styles.couponListTitle, { color: theme.textPrimary }]}>{item.title}</Text>
+                          <Text style={[styles.couponListDesc, { color: theme.textSecondary }]}>{item.description}</Text>
+                          <Text style={[styles.couponMinSpend, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>
+                            Min Spend: ₹{item.minSpend} • Valid till {item.validTill}
+                          </Text>
+                        </View>
                       </View>
-                      <View>
-                        <Text style={[styles.couponListTitle, { color: theme.textPrimary }]}>{item.title}</Text>
-                        <Text style={[styles.couponListDesc, { color: theme.textSecondary }]}>{item.description}</Text>
-                        <Text style={[styles.couponMinSpend, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>
-                          Min Spend: ₹{item.minSpend} • Valid till {item.validTill}
-                        </Text>
-                      </View>
-                    </View>
 
-                    <TouchableOpacity
-                      style={[
-                        styles.couponApplyBtn,
-                        isSelected && styles.couponAppliedBtn,
-                        { backgroundColor: isSelected ? '#10B981' : AllColors.primary }
-                      ]}
-                      onPress={() => applyCoupon(item)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.couponApplyBtnText}>
-                        {isSelected ? 'APPLIED' : 'APPLY'}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                );
-              }}
-            />
+                      <TouchableOpacity
+                        style={[
+                          styles.couponApplyBtn,
+                          isSelected && styles.couponAppliedBtn,
+                          { backgroundColor: isSelected ? '#10B981' : AllColors.primary }
+                        ]}
+                        onPress={() => applyCoupon(item)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.couponApplyBtnText}>
+                          {isSelected ? 'APPLIED' : 'APPLY'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                }}
+              />
+            )}
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>

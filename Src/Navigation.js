@@ -12,7 +12,6 @@ import VerifyOTP from './Screen/auth/VerifyOTP';
 import { useTheme } from './Context/ThemeContext';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import CommonLoginModal from './Screen/auth/Login';
-import TextView from './Screen/app/Misc/Text';
 import EditProfileScreen from './Screen/app/AuthProfile/EditProfile';
 import SaveAddress from './Screen/app/Address/SaveAddress';
 import ProductDetails from './Screen/app/ProductsDashboard/ProductDetails';
@@ -21,18 +20,15 @@ import MapScreen from './Screen/app/Address/MapScreen';
 import AllAddress from './Screen/app/Address/AllAdress';
 import ViewAllProducts from './Screen/app/ProductsDashboard/ViewAllProducts';
 import Wishlist from './Screen/app/Misc/Wishlist';
-import RazorpayScreen from './Screen/app/CartCheckout/RazorpayScreen';
 import Orders from './Screen/app/Orders/Orders';
 import Coupons from './Screen/app/CartCheckout/Coupons';
-import HelpCenter from './Screen/app/Misc/HelpCenter';
 import SplashScreen from './Screen/auth/SplashScreen';
 import OrderDetails from './Screen/app/Orders/OrderDetails';
 import Register from './Screen/auth/Register';
-import TermsCondition from './Screen/app/Misc/TermsCondition';
 import OrderSuccess from './Screen/app/CartCheckout/OrderSuccess';
 // const Tab = createMaterialTopTabNavigator();
 const Tab = createBottomTabNavigator()
-import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef, getStateFromPath } from '@react-navigation/native';
 
 
 export const navigationRef = createNavigationContainerRef();
@@ -85,13 +81,52 @@ export function navigate(name, params) {
 }
 
 const linking = {
-  prefixes: ['https://deebazar.com', 'http://deebazar.com', 'deebazar://'],
+  prefixes: [
+    'https://deebazar.com',
+    'https://www.deebazar.com',
+    'http://deebazar.com',
+    'http://www.deebazar.com',
+    'deebazar://',
+  ],
   config: {
     screens: {
-      ProductDetails: 'product/:id',
+      ProductDetails: {
+        path: 'product/:id',
+        parse: {
+          id: (id) => String(id),
+        },
+      },
       CartPage: 'cart',
       Wishlist: 'wishlist',
+      Orders: 'orders',
+      AllCategories: 'categories',
     },
+  },
+  getStateFromPath: (path, options) => {
+    try {
+      let cleanPath = path;
+      if (cleanPath.startsWith('/')) cleanPath = cleanPath.slice(1);
+
+      // Match /product/123, /product-details/123, /products/123, /sku/123, or ?id=123
+      const productMatch = cleanPath.match(
+        /^(?:product|product-details|products|sku|item)(?:\/|\?.*?(?:id|sku_id|product_id)=)([a-zA-Z0-9_-]+)/i
+      );
+      if (productMatch) {
+        const prodId = productMatch[1];
+        return {
+          routes: [
+            { name: 'AppTab' },
+            {
+              name: 'ProductDetails',
+              params: { id: prodId, product_sku_id: prodId, sku_id: prodId },
+            },
+          ],
+        };
+      }
+    } catch (e) {
+      console.log('getStateFromPath error:', e);
+    }
+    return getStateFromPath(path, options);
   },
 };
 
@@ -121,8 +156,6 @@ const AppStack = () => {
       <Stack.Screen name='VerifyOTP' component={VerifyOTP} />
       <Stack.Screen name='Login' component={CommonLoginModal} />
       <Stack.Screen name='Register' component={Register} />
-      <Stack.Screen name='TermsCondition' component={TermsCondition} />
-      <Stack.Screen name='TextView' component={TextView} />
       <Stack.Screen name='editProfile' component={EditProfileScreen} />
       <Stack.Screen name='SaveAddress' component={SaveAddress} />
       <Stack.Screen name='EditAddress' component={SaveAddress} />
@@ -132,11 +165,9 @@ const AppStack = () => {
       <Stack.Screen name='AllAddress' component={AllAddress} />
       <Stack.Screen name="ViewAllProducts" component={ViewAllProducts} />
       <Stack.Screen name="Wishlist" component={Wishlist} />
-      <Stack.Screen name="RazorpayScreen" component={RazorpayScreen} />
       <Stack.Screen name="CartPage" component={CartPage} />
       <Stack.Screen name="Orders" component={Orders} />
       <Stack.Screen name="Coupons" component={Coupons} />
-      <Stack.Screen name="HelpCenter" component={HelpCenter} />
       <Stack.Screen name="OrderDetails" component={OrderDetails} />
       <Stack.Screen name="OrderSuccess" component={OrderSuccess} />
       <Stack.Screen name="AllCategories" component={AllCategories} />

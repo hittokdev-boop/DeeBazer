@@ -9,14 +9,19 @@ import {
   Image,
   StatusBar,
   ActivityIndicator,
+  Linking,
+  Alert,
+  Platform,
+  ToastAndroid,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import Feather from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
-import { getOrderDetailsApi, getToken, getuserId } from '../../../Api/Api';
+import { getOrderDetailsApi, checkPaymentStatusApi, getToken, getuserId } from '../../../Api/Api';
 import { clearActiveCartSeller } from '../../../Common/sellerUtils';
 
 export default function OrderSuccess() {
@@ -43,6 +48,67 @@ export default function OrderSuccess() {
 
   const [order, setOrder] = useState(initialOrder || null);
   const [loading, setLoading] = useState(!hasInitialData && Boolean(order_id));
+  const [checkingPayment, setCheckingPayment] = useState(false);
+
+  const handleCheckPaymentStatus = async (silent = false) => {
+    const targetTxn =
+      order?.txnid ||
+      initialOrder?.txnid ||
+      (typeof order?.id === 'string' && order.id.startsWith('DBZ') ? order.id : null) ||
+      (typeof order?.order_number === 'string' && order.order_number.startsWith('DBZ') ? order.order_number : null);
+
+    if (!targetTxn) {
+      if (!silent) Alert.alert('Information', 'No transaction ID available to check payment status.');
+      return;
+    }
+
+    if (!silent) setCheckingPayment(true);
+    try {
+      const res = await checkPaymentStatusApi(targetTxn);
+      console.log('Payment status API result in OrderSuccess:', res);
+      if (res && (res.status === 200 || res.status === '200')) {
+        const pStatus = String(res.payment_status || '').toLowerCase();
+        const pState = String(res.state || '').toLowerCase();
+
+        if (pStatus === 'order_failed' || pState.includes('refund')) {
+          setOrder((prev) => ({
+            ...prev,
+            payment_status: res.payment_status || 'order_failed',
+            payment_state: res.state || 'refund_pending',
+            payment_message: res.message,
+            refund_amount: res.amount,
+          }));
+          if (!silent) {
+            Alert.alert('Refund Notice ℹ️', res.message || 'Payment received, but the order could not be placed. Your money will be refunded.');
+          }
+        } else if (pStatus === 'success' || pStatus === 'completed' || pStatus === 'paid' || pState === 'success') {
+          setOrder((prev) => ({
+            ...prev,
+            payment_status: 'paid',
+            payment_state: 'completed',
+          }));
+          if (Array.isArray(res.order_ids) && res.order_ids.length > 0) {
+            fetchOrderDetails(res.order_ids[0]);
+          }
+          if (!silent) {
+            if (Platform.OS === 'android') {
+              ToastAndroid.show('Payment Verified Successfully! 🎉', ToastAndroid.LONG);
+            } else {
+              Alert.alert('Success 🎉', 'Payment verified successfully!');
+            }
+          }
+        } else if (!silent) {
+          Alert.alert('Payment Pending', res.message || 'Payment is still pending.');
+        }
+      } else if (!silent) {
+        Alert.alert('Payment Status', res?.message || 'Could not verify payment status at this moment.');
+      }
+    } catch (err) {
+      console.log('OrderSuccess check payment error:', err);
+    } finally {
+      if (!silent) setCheckingPayment(false);
+    }
+  };
 
   useEffect(() => {
     clearActiveCartSeller();
@@ -158,9 +224,20 @@ export default function OrderSuccess() {
   const paymentText = (() => {
     const pm = String(rawPayment).toLowerCase();
     if (pm === 'cod' || pm.includes('cash on delivery')) return 'Cash on Delivery (COD)';
+    if (pm === 'payu' || pm.includes('payu')) return 'Paid Online (PayU)';
     if (pm === 'cashfree' || pm === 'online' || pm.includes('prepaid')) return 'Paid Online (Prepaid)';
     return rawPayment || 'Cash on Delivery (COD)';
   })();
+
+  const paymentUrl = order?.payment_url || null;
+  const isRefundPending =
+    String(order?.payment_status || '').toLowerCase() === 'order_failed' ||
+    String(order?.payment_state || '').toLowerCase().includes('refund');
+  const isPaymentPending =
+    !isRefundPending &&
+    (String(order?.payment_status || '').toLowerCase() === 'pending' ||
+      (paymentText.includes('PayU') && Boolean(paymentUrl)));
+
   const amount = Number(order?.line_total ?? order?.payable_amount ?? order?.total_amount ?? order?.net_amount ?? order?.amount ?? order?.selling_price ?? 0);
 
   const itemsList =
@@ -239,6 +316,126 @@ export default function OrderSuccess() {
             Thank you for shopping with DeeBazer. Your order has been registered and is being processed.
           </Text>
         </View>
+
+        {/* Refund Pending Notice Banner */}
+        {isRefundPending ? (
+          <View
+            style={[
+              styles.pendingPaymentBanner,
+              {
+                backgroundColor: isDarkMode ? '#2D0A0A' : '#FEF2F2',
+                borderColor: '#EF4444',
+              },
+            ]}
+          >
+            <View style={styles.pendingPaymentRow}>
+              <View
+                style={[
+                  styles.pendingPaymentIconWrapper,
+                  { backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.25)' : '#FEE2E2' },
+                ]}
+              >
+                <MaterialCommunityIcons name="cash-refund" size={24} color="#DC2626" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.pendingPaymentTitle, { color: isDarkMode ? '#FCA5A5' : '#B91C1C' }]}>
+                  Order Placement Failed • Refund Initiated
+                </Text>
+                <Text style={[styles.pendingPaymentSub, { color: isDarkMode ? '#F87171' : '#7F1D1D' }]}>
+                  {order?.payment_message || 'Payment received, but the order could not be placed. Your money will be refunded.'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.checkPaymentStatusSuccessBtn,
+                {
+                  borderColor: isDarkMode ? '#7F1D1D' : '#FCA5A5',
+                  marginTop: 12,
+                },
+              ]}
+              onPress={() => handleCheckPaymentStatus(false)}
+              disabled={checkingPayment}
+              activeOpacity={0.8}
+            >
+              {checkingPayment ? (
+                <ActivityIndicator size="small" color="#DC2626" />
+              ) : (
+                <>
+                  <Feather name="refresh-cw" size={14} color="#DC2626" style={{ marginRight: 6 }} />
+                  <Text style={[styles.checkPaymentStatusSuccessBtnText, { color: '#DC2626' }]}>Refresh Refund Status</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* PayU Payment Pending Action Banner */}
+        {isPaymentPending ? (
+          <View
+            style={[
+              styles.pendingPaymentBanner,
+              {
+                backgroundColor: isDarkMode ? '#2D1F03' : '#FFFBEB',
+                borderColor: '#F59E0B',
+              },
+            ]}
+          >
+            <View style={styles.pendingPaymentRow}>
+              <View
+                style={[
+                  styles.pendingPaymentIconWrapper,
+                  { backgroundColor: isDarkMode ? 'rgba(245, 158, 11, 0.25)' : '#FEF3C7' },
+                ]}
+              >
+                <Ionicons name="card-outline" size={24} color="#D97706" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.pendingPaymentTitle, { color: isDarkMode ? '#FDE68A' : '#92400E' }]}>
+                  Complete Your Payment
+                </Text>
+                <Text style={[styles.pendingPaymentSub, { color: isDarkMode ? '#FCD34D' : '#B45309' }]}>
+                  Please complete payment via PayU to confirm this order.
+                </Text>
+              </View>
+            </View>
+
+            {paymentUrl ? (
+              <TouchableOpacity
+                style={styles.payNowSuccessBtn}
+                onPress={() => Linking.openURL(paymentUrl).catch(() => {})}
+                activeOpacity={0.85}
+              >
+                <MaterialCommunityIcons name="shield-check" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.payNowSuccessBtnText}>Pay Now via PayU</Text>
+                <Ionicons name="arrow-forward" size={16} color="#FFFFFF" style={{ marginLeft: 6 }} />
+              </TouchableOpacity>
+            ) : null}
+
+            <TouchableOpacity
+              style={[
+                styles.checkPaymentStatusSuccessBtn,
+                {
+                  backgroundColor: isDarkMode ? '#3A2000' : '#FEF3C7',
+                  borderColor: isDarkMode ? '#78350F' : '#FDE68A',
+                  marginTop: paymentUrl ? 8 : 12,
+                },
+              ]}
+              onPress={() => handleCheckPaymentStatus(false)}
+              disabled={checkingPayment}
+              activeOpacity={0.8}
+            >
+              {checkingPayment ? (
+                <ActivityIndicator size="small" color="#D97706" />
+              ) : (
+                <>
+                  <Feather name="refresh-cw" size={14} color="#D97706" style={{ marginRight: 6 }} />
+                  <Text style={styles.checkPaymentStatusSuccessBtnText}>Check Payment Status</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* Invoice details card */}
         <View style={[styles.invoiceCard, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}>
@@ -544,5 +741,61 @@ const styles = StyleSheet.create({
   },
   btnIcon: {
     marginRight: 8,
+  },
+  pendingPaymentBanner: {
+    marginBottom: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 14,
+  },
+  pendingPaymentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pendingPaymentIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pendingPaymentTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  pendingPaymentSub: {
+    fontSize: 12.5,
+    fontWeight: '500',
+    marginTop: 2,
+    lineHeight: 17,
+  },
+  payNowSuccessBtn: {
+    backgroundColor: '#D97706',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginTop: 12,
+  },
+  payNowSuccessBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  checkPaymentStatusSuccessBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  checkPaymentStatusSuccessBtnText: {
+    color: '#D97706',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

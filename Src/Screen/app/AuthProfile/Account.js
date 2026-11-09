@@ -119,33 +119,34 @@ export default function Account() {
   const goToWishList = () => handleNavigate('Wishlist');
   const goToOrders = () => handleNavigate('Orders');
   const goToCoupons = () => handleNavigate('Coupons');
-  const goToHelpCenter = () => handleNavigate('HelpCenter');
   const gotoEditProfile = () => handleNavigate('editProfile');
   const gotoSaveAddress = () => handleNavigate('AllAddress');
 
   const openHelpSupport = () => {
     Linking.openURL('https://deebazar.com/help-and-support.php').catch(err => {
-      console.log("Couldn't load page", err);
+      console.log("Couldn't load help & support page", err);
     });
   };
 
   const openPrivacyPolicy = () => {
     Linking.openURL('https://deebazar.com/privacy-policy.php').catch(err => {
-      console.log("Couldn't load page", err);
+      console.log("Couldn't load privacy policy page", err);
     });
   };
 
   const openTermsConditions = () => {
     Linking.openURL('https://deebazar.com/terms-and-conditions.php').catch(err => {
-      console.log("Couldn't load page", err);
+      console.log("Couldn't load terms & conditions page", err);
     });
   };
 
-  const openReturnPolicy = () => {
-    Linking.openURL('https://deebazar.com/return-policy.php').catch(err => {
-      console.log("Couldn't load page", err);
-      handleNavigate('HelpCenter');
-    });
+  const openReturnPolicy = async () => {
+    const url = 'https://deebazar.com/return-policy.php';
+    try {
+      await Linking.openURL(url);
+    } catch (err) {
+      console.log("Couldn't load return policy page", err);
+    }
   };
 
   const checkLogin = async () => {
@@ -369,7 +370,7 @@ export default function Account() {
             <TouchableOpacity
               style={[styles.box, { backgroundColor: theme.cardBg, borderColor: theme.borderColor }]}
               activeOpacity={0.7}
-              onPress={goToHelpCenter}>
+              onPress={openHelpSupport}>
               <Feather
                 name="headphones"
                 size={26}
@@ -467,17 +468,6 @@ export default function Account() {
           <TouchableOpacity
             style={[styles.row, { borderBottomColor: theme.divider }]}
             activeOpacity={0.7}
-            onPress={goToHelpCenter}>
-            <View style={styles.rowLeft}>
-              <AntDesign name="questioncircleo" size={22} color={theme.iconPrimary} />
-              <Text style={[styles.rowText, { color: theme.textSecondary }]}>Browse FAQs</Text>
-            </View>
-            <AntDesign name="right" size={18} color={theme.modalSubText} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.row, { borderBottomColor: theme.divider }]}
-            activeOpacity={0.7}
             onPress={openHelpSupport}>
             <View style={styles.rowLeft}>
               <Feather name="headphones" size={22} color={theme.iconPrimary} />
@@ -514,7 +504,7 @@ export default function Account() {
             onPress={openReturnPolicy}>
             <View style={styles.rowLeft}>
               <Ionicons name="refresh-circle-outline" size={22} color={theme.iconPrimary} />
-              <Text style={[styles.rowText, { color: theme.textSecondary }]}>Return & Refund Policy</Text>
+              <Text style={[styles.rowText, { color: theme.textSecondary }]}>Return Policy</Text>
             </View>
             <AntDesign name="right" size={18} color={theme.modalSubText} />
           </TouchableOpacity>

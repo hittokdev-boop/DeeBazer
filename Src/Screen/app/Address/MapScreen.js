@@ -472,8 +472,9 @@ export default function MapScreen() {
         payload.latitude = Number(Number(finalLat).toFixed(6));
         payload.longitude = Number(Number(finalLng).toFixed(6));
       } else {
-        payload.latitude = 22.5726;
-        payload.longitude = 88.3639;
+        setSaving(false);
+        Alert.alert('Location Required', 'Please pin your exact location on the map to save your delivery address.');
+        return;
       }
 
       const res = await saveAddressApi(payload);

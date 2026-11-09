@@ -18,11 +18,12 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
-import { getCategoriesApi, getSubCategoriesApi } from '../../../Api/Api';
+import { getCategoriesApi, getSubCategoriesApi, getChildCategoriesApi } from '../../../Api/Api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SIDEBAR_WIDTH = 92;
+const SIDEBAR_WIDTH = 90;
 const CONTENT_WIDTH = SCREEN_WIDTH - SIDEBAR_WIDTH;
+const CHILD_CARD_WIDTH = Math.max(70, Math.floor((CONTENT_WIDTH - 20 - 24 - 16) / 3));
 
 export default function AllCategories() {
   const navigation = useNavigation();
@@ -32,6 +33,9 @@ export default function AllCategories() {
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [subCategoriesMap, setSubCategoriesMap] = useState({});
+  const [childCategoriesMap, setChildCategoriesMap] = useState({});
+  const [loadingChildMap, setLoadingChildMap] = useState({});
+  const [collapsedSubs, setCollapsedSubs] = useState({});
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isLoadingSubCategories, setIsLoadingSubCategories] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -40,6 +44,84 @@ export default function AllCategories() {
 
   // Ref to prevent race conditions in subcategory fetching
   const activeCategoryIdRef = useRef(null);
+
+  // Fetch child categories for a subcategory
+  const fetchChildCategories = useCallback(async (catId, subCatId) => {
+    if (!subCatId) return;
+    if (childCategoriesMap[subCatId] !== undefined) return;
+
+    setLoadingChildMap((prev) => ({ ...prev, [subCatId]: true }));
+    try {
+      const response = await getChildCategoriesApi(catId, subCatId);
+      const json = response || {};
+      const list = json?.data || (Array.isArray(json) ? json : []);
+      setChildCategoriesMap((prev) => ({
+        ...prev,
+        [subCatId]: Array.isArray(list) ? list : [],
+      }));
+    } catch (err) {
+      console.log(`Error fetching child-categories for sub ${subCatId}:`, err);
+      setChildCategoriesMap((prev) => ({
+        ...prev,
+        [subCatId]: [],
+      }));
+    } finally {
+      setLoadingChildMap((prev) => ({ ...prev, [subCatId]: false }));
+    }
+  }, [childCategoriesMap]);
+
+  // Fetch subcategories for a given category ID
+  const fetchSubCategories = useCallback(async (catId) => {
+    if (!catId) return;
+    activeCategoryIdRef.current = catId;
+
+    // Use cached if already present
+    if (subCategoriesMap[catId] !== undefined) {
+      const cached = subCategoriesMap[catId] || [];
+      cached.forEach((sub) => {
+        if (childCategoriesMap[sub.id] === undefined) {
+          fetchChildCategories(catId, sub.id);
+        }
+      });
+      return;
+    }
+
+    setIsLoadingSubCategories(true);
+    try {
+      const response = await getSubCategoriesApi(catId);
+      const json = response || {};
+      const list =
+        json?.data ||
+        json?.subcategories ||
+        json?.sub_categories ||
+        (Array.isArray(json) ? json : []);
+
+      if (activeCategoryIdRef.current === catId) {
+        const validList = Array.isArray(list) ? list : [];
+        setSubCategoriesMap((prev) => ({
+          ...prev,
+          [catId]: validList,
+        }));
+
+        // Fetch child categories for all subcategories in parallel
+        validList.forEach((sub) => {
+          fetchChildCategories(catId, sub.id);
+        });
+      }
+    } catch (err) {
+      console.log(`Error fetching sub-categories for cat ${catId}:`, err);
+      if (activeCategoryIdRef.current === catId) {
+        setSubCategoriesMap((prev) => ({
+          ...prev,
+          [catId]: [],
+        }));
+      }
+    } finally {
+      if (activeCategoryIdRef.current === catId) {
+        setIsLoadingSubCategories(false);
+      }
+    }
+  }, [subCategoriesMap, childCategoriesMap, fetchChildCategories]);
 
   // Fetch all categories from backend
   const fetchCategories = useCallback(async (isRefresh = false) => {
@@ -52,7 +134,6 @@ export default function AllCategories() {
 
     try {
       const response = await getCategoriesApi();
-      // requestApi returns the parsed JSON directly, e.g. { status: 200, data: [...] }
       const json = response || {};
 
       if (json?.data && Array.isArray(json.data) && json.data.length > 0) {
@@ -83,48 +164,6 @@ export default function AllCategories() {
     }
   }, [categories.length, selectedCategory, fetchSubCategories]);
 
-  // Fetch subcategories for a given category ID
-  const fetchSubCategories = useCallback(async (catId) => {
-    if (!catId) return;
-    activeCategoryIdRef.current = catId;
-
-    // Use cached if already present
-    if (subCategoriesMap[catId] !== undefined) {
-      return;
-    }
-
-    setIsLoadingSubCategories(true);
-    try {
-      const response = await getSubCategoriesApi(catId);
-      // requestApi returns the parsed JSON directly
-      const json = response || {};
-      const list =
-        json?.data ||
-        json?.subcategories ||
-        json?.sub_categories ||
-        (Array.isArray(json) ? json : []);
-
-      if (activeCategoryIdRef.current === catId) {
-        setSubCategoriesMap((prev) => ({
-          ...prev,
-          [catId]: Array.isArray(list) ? list : [],
-        }));
-      }
-    } catch (err) {
-      console.log(`Error fetching sub-categories for cat ${catId}:`, err);
-      if (activeCategoryIdRef.current === catId) {
-        setSubCategoriesMap((prev) => ({
-          ...prev,
-          [catId]: [],
-        }));
-      }
-    } finally {
-      if (activeCategoryIdRef.current === catId) {
-        setIsLoadingSubCategories(false);
-      }
-    }
-  }, [subCategoriesMap]);
-
   // Initial load
   useEffect(() => {
     fetchCategories();
@@ -134,9 +173,7 @@ export default function AllCategories() {
   const handleSelectCategory = (cat) => {
     setSelectedCategory(cat);
     activeCategoryIdRef.current = cat.id;
-    if (subCategoriesMap[cat.id] === undefined) {
-      fetchSubCategories(cat.id);
-    }
+    fetchSubCategories(cat.id);
   };
 
   // Navigate to ViewAllProducts for a whole category
@@ -158,10 +195,35 @@ export default function AllCategories() {
     });
   };
 
+  // Navigate to ViewAllProducts for a specific child category
+  const handleSelectChildCategory = (childCat, subCat) => {
+    if (!childCat) return;
+    navigation.navigate('ViewAllProducts', {
+      title: childCat.name,
+      categoryId: selectedCategory?.id || subCat?.category_id || childCat.category_id,
+      subCategoryId: subCat?.id || childCat.sub_category_id,
+      childCategoryId: childCat.id,
+    });
+  };
+
+  // Toggle expand / collapse for a subcategory
+  const toggleCollapseSub = (subId) => {
+    setCollapsedSubs((prev) => ({
+      ...prev,
+      [subId]: !prev[subId],
+    }));
+  };
+
   // Current active subcategories list
   const currentSubCategories = selectedCategory
     ? subCategoriesMap[selectedCategory.id] || []
     : [];
+
+  // Total child categories count in active category
+  const totalChildCount = currentSubCategories.reduce((acc, sub) => {
+    const c = childCategoriesMap[sub.id] || [];
+    return acc + c.length;
+  }, 0);
 
   // Filtered categories and subcategories when searching
   const filteredCategories = searchQuery.trim()
@@ -175,6 +237,14 @@ export default function AllCategories() {
   const filteredSubCategories = searchQuery.trim()
     ? allKnownSubCategories.filter((s) =>
         s.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
+      )
+    : [];
+
+  // Flattened all child categories that match the search
+  const allKnownChildCategories = Object.values(childCategoriesMap).flat();
+  const filteredChildCategories = searchQuery.trim()
+    ? allKnownChildCategories.filter((c) =>
+        c.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
       )
     : [];
 
@@ -382,52 +452,105 @@ export default function AllCategories() {
               />
             </TouchableOpacity>
           )}
-          ListFooterComponent={() =>
-            filteredSubCategories.length > 0 ? (
-              <View style={styles.searchSubSection}>
-                <Text
-                  style={[
-                    styles.searchSectionTitle,
-                    { color: theme.textPrimary, marginTop: 16 },
-                  ]}
-                >
-                  Subcategories ({filteredSubCategories.length})
-                </Text>
-                <View style={styles.searchSubGrid}>
-                  {filteredSubCategories.map((sub) => (
-                    <TouchableOpacity
-                      key={`sub-${sub.id}`}
-                      style={[
-                        styles.searchSubChip,
-                        {
-                          backgroundColor: theme.cardBg,
-                          borderColor: theme.borderColor,
-                        },
-                      ]}
-                      onPress={() => handleSelectSubCategory(sub)}
-                    >
-                      {sub.image && (
-                        <Image
-                          source={{ uri: sub.image }}
-                          style={styles.searchSubChipImage}
-                          resizeMode="contain"
-                        />
-                      )}
-                      <Text
+          ListFooterComponent={() => (
+            <>
+              {filteredSubCategories.length > 0 && (
+                <View style={styles.searchSubSection}>
+                  <Text
+                    style={[
+                      styles.searchSectionTitle,
+                      { color: theme.textPrimary, marginTop: 16 },
+                    ]}
+                  >
+                    Subcategories ({filteredSubCategories.length})
+                  </Text>
+                  <View style={styles.searchSubGrid}>
+                    {filteredSubCategories.map((sub) => (
+                      <TouchableOpacity
+                        key={`sub-${sub.id}`}
                         style={[
-                          styles.searchSubChipText,
-                          { color: theme.textPrimary },
+                          styles.searchSubChip,
+                          {
+                            backgroundColor: theme.cardBg,
+                            borderColor: theme.borderColor,
+                          },
                         ]}
-                        numberOfLines={1}
+                        onPress={() => handleSelectSubCategory(sub)}
                       >
-                        {sub.name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        {sub.image && (
+                          <Image
+                            source={{ uri: sub.image }}
+                            style={styles.searchSubChipImage}
+                            resizeMode="contain"
+                          />
+                        )}
+                        <Text
+                          style={[
+                            styles.searchSubChipText,
+                            { color: theme.textPrimary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {sub.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
-              </View>
-            ) : null
-          }
+              )}
+
+              {filteredChildCategories.length > 0 && (
+                <View style={styles.searchSubSection}>
+                  <Text
+                    style={[
+                      styles.searchSectionTitle,
+                      { color: theme.textPrimary, marginTop: 16 },
+                    ]}
+                  >
+                    Child Categories ({filteredChildCategories.length})
+                  </Text>
+                  <View style={styles.searchSubGrid}>
+                    {filteredChildCategories.map((child) => (
+                      <TouchableOpacity
+                        key={`child-search-${child.id}`}
+                        style={[
+                          styles.searchSubChip,
+                          {
+                            backgroundColor: theme.cardBg,
+                            borderColor: theme.borderColor,
+                          },
+                        ]}
+                        onPress={() => handleSelectChildCategory(child)}
+                      >
+                        {child.image ? (
+                          <Image
+                            source={{ uri: child.image }}
+                            style={styles.searchSubChipImage}
+                            resizeMode="contain"
+                          />
+                        ) : (
+                          <Ionicons
+                            name="apps-outline"
+                            size={14}
+                            color={AllColors.primary}
+                          />
+                        )}
+                        <Text
+                          style={[
+                            styles.searchSubChipText,
+                            { color: theme.textPrimary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {child.name}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </>
+          )}
           ListEmptyComponent={() => (
             <View style={styles.centerEmpty}>
               <Ionicons
@@ -548,20 +671,19 @@ export default function AllCategories() {
               <FlatList
                 data={currentSubCategories}
                 keyExtractor={(item) => `subcat-${item.id}`}
-                numColumns={2}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.subCatListPadding}
-                columnWrapperStyle={
-                  currentSubCategories.length > 0
-                    ? styles.subCatColumnWrapper
-                    : null
-                }
                 refreshControl={
                   <RefreshControl
                     refreshing={refreshing}
                     onRefresh={() => {
                       fetchCategories(true);
                       if (selectedCategory) {
+                        setSubCategoriesMap((prev) => {
+                          const copy = { ...prev };
+                          delete copy[selectedCategory.id];
+                          return copy;
+                        });
                         fetchSubCategories(selectedCategory.id);
                       }
                     }}
@@ -601,7 +723,7 @@ export default function AllCategories() {
                           ]}
                         >
                           {currentSubCategories.length > 0
-                            ? `${currentSubCategories.length} Subcategories`
+                            ? `${currentSubCategories.length} ${currentSubCategories.length === 1 ? 'Subcategory' : 'Subcategories'}${totalChildCount > 0 ? ` • ${totalChildCount} ${totalChildCount === 1 ? 'type' : 'types'}` : ''}`
                             : 'Explore collection'}
                         </Text>
 
@@ -640,7 +762,7 @@ export default function AllCategories() {
                           { color: theme.textPrimary },
                         ]}
                       >
-                        Subcategories
+                        Subcategories & Types
                       </Text>
                       {currentSubCategories.length > 0 && (
                         <Text
@@ -649,66 +771,215 @@ export default function AllCategories() {
                             { color: theme.textSecondary },
                           ]}
                         >
-                          {currentSubCategories.length} items
+                          {currentSubCategories.length} {currentSubCategories.length === 1 ? 'category' : 'categories'}
                         </Text>
                       )}
                     </View>
                   </View>
                 )}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    style={[
-                      styles.subCategoryCard,
-                      {
-                        backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
-                        borderColor: isDarkMode ? '#334155' : '#E2E8F0',
-                      },
-                    ]}
-                    onPress={() => handleSelectSubCategory(item)}
-                  >
+                renderItem={({ item }) => {
+                  const isCollapsed = Boolean(collapsedSubs[item.id]);
+                  const childList = childCategoriesMap[item.id] || [];
+                  const isChildLoading = Boolean(loadingChildMap[item.id]);
+
+                  return (
                     <View
                       style={[
-                        styles.subCatImageWrapper,
+                        styles.subCategoryBlock,
                         {
-                          backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC',
+                          backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
+                          borderColor: isDarkMode ? '#334155' : '#E2E8F0',
                         },
                       ]}
                     >
-                      {item.image ? (
-                        <Image
-                          source={{ uri: item.image }}
-                          style={styles.subCatImage}
-                          resizeMode="contain"
-                        />
-                      ) : (
-                        <Ionicons
-                          name="pricetag-outline"
-                          size={24}
-                          color={AllColors.primary}
-                        />
+                      {/* Subcategory Header */}
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => toggleCollapseSub(item.id)}
+                        style={[
+                          styles.subCategoryHeader,
+                          {
+                            backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC',
+                            borderBottomColor: isCollapsed
+                              ? 'transparent'
+                              : (isDarkMode ? '#334155' : '#E2E8F0'),
+                          },
+                        ]}
+                      >
+                        <View style={styles.subHeaderLeft}>
+                          {item.image ? (
+                            <Image
+                              source={{ uri: item.image }}
+                              style={styles.subHeaderImage}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <View
+                              style={[
+                                styles.subHeaderIconBox,
+                                {
+                                  backgroundColor: isDarkMode
+                                    ? '#0F172A'
+                                    : '#EFF6FF',
+                                },
+                              ]}
+                            >
+                              <Ionicons
+                                name="pricetag-outline"
+                                size={15}
+                                color={AllColors.primary}
+                              />
+                            </View>
+                          )}
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              style={[
+                                styles.subHeaderTitle,
+                                { color: theme.textPrimary },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {item.name}
+                            </Text>
+                            {childList.length > 0 && (
+                              <Text
+                                style={[
+                                  styles.subHeaderSubtitle,
+                                  { color: theme.textSecondary },
+                                ]}
+                              >
+                                {childList.length}{' '}
+                                {childList.length === 1 ? 'type' : 'types'}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+
+                        <View style={styles.subHeaderRight}>
+                          <TouchableOpacity
+                            style={styles.subHeaderExploreBtn}
+                            onPress={() => handleSelectSubCategory(item)}
+                            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                          >
+                            <Text style={styles.subHeaderExploreText}>All</Text>
+                            <Ionicons
+                              name="chevron-forward"
+                              size={12}
+                              color={AllColors.primary}
+                            />
+                          </TouchableOpacity>
+                          <Ionicons
+                            name={isCollapsed ? 'chevron-down' : 'chevron-up'}
+                            size={18}
+                            color={theme.textSecondary}
+                          />
+                        </View>
+                      </TouchableOpacity>
+
+                      {/* Child Categories Grid (when expanded) */}
+                      {!isCollapsed && (
+                        <View style={styles.childGridContainer}>
+                          {isChildLoading ? (
+                            <View style={styles.childLoadingBox}>
+                              <ActivityIndicator
+                                size="small"
+                                color={AllColors.primary}
+                              />
+                              <Text
+                                style={[
+                                  styles.childLoadingText,
+                                  { color: theme.textSecondary },
+                                ]}
+                              >
+                                Loading child categories...
+                              </Text>
+                            </View>
+                          ) : childList.length > 0 ? (
+                            <View style={styles.childGrid}>
+                              {childList.map((child) => (
+                                <TouchableOpacity
+                                  key={`child-${child.id}`}
+                                  style={[
+                                    styles.childCard,
+                                    { width: CHILD_CARD_WIDTH },
+                                  ]}
+                                  activeOpacity={0.7}
+                                  onPress={() =>
+                                    handleSelectChildCategory(child, item)
+                                  }
+                                >
+                                  <View
+                                    style={[
+                                      styles.childImageWrap,
+                                      {
+                                        backgroundColor: isDarkMode
+                                          ? '#0F172A'
+                                          : '#F1F5F9',
+                                        borderColor: isDarkMode
+                                          ? '#334155'
+                                          : '#E2E8F0',
+                                      },
+                                    ]}
+                                  >
+                                    {child.image ? (
+                                      <Image
+                                        source={{ uri: child.image }}
+                                        style={styles.childImage}
+                                        resizeMode="contain"
+                                      />
+                                    ) : (
+                                      <Ionicons
+                                        name="apps-outline"
+                                        size={20}
+                                        color={AllColors.primary}
+                                      />
+                                    )}
+                                  </View>
+                                  <Text
+                                    style={[
+                                      styles.childNameText,
+                                      { color: theme.textPrimary },
+                                    ]}
+                                    numberOfLines={2}
+                                  >
+                                    {child.name}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          ) : (
+                            <TouchableOpacity
+                              style={[
+                                styles.emptyChildExploreRow,
+                                {
+                                  backgroundColor: isDarkMode
+                                    ? '#0F172A'
+                                    : '#F8FAFC',
+                                },
+                              ]}
+                              onPress={() => handleSelectSubCategory(item)}
+                            >
+                              <Text
+                                style={[
+                                  styles.emptyChildExploreText,
+                                  { color: theme.textSecondary },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                Explore all {item.name} products
+                              </Text>
+                              <Ionicons
+                                name="arrow-forward"
+                                size={13}
+                                color={AllColors.primary}
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
                       )}
                     </View>
-
-                    <Text
-                      style={[
-                        styles.subCatNameText,
-                        { color: theme.textPrimary },
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {item.name}
-                    </Text>
-
-                    {item.count_child_category > 0 && (
-                      <View style={styles.subCatBadgeChip}>
-                        <Text style={styles.subCatBadgeText}>
-                          {item.count_child_category} types
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                )}
+                  );
+                }}
                 ListEmptyComponent={() =>
                   isLoadingSubCategories ? (
                     <View style={styles.subLoadingBox}>
@@ -991,48 +1262,129 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500',
   },
-  subCategoryCard: {
-    width: (CONTENT_WIDTH - 32) / 2,
+  /* Subcategory Block Container */
+  subCategoryBlock: {
     borderRadius: 14,
     borderWidth: 1,
-    padding: 10,
-    alignItems: 'center',
+    marginBottom: 12,
+    overflow: 'hidden',
     elevation: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
   },
-  subCatImageWrapper: {
-    width: '100%',
-    aspectRatio: 1.1,
-    borderRadius: 10,
+  subCategoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  subHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 9,
+    marginRight: 6,
+  },
+  subHeaderImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+  },
+  subHeaderIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  subHeaderTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  subHeaderSubtitle: {
+    fontSize: 10,
+    fontWeight: '500',
+    marginTop: 1,
+  },
+  subHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  subHeaderExploreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: AllColors.softPinkBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 12,
+    gap: 2,
+  },
+  subHeaderExploreText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: AllColors.primary,
+  },
+  /* Child Categories Grid */
+  childGridContainer: {
+    padding: 10,
+  },
+  childGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  childCard: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  childImageWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: 5,
   },
-  subCatImage: {
-    width: '80%',
-    height: '80%',
+  childImage: {
+    width: 34,
+    height: 34,
   },
-  subCatNameText: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    textAlign: 'center',
-    lineHeight: 15,
-  },
-  subCatBadgeChip: {
-    marginTop: 5,
-    backgroundColor: AllColors.softPinkBg,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  subCatBadgeText: {
-    fontSize: 9.5,
+  childNameText: {
+    fontSize: 10.5,
     fontWeight: '600',
-    color: AllColors.primary,
+    textAlign: 'center',
+    lineHeight: 14,
+    paddingHorizontal: 2,
+  },
+  childLoadingBox: {
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  childLoadingText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  emptyChildExploreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  emptyChildExploreText: {
+    fontSize: 11.5,
+    fontWeight: '500',
+    flex: 1,
   },
   subLoadingBox: {
     paddingVertical: 40,

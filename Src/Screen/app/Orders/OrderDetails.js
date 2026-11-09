@@ -29,7 +29,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
-import { getOrderDetailsApi, getOrderListApi, returnOrderApi, getToken, getuserId } from '../../../Api/Api';
+import { getOrderDetailsApi, getOrderListApi, returnOrderApi, checkPaymentStatusApi, getToken, getuserId } from '../../../Api/Api';
 import ProductReviewModal, {
   getStoredReviews,
   getRatingColor,
@@ -85,6 +85,10 @@ export default function OrderDetails() {
   const [selectedReturnReason, setSelectedReturnReason] = useState('');
   const [returnComment, setReturnComment] = useState('');
   const [submittingReturn, setSubmittingReturn] = useState(false);
+
+  // Payment Status Checking State
+  const [checkingPayment, setCheckingPayment] = useState(false);
+  const [paymentStatusData, setPaymentStatusData] = useState(null);
 
   // Review & Rating State
   const [storedReviews, setStoredReviews] = useState({});
@@ -406,6 +410,7 @@ export default function OrderDetails() {
         console.log('OrderDetails fetch error:', err);
         if (!orderRef.current) {
           setError('Network error. Please check your internet connection.');
+          Alert.alert('Error', 'Unable to fetch order details from server. Please check your internet connection.');
         }
       } finally {
         setLoading(false);
@@ -415,13 +420,110 @@ export default function OrderDetails() {
     [targetOrderId, targetId, targetOrderNumber]
   );
 
+  const handleCheckPaymentStatus = useCallback(
+    async (silent = false) => {
+      const targetTxn =
+        order?.txnid ||
+        initialOrder?.txnid ||
+        params?.txnid ||
+        paymentStatusData?.txnid ||
+        (typeof order?.id === 'string' && order.id.startsWith('DBZ') ? order.id : null) ||
+        (typeof order?.order_number === 'string' && order.order_number.startsWith('DBZ') ? order.order_number : null) ||
+        (typeof params?.id === 'string' && params.id.startsWith('DBZ') ? params.id : null) ||
+        (typeof params?.order_number === 'string' && params.order_number.startsWith('DBZ') ? params.order_number : null);
+
+      if (!targetTxn) {
+        if (!silent) {
+          Alert.alert('Information', 'No transaction ID available to check payment status.');
+        }
+        return;
+      }
+
+      if (!silent) setCheckingPayment(true);
+      try {
+        const res = await checkPaymentStatusApi(targetTxn);
+        console.log('Payment status API result:', res);
+        if (res && (res.status === 200 || res.status === '200')) {
+          setPaymentStatusData(res);
+          const pStatus = String(res.payment_status || '').toLowerCase();
+          const pState = String(res.state || '').toLowerCase();
+
+          if (pStatus === 'order_failed' || pState.includes('refund')) {
+            setOrder((prev) => {
+              const updated = {
+                ...prev,
+                payment_status: res.payment_status || 'order_failed',
+                payment_state: res.state || 'refund_pending',
+                payment_message: res.message,
+                order_status: 'Order Failed (Refund Pending)',
+                status: 'Order Failed (Refund Pending)',
+                refund_amount: res.amount,
+              };
+              orderRef.current = updated;
+              return updated;
+            });
+            if (!silent) {
+              Alert.alert(
+                'Refund Notice ℹ️',
+                res.message || 'Payment received, but the order could not be placed. Your money will be refunded.'
+              );
+            }
+          } else if (pStatus === 'success' || pStatus === 'completed' || pStatus === 'paid' || pState === 'success') {
+            setOrder((prev) => {
+              const updated = {
+                ...prev,
+                payment_status: 'paid',
+                payment_state: 'completed',
+                order_status: 'Processing',
+                status: 'Processing',
+              };
+              orderRef.current = updated;
+              return updated;
+            });
+            if (Array.isArray(res.order_ids) && res.order_ids.length > 0) {
+              fetchOrderDetails(true);
+            }
+            if (!silent) {
+              if (Platform.OS === 'android') {
+                ToastAndroid.show('Payment Verified! Order Confirmed 🎉', ToastAndroid.LONG);
+              } else {
+                Alert.alert('Success 🎉', 'Payment verified successfully! Your order is confirmed.');
+              }
+            }
+          } else if (!silent) {
+            Alert.alert(
+              'Payment Pending',
+              res.message || 'Your payment is still pending. If you haven’t paid yet, please complete your payment via PayU.'
+            );
+          }
+        } else if (!silent) {
+          Alert.alert('Payment Status', res?.message || 'Could not verify payment status at this moment.');
+        }
+      } catch (err) {
+        console.log('Check payment status error:', err);
+        if (!silent) {
+          Alert.alert('Error', 'Network error while checking payment status. Please try again.');
+        }
+      } finally {
+        if (!silent) setCheckingPayment(false);
+      }
+    },
+    [order, initialOrder, params, paymentStatusData, fetchOrderDetails]
+  );
+
   useEffect(() => {
     fetchOrderDetails();
-  }, []); // ✅ only runs once on mount
+    if (params?.txnid || initialOrder?.txnid) {
+      handleCheckPaymentStatus(true);
+    }
+  }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchOrderDetails(true);
+    if (order?.txnid || initialOrder?.txnid || params?.txnid) {
+      handleCheckPaymentStatus(true);
+    }
   };
 
   const copyToClipboard = (text) => {
@@ -436,6 +538,36 @@ export default function OrderDetails() {
 
   const getStatusConfig = (status) => {
     const s = String(status || '').toLowerCase().trim();
+    if (
+      s.includes('refund') ||
+      s.includes('order_failed') ||
+      s.includes('order failed')
+    ) {
+      return {
+        bg: isDarkMode ? 'rgba(239, 68, 68, 0.18)' : '#FEF2F2',
+        color: isDarkMode ? '#F87171' : '#DC2626',
+        borderColor: isDarkMode ? 'rgba(248, 113, 113, 0.3)' : '#FECACA',
+        label: 'Order Failed (Refund Pending)',
+        icon: 'alert-circle',
+        subtitle: 'Payment received. Your money will be refunded.',
+        stepIndex: -1,
+      };
+    }
+    if (
+      s.includes('payment pending') ||
+      s.includes('pending payment') ||
+      s === 'payment_pending'
+    ) {
+      return {
+        bg: isDarkMode ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7',
+        color: isDarkMode ? '#FBBF24' : '#D97706',
+        borderColor: isDarkMode ? 'rgba(245, 158, 11, 0.3)' : '#FDE68A',
+        label: 'Payment Pending',
+        icon: 'time-outline',
+        subtitle: 'Payment is pending. Please complete your payment via PayU.',
+        stepIndex: 0,
+      };
+    }
     if (
       s.includes('delivered') ||
       s.includes('completed') ||
@@ -808,7 +940,7 @@ export default function OrderDetails() {
                     borderColor: theme.borderColor,
                   },
                 ]}
-                onPress={() => navigation.navigate('HelpCenter')}
+                onPress={() => Linking.openURL('https://deebazar.com/help-and-support.php')}
                 activeOpacity={0.8}
               >
                 <Feather
@@ -1236,9 +1368,38 @@ export default function OrderDetails() {
   const paymentMethodText = (() => {
     const pm = String(rawPaymentMethod).toLowerCase();
     if (pm === 'cod' || pm.includes('cash on delivery')) return 'Cash on Delivery (COD)';
+    if (pm === 'payu' || pm.includes('payu')) return 'Online Payment (PayU)';
     if (pm === 'cashfree' || pm === 'online' || pm.includes('prepaid')) return 'Online Payment (Prepaid)';
     return rawPaymentMethod || 'Cash on Delivery (COD)';
   })();
+
+  const isRefundPending = (() => {
+    const pStatus = String(currentOrder?.payment_status || '').toLowerCase();
+    const pState = String(currentOrder?.payment_state || currentOrder?.state || '').toLowerCase();
+    const oStatus = String(currentOrder?.order_status || currentOrder?.status || '').toLowerCase();
+    return (
+      pStatus === 'order_failed' ||
+      pState.includes('refund') ||
+      oStatus.includes('refund') ||
+      oStatus.includes('order failed')
+    );
+  })();
+
+  const isPaymentPending = (() => {
+    if (isRefundPending) return false;
+    const pStatus = String(currentOrder?.payment_status || currentOrder?.payment_state || '').toLowerCase();
+    const oStatus = String(currentOrder?.order_status || currentOrder?.status || '').toLowerCase();
+    const pMethod = String(rawPaymentMethod).toLowerCase();
+    return (
+      pStatus === 'pending' ||
+      oStatus.includes('payment pending') ||
+      oStatus.includes('pending payment') ||
+      (pMethod.includes('payu') && pStatus !== 'paid' && pStatus !== 'completed' && pStatus !== 'success' && pStatus !== 'order_failed')
+    );
+  })();
+
+  const paymentUrl = currentOrder?.payment_url || params?.payment_url || null;
+  const txnid = currentOrder?.txnid || params?.txnid || null;
 
   const steps = [
     { title: 'Order Placed', icon: 'bag-check-outline' },
@@ -1248,10 +1409,11 @@ export default function OrderDetails() {
   ];
 
   const sellerPolicy =
+    currentOrder.store_policy ||
     currentOrder.seller_policy ||
     currentOrder.return_policy ||
     currentOrder.policy ||
-    (itemsList && itemsList[0] ? (itemsList[0].seller_policy || itemsList[0].return_policy || itemsList[0].policy) : null) ||
+    (itemsList && itemsList[0] ? (itemsList[0].store_policy || itemsList[0].seller_policy || itemsList[0].return_policy || itemsList[0].policy) : null) ||
     null;
 
   const dynamicReturnDays =
@@ -1324,9 +1486,7 @@ export default function OrderDetails() {
             text: 'Need Support?',
             onPress: () => {
               Linking.openURL(
-                `https://wa.me/919876543210?text=${encodeURIComponent(
-                  `Hi DeeBazar, I submitted a Return Request for Order #${displayOrderId}. Reason: ${selectedReturnReason}`
-                )}`
+                `mailto:support@deebazar.com?subject=${encodeURIComponent(`Return Request for Order #${displayOrderId}`)}&body=${encodeURIComponent(`Hi DeeBazar Support, I submitted a return request for Order #${displayOrderId}. Reason: ${selectedReturnReason}`)}`
               ).catch(() => { });
             },
           },
@@ -1419,6 +1579,143 @@ export default function OrderDetails() {
             </Text>
           </View>
         </View>
+
+        {/* Refund Pending Notice Banner */}
+        {isRefundPending && (
+          <View
+            style={[
+              styles.refundNoticeCard,
+              {
+                backgroundColor: isDarkMode ? '#2D0A0A' : '#FEF2F2',
+                borderColor: '#EF4444',
+              },
+            ]}
+          >
+            <View style={styles.refundHeaderRow}>
+              <View
+                style={[
+                  styles.refundIconWrapper,
+                  { backgroundColor: isDarkMode ? 'rgba(239, 68, 68, 0.25)' : '#FEE2E2' },
+                ]}
+              >
+                <MaterialCommunityIcons name="cash-refund" size={24} color="#DC2626" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.refundTitle, { color: isDarkMode ? '#FCA5A5' : '#B91C1C' }]}>
+                  Order Placement Failed • Refund Initiated
+                </Text>
+                <Text style={[styles.refundMessage, { color: isDarkMode ? '#F87171' : '#7F1D1D' }]}>
+                  {currentOrder?.payment_message || paymentStatusData?.message || 'Payment received, but the order could not be placed. Your money will be refunded.'}
+                </Text>
+              </View>
+            </View>
+
+            {(currentOrder?.refund_amount || paymentStatusData?.amount) ? (
+              <View style={[styles.refundAmountRow, { borderTopColor: isDarkMode ? 'rgba(239, 68, 68, 0.3)' : '#FECACA' }]}>
+                <Text style={[styles.refundAmountLabel, { color: isDarkMode ? '#FCA5A5' : '#991B1B' }]}>
+                  Refund Amount:
+                </Text>
+                <Text style={[styles.refundAmountValue, { color: isDarkMode ? '#FCA5A5' : '#B91C1C' }]}>
+                  ₹{currentOrder?.refund_amount || paymentStatusData?.amount}
+                </Text>
+              </View>
+            ) : null}
+
+            <TouchableOpacity
+              style={[styles.checkStatusBtn, { borderColor: isDarkMode ? '#7F1D1D' : '#FCA5A5' }]}
+              onPress={() => handleCheckPaymentStatus(false)}
+              disabled={checkingPayment}
+              activeOpacity={0.8}
+            >
+              {checkingPayment ? (
+                <ActivityIndicator size="small" color="#DC2626" />
+              ) : (
+                <>
+                  <Feather name="refresh-cw" size={14} color="#DC2626" style={{ marginRight: 6 }} />
+                  <Text style={[styles.checkStatusBtnText, { color: '#DC2626' }]}>Refresh Refund Status</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* PayU Payment Pending Action Banner */}
+        {isPaymentPending && (
+          <View
+            style={[
+              styles.paymentPendingCard,
+              {
+                backgroundColor: isDarkMode ? '#2D1F03' : '#FFFBEB',
+                borderColor: '#F59E0B',
+              },
+            ]}
+          >
+            <View style={styles.paymentPendingHeader}>
+              <View
+                style={[
+                  styles.paymentPendingIconWrapper,
+                  { backgroundColor: isDarkMode ? 'rgba(245, 158, 11, 0.25)' : '#FEF3C7' },
+                ]}
+              >
+                <Ionicons name="card-outline" size={24} color="#D97706" />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={[styles.paymentPendingTitle, { color: isDarkMode ? '#FDE68A' : '#92400E' }]}>
+                  Payment Pending
+                </Text>
+                <Text style={[styles.paymentPendingSubtitle, { color: isDarkMode ? '#FCD34D' : '#B45309' }]}>
+                  {paymentUrl
+                    ? 'Please complete your payment via PayU to confirm this order.'
+                    : 'Payment is pending. Please complete your payment.'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.paymentPendingBtnContainer}>
+              {paymentUrl ? (
+                <TouchableOpacity
+                  style={styles.payNowBtn}
+                  onPress={() => {
+                    Linking.openURL(paymentUrl).catch((err) => {
+                      console.log('Error opening PayU link:', err);
+                      Alert.alert('Pay via PayU', 'Please open the payment link in your browser.', [
+                        { text: 'Open', onPress: () => Linking.openURL(paymentUrl) },
+                        { text: 'Cancel', style: 'cancel' },
+                      ]);
+                    });
+                  }}
+                  activeOpacity={0.85}
+                >
+                  <MaterialCommunityIcons name="shield-check" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.payNowBtnText}>Pay Now via PayU</Text>
+                  <Ionicons name="arrow-forward" size={16} color="#FFFFFF" style={{ marginLeft: 6 }} />
+                </TouchableOpacity>
+              ) : null}
+
+              <TouchableOpacity
+                style={[
+                  styles.checkPaymentStatusBtn,
+                  {
+                    backgroundColor: isDarkMode ? '#3A2000' : '#FEF3C7',
+                    borderColor: isDarkMode ? '#78350F' : '#FDE68A',
+                  },
+                ]}
+                onPress={() => handleCheckPaymentStatus(false)}
+                disabled={checkingPayment}
+                activeOpacity={0.8}
+              >
+                {checkingPayment ? (
+                  <ActivityIndicator size="small" color="#D97706" />
+                ) : (
+                  <>
+                    <Feather name="refresh-cw" size={14} color="#D97706" style={{ marginRight: 6 }} />
+                    <Text style={styles.checkPaymentStatusBtnText}>Check Payment Status</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Timeline Stepper (if not cancelled) */}
         {statusConfig.stepIndex >= 0 && (
@@ -1585,6 +1882,17 @@ export default function OrderDetails() {
               {paymentMethodText}
             </Text>
           </View>
+
+          {txnid ? (
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>
+                Transaction ID
+              </Text>
+              <Text style={[styles.infoValue, { color: theme.textPrimary, fontWeight: '600' }]}>
+                {txnid}
+              </Text>
+            </View>
+          ) : null}
 
           {itemsList.length > 0 && (
             <View style={styles.infoRow}>
@@ -2650,7 +2958,7 @@ export default function OrderDetails() {
                 borderColor: theme.borderColor,
               },
             ]}
-            onPress={() => navigation.navigate('HelpCenter')}
+            onPress={() => Linking.openURL('https://deebazar.com/help-and-support.php')}
             activeOpacity={0.8}
           >
             <Feather
@@ -2731,6 +3039,16 @@ export default function OrderDetails() {
               <Text style={[styles.guidelineBodyText, { color: theme.textSecondary }]}>
                 Innerwear, personal hygiene products, perishable items, and products marked as "Non-Returnable" on the item page cannot be returned once delivered.
               </Text>
+
+              <TouchableOpacity
+                style={{ marginTop: 14, marginBottom: 8, paddingVertical: 8, alignItems: 'center' }}
+                onPress={() => Linking.openURL('https://deebazar.com/return-policy.php')}
+                activeOpacity={0.7}
+              >
+                <Text style={{ color: AllColors.primary, fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' }}>
+                  View Official Return Policy (deebazar.com/return-policy.php) →
+                </Text>
+              </TouchableOpacity>
             </ScrollView>
 
             <TouchableOpacity
@@ -3682,5 +4000,124 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  paymentPendingCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 14,
+  },
+  paymentPendingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  paymentPendingIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  paymentPendingTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  paymentPendingSubtitle: {
+    fontSize: 12.5,
+    fontWeight: '500',
+    marginTop: 2,
+    lineHeight: 17,
+  },
+  payNowBtn: {
+    backgroundColor: '#D97706',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  payNowBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  paymentPendingBtnContainer: {
+    marginTop: 4,
+  },
+  checkPaymentStatusBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 8,
+  },
+  checkPaymentStatusBtnText: {
+    color: '#D97706',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  refundNoticeCard: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 14,
+  },
+  refundHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  refundIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  refundTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  refundMessage: {
+    fontSize: 12.5,
+    fontWeight: '500',
+    marginTop: 2,
+    lineHeight: 17,
+  },
+  refundAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+    marginTop: 10,
+    borderTopWidth: 1,
+  },
+  refundAmountLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  refundAmountValue: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  checkStatusBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: 10,
+  },
+  checkStatusBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

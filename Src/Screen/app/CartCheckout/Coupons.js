@@ -21,48 +21,7 @@ import AllColors from '../../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../../Constants/ScreenUtils';
 import { useTheme } from '../../../Context/ThemeContext';
 
-const COUPONS_DATA = [
-  {
-    id: '1',
-    code: 'DEEBAZER50',
-    discount: '50% OFF',
-    title: 'Flat 50% Off on First Purchase',
-    description: 'Use code DEEBAZER50 on orders above ₹499.',
-    minSpend: 499,
-    validTill: '31 Aug 2026',
-    bgGradient: ['#F71670', '#E11D48'],
-  },
-  {
-    id: '2',
-    code: 'FESTIVE200',
-    discount: '₹200 OFF',
-    title: 'Festival Season Discount',
-    description: 'Save flat ₹200 on all ethnic wear items.',
-    minSpend: 999,
-    validTill: '15 Aug 2026',
-    bgGradient: ['#8B5CF6', '#6D28D9'],
-  },
-  {
-    id: '3',
-    code: 'FREESHIP',
-    discount: 'FREE SHIPPING',
-    title: 'Free Shipping Voucher',
-    description: 'Get free delivery on any order with no minimum spend.',
-    minSpend: 0,
-    validTill: '30 Sep 2026',
-    bgGradient: ['#10B981', '#059669'],
-  },
-  {
-    id: '4',
-    code: 'MEGA100',
-    discount: '₹100 OFF',
-    title: 'Super Saver Coupon',
-    description: 'Enjoy ₹100 instant cashback on orders above ₹799.',
-    minSpend: 799,
-    validTill: '10 Aug 2026',
-    bgGradient: ['#F59E0B', '#D97706'],
-  },
-];
+const COUPONS_DATA = [];
 
 export default function Coupons() {
   const navigation = useNavigation();
@@ -95,23 +54,11 @@ export default function Coupons() {
       }
       return;
     }
-
-    const matched = COUPONS_DATA.find(
-      (c) => c.code.toLowerCase() === promoCode.trim().toLowerCase()
-    );
-
-    if (matched) {
-      if (Platform.OS === 'android') {
-        ToastAndroid.show(`🎉 Coupon ${matched.code} Applied Successfully!`, ToastAndroid.SHORT);
-      } else {
-        Alert.alert('Success', `Coupon ${matched.code} Applied Successfully!`);
-      }
+    const entered = promoCode.trim().toUpperCase();
+    if (Platform.OS === 'android') {
+      ToastAndroid.show('Coupon ' + entered + ' added. It will be verified during checkout.', ToastAndroid.SHORT);
     } else {
-      if (Platform.OS === 'android') {
-        ToastAndroid.show('❌ Invalid or expired coupon code', ToastAndroid.SHORT);
-      } else {
-        Alert.alert('Error', 'Invalid or expired coupon code');
-      }
+      Alert.alert('Coupon Added', 'Coupon ' + entered + ' added. It will be verified during checkout.');
     }
   };
 

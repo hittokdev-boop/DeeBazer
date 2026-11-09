@@ -17,7 +17,9 @@ import {
   RefreshControl,
   BackHandler,
   DeviceEventEmitter,
+  Linking,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import LinearGradient from 'react-native-linear-gradient';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import AntDesign from 'react-native-vector-icons/AntDesign';
@@ -170,14 +172,17 @@ export default function ProductDetails({ route }) {
 
       const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
 
-      // When returning from another screen (Cart / Wishlist), update cart & wishlist quietly without blinking
+      // When returning from another screen (Cart / Wishlist), update cart & wishlist directly from API
       if (hasLoadedRef.current) {
-        getWishlistStatus();
-        getCartStatus();
+        const targetSku = selectedSkuId ?? initialSkuId;
+        const targetSeller = selectedSellerId ?? initialSellerId;
+        if (targetSku) {
+          getPrductDetails(targetSku, targetSeller, false, false);
+        }
       }
 
       return () => subscription.remove();
-    }, [])
+    }, [selectedSkuId, selectedSellerId, initialSkuId, initialSellerId])
   );
 
   // Initial load: fetch once, show loader, show page when ready
@@ -190,11 +195,7 @@ export default function ProductDetails({ route }) {
       setLoading(true);
 
       try {
-        await Promise.all([
-          getPrductDetails(initialSkuId, initialSellerId, false, false),
-          getWishlistStatus(initialSkuId),
-          getCartStatus(),
-        ]);
+        await getPrductDetails(initialSkuId, initialSellerId, false, false);
         if (isMounted) {
           hasLoadedRef.current = true;
         }
@@ -239,8 +240,6 @@ export default function ProductDetails({ route }) {
       if (incomingSellerId) setSelectedSellerId(incomingSellerId);
       setLoading(true);
       getPrductDetails(incomingSkuId, incomingSellerId, false, false);
-      getWishlistStatus(incomingSkuId);
-      getCartStatus();
     }
   }, [
     route.params?.sku_id,
@@ -251,20 +250,34 @@ export default function ProductDetails({ route }) {
   ]);
 
   useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('WISHLIST_UPDATED', () => {
-      getWishlistStatus();
+    const subWishlist = DeviceEventEmitter.addListener('WISHLIST_UPDATED', () => {
+      if (selectedSkuId) {
+        getPrductDetails(selectedSkuId, selectedSellerId, false, false);
+      }
     });
-    return () => sub.remove();
-  }, [selectedSkuId]);
+    const subCart = DeviceEventEmitter.addListener('CART_UPDATED', () => {
+      if (selectedSkuId) {
+        getPrductDetails(selectedSkuId, selectedSellerId, false, false);
+        getCartStatus();
+      }
+    });
+    const subLogin = DeviceEventEmitter.addListener('LOGIN_SUCCESS', () => {
+      if (selectedSkuId) {
+        getPrductDetails(selectedSkuId, selectedSellerId, false, false);
+        getCartStatus();
+      }
+    });
+    return () => {
+      subWishlist.remove();
+      subCart.remove();
+      subLogin.remove();
+    };
+  }, [selectedSkuId, selectedSellerId]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await Promise.all([
-        getPrductDetails(selectedSkuId, selectedSellerId, true, false),
-        getWishlistStatus(),
-        getCartStatus(),
-      ]);
+      await getPrductDetails(selectedSkuId, selectedSellerId, true, false);
     } catch (e) {
       console.log('Error refreshing product details:', e);
     } finally {
@@ -274,17 +287,41 @@ export default function ProductDetails({ route }) {
 
   const shareProduct = async () => {
     try {
-      const productId = id || product?.id || product?.product_id;
-      const playStoreUrl = `https://play.google.com/store/apps/details?id=com.deebazar.shopping&referrer=product_id%3D${productId}`;
-      const deepLinkUrl = `deebazar://product/${productId}`;
+      const targetSkuId =
+        selectedSkuId ||
+        skuData?.product_sku_id ||
+        product?.product_sku_id ||
+        product?.sku_id ||
+        sku_id ||
+        id ||
+        product?.id ||
+        product?.product_id;
 
-      const message = `${product?.name || ''}\n\nPrice: ₹${product?.discount_price || product?.actual_price || ''
-        }\n\nCheck out this product on DeeBazar!\n\nIf the app is installed, open directly:\n${deepLinkUrl}\n\nIf the app is not installed, install it from Play Store:\n${playStoreUrl}`;
+      const pName =
+        skuData?.name ||
+        product?.name ||
+        productInfo?.name ||
+        'Product Details';
 
-      await Share.share({
-        title: product?.name || 'Product Details',
-        message: message,
-      });
+      const pPrice =
+        skuData?.discount_price ??
+        product?.discount_price ??
+        skuData?.actual_price ??
+        product?.price ??
+        product?.actual_price ??
+        '';
+
+      const productWebUrl = `https://deebazar.com/product/${targetSkuId}`;
+      const playStoreUrl = `https://play.google.com/store/apps/details?id=com.deebazar.shopping&referrer=product_id%3D${targetSkuId}`;
+
+      const priceText = pPrice ? `Price: ₹${pPrice}\n` : '';
+      const message = `${pName}\n${priceText}\nView Product on DeeBazar:\n${productWebUrl}\n\nInstall App:\n${playStoreUrl}`;
+
+      await Share.share(
+        Platform.OS === 'ios'
+          ? { title: pName, url: productWebUrl, message: message }
+          : { title: pName, message: message }
+      );
     } catch (error) {
       console.log('Share error:', error);
     }
@@ -484,6 +521,24 @@ export default function ProductDetails({ route }) {
         const pName = p.name ? p.name.trim() : '';
         const displayName = sName || pName || 'Product Details';
 
+        const parseApiBool = (val) => {
+          if (val === true || val === 1 || val === '1' || val === 'true') return true;
+          if (val === false || val === 0 || val === '0' || val === 'false') return false;
+          return null;
+        };
+
+        // Directly bind Wishlist state from API response
+        const rawWishlist = parseApiBool(s.is_wishlist) ?? parseApiBool(d.is_wishlist) ?? parseApiBool(p.is_wishlist);
+        const wishlistQty = Number(s.wishlist_qty ?? p.wishlist_qty ?? d.wishlist_qty ?? 0);
+        const finalWishlist = rawWishlist !== null ? (rawWishlist || wishlistQty > 0) : (wishlistQty > 0);
+        setIsWishlisted(Boolean(finalWishlist));
+
+        // Directly bind Cart state from API response
+        const rawCart = parseApiBool(s.is_cart) ?? parseApiBool(d.is_cart) ?? parseApiBool(p.is_cart);
+        const cartQty = Number(s.cart_qty ?? p.cart_qty ?? d.cart_qty ?? 0);
+        const finalCart = rawCart !== null ? (rawCart || cartQty > 0) : (cartQty > 0);
+        setIsAddedToCart(Boolean(finalCart));
+
         const merged = {
           ...p,
           ...s,
@@ -517,10 +572,16 @@ export default function ProductDetails({ route }) {
           child_category_id: p.child_category_id,
           child_category_name: p.child_category_name,
           reviews: p.reviews,
+          is_cart: Boolean(finalCart),
+          is_wishlist: Boolean(finalWishlist),
+          cart_qty: cartQty,
+          wishlist_qty: wishlistQty,
+          store_policy: s.store_policy ?? p.store_policy ?? d.store_policy,
+          store_policy_id: s.store_policy_id ?? p.store_policy_id,
+          seller_policy: s.store_policy ?? s.seller_policy ?? p.store_policy ?? p.seller_policy ?? d.store_policy ?? d.seller_policy,
         };
 
         setProduct(merged);
-        getWishlistStatus(s.product_sku_id ?? currentSkuId, s.seller_sku_id ?? p.seller_sku_id);
 
         if (s.image) {
           setProductImage(s.image);
@@ -557,6 +618,7 @@ export default function ProductDetails({ route }) {
       }
     } catch (error) {
       console.log('Error fetching sku-details:', error);
+      Alert.alert('Error', 'Unable to fetch product details from server. Please check your internet connection.');
     } finally {
       if (!isVariantChange) {
         setLoading(false);
@@ -659,12 +721,14 @@ export default function ProductDetails({ route }) {
   };
 
   const toggleWishlist = async () => {
-    const token = await getToken();
-    const userId = await getuserId();
-
-    if (!token || !userId) {
-      navigation.navigate('Login');
-      return;
+    let token = await getToken();
+    let userId = await getuserId();
+    if (token && !userId) {
+      try {
+        const prof = await getUserProfileApi();
+        userId = prof?.data?.user?.id || prof?.data?.id || prof?.user?.id;
+        if (userId) await setuserId(userId);
+      } catch (e) {}
     }
 
     const currentSkuId =
@@ -677,12 +741,47 @@ export default function ProductDetails({ route }) {
       product?.id ??
       id;
 
+    const currentSellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
+
+    if (!token || !userId) {
+      const pendingAction = {
+        type: 'TOGGLE_WISHLIST',
+        product_sku_id: currentSkuId,
+        seller_sku_id: currentSellerSkuId,
+        product,
+      };
+      await AsyncStorage.setItem(
+        'PENDING_POST_LOGIN_ACTION',
+        JSON.stringify({
+          postLoginAction: pendingAction,
+          returnScreen: 'ProductDetails',
+          returnParams: {
+            id: currentSkuId,
+            product_sku_id: currentSkuId,
+            sku_id: currentSkuId,
+            seller_id: selectedSellerId,
+          },
+        })
+      ).catch(() => {});
+
+      navigation.navigate('Login', {
+        returnScreen: 'ProductDetails',
+        returnParams: {
+          id: currentSkuId,
+          product_sku_id: currentSkuId,
+          sku_id: currentSkuId,
+          seller_id: selectedSellerId,
+        },
+        postLoginAction: pendingAction,
+      });
+      return;
+    }
+
     if (!currentSkuId) {
       Alert.alert('Unable to update wishlist', 'Product SKU is missing.');
       return;
     }
 
-    const currentSellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
     const prevWishlisted = isWishlisted;
     setIsWishlisted(!prevWishlisted);
 
@@ -715,8 +814,15 @@ export default function ProductDetails({ route }) {
   };
 
   const requestToCart = async () => {
-    const token = await getToken();
-    const userId = await getuserId();
+    let token = await getToken();
+    let userId = await getuserId();
+    if (token && !userId) {
+      try {
+        const prof = await getUserProfileApi();
+        userId = prof?.data?.user?.id || prof?.data?.id || prof?.user?.id;
+        if (userId) await setuserId(userId);
+      } catch (e) {}
+    }
     if (!token || !userId) {
       navigation.navigate('Login');
       return false;
@@ -897,11 +1003,61 @@ export default function ProductDetails({ route }) {
   };
 
   const IsUser = async () => {
-    const token = await getToken();
-    if (token) {
+    let token = await getToken();
+    let userId = await getuserId();
+    if (token && !userId) {
+      try {
+        const prof = await getUserProfileApi();
+        userId = prof?.data?.user?.id || prof?.data?.id || prof?.user?.id;
+        if (userId) await setuserId(userId);
+      } catch (e) {}
+    }
+    if (token && userId) {
       await requestToCart();
     } else {
-      navigation.navigate('Login');
+      const currentSkuId =
+        skuData?.product_sku_id ??
+        selectedSkuId ??
+        product?.product_sku_id ??
+        product_sku_id ??
+        sku_id ??
+        product?.sku_id ??
+        product?.id ??
+        id;
+      const currentSellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
+
+      const pendingAction = {
+        type: 'ADD_TO_CART',
+        product_sku_id: currentSkuId,
+        seller_sku_id: currentSellerSkuId,
+        product,
+        qty: 1,
+      };
+
+      await AsyncStorage.setItem(
+        'PENDING_POST_LOGIN_ACTION',
+        JSON.stringify({
+          postLoginAction: pendingAction,
+          returnScreen: 'ProductDetails',
+          returnParams: {
+            id: currentSkuId,
+            product_sku_id: currentSkuId,
+            sku_id: currentSkuId,
+            seller_id: selectedSellerId,
+          },
+        })
+      ).catch(() => {});
+
+      navigation.navigate('Login', {
+        returnScreen: 'ProductDetails',
+        returnParams: {
+          id: currentSkuId,
+          product_sku_id: currentSkuId,
+          sku_id: currentSkuId,
+          seller_id: selectedSellerId,
+        },
+        postLoginAction: pendingAction,
+      });
     }
   };
 
@@ -938,12 +1094,53 @@ export default function ProductDetails({ route }) {
       }
       return;
     }
+
+    let token = await getToken();
+    let userId = await getuserId();
+    if (token && !userId) {
+      try {
+        const prof = await getUserProfileApi();
+        userId = prof?.data?.user?.id || prof?.data?.id || prof?.user?.id;
+        if (userId) await setuserId(userId);
+      } catch (e) {}
+    }
+
+    const currentSkuId =
+      skuData?.product_sku_id ??
+      selectedSkuId ??
+      product?.product_sku_id ??
+      product_sku_id ??
+      sku_id ??
+      product?.sku_id ??
+      product?.id ??
+      id;
+    const currentSellerSkuId = skuData?.seller_sku_id ?? product?.seller_sku_id;
+
+    if (!token || !userId) {
+      const pendingAction = {
+        type: 'BUY_NOW',
+        product_sku_id: currentSkuId,
+        seller_sku_id: currentSellerSkuId,
+        product,
+        qty: 1,
+      };
+
+      await AsyncStorage.setItem(
+        'PENDING_POST_LOGIN_ACTION',
+        JSON.stringify({
+          postLoginAction: pendingAction,
+          returnScreen: 'AppTab',
+        })
+      ).catch(() => {});
+
+      navigation.navigate('Login', {
+        returnScreen: 'AppTab',
+        postLoginAction: pendingAction,
+      });
+      return;
+    }
+
     if (!isAddedToCart) {
-      const token = await getToken();
-      if (!token) {
-        navigation.navigate('Login');
-        return;
-      }
       const success = await requestToCart();
       if (!success) {
         return; // Don't navigate if adding to cart failed or was blocked by seller check
@@ -974,10 +1171,22 @@ export default function ProductDetails({ route }) {
 
   const reviewsCount = product?.reviews ?? product?.rating_count ?? product?.reviews_count ?? null;
   const sellerName = product?.seller_name || product?.seller?.name || product?.seller?.shop_name || null;
-  const sellerPolicy = product?.seller_policy || product?.return_policy || product?.policy || null;
-  const returnDays = sellerPolicy?.return_days !== undefined && sellerPolicy?.return_days !== null
-    ? Number(sellerPolicy.return_days)
-    : null;
+  const sellerPolicy =
+    skuData?.store_policy ||
+    product?.store_policy ||
+    skuData?.seller_policy ||
+    product?.seller_policy ||
+    product?.return_policy ||
+    skuData?.return_policy ||
+    product?.policy ||
+    skuData?.policy ||
+    null;
+  const returnDays =
+    sellerPolicy?.return_days !== undefined && sellerPolicy?.return_days !== null
+      ? Number(sellerPolicy.return_days)
+      : (product?.return_days !== undefined && product?.return_days !== null
+          ? Number(product.return_days)
+          : null);
   console.log('🔁 sellerPolicy:', sellerPolicy, '| returnDays:', returnDays);
   const productImages = getProductImages();
 
@@ -2001,76 +2210,6 @@ export default function ProductDetails({ route }) {
             </Text>
           </View>
 
-          {/* Seller Return Policy Section */}
-          {sellerPolicy ? (
-            <View
-              style={[
-                styles.policyCard,
-                {
-                  backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC',
-                  borderColor: isDarkMode ? '#334155' : '#E2E8F0',
-                },
-              ]}
-            >
-              <View style={styles.policyHeader}>
-                <View style={styles.policyTitleRow}>
-                  <View
-                    style={[
-                      styles.policyIconBox,
-                      {
-                        backgroundColor: sellerPolicy?.return_days > 0 ? (isDarkMode ? '#064E3B' : '#DEF7EC') : (isDarkMode ? '#7F1D1D' : '#FDE8E8'),
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name={sellerPolicy?.return_days > 0 ? 'refresh-outline' : 'alert-circle-outline'}
-                      size={20}
-                      color={sellerPolicy?.return_days > 0 ? (isDarkMode ? '#34D399' : '#0E9F6E') : (isDarkMode ? '#FCA5A5' : '#E02424')}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.policyHeaderTitle, { color: theme.textPrimary }]}>
-                      Return Policy
-                    </Text>
-                    {sellerPolicy?.title ? (
-                      <Text style={[styles.policySubTitle, { color: sellerPolicy?.return_days > 0 ? '#10B981' : '#EF4444' }]}>
-                        {sellerPolicy.title}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-                {sellerPolicy?.return_days !== undefined && sellerPolicy?.return_days !== null && (
-                  <View
-                    style={[
-                      styles.policyBadge,
-                      {
-                        backgroundColor: sellerPolicy.return_days > 0 ? (isDarkMode ? '#075985' : '#E0F2FE') : (isDarkMode ? '#7F1D1D' : '#FEE2E2'),
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.policyBadgeText,
-                        {
-                          color: sellerPolicy.return_days > 0 ? (isDarkMode ? '#38BDF8' : '#0284C7') : (isDarkMode ? '#FCA5A5' : '#DC2626'),
-                        },
-                      ]}
-                    >
-                      {sellerPolicy.return_days > 0
-                        ? `${sellerPolicy.return_days} Days Return`
-                        : 'No Return'}
-                    </Text>
-                  </View>
-                )}
-              </View>
-              {sellerPolicy?.description ? (
-                <Text style={[styles.policyDescText, { color: theme.textSecondary }]}>
-                  {sellerPolicy.description}
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
-
           {/* Highlight Features Row */}
           <View
             style={[
@@ -2091,18 +2230,34 @@ export default function ProductDetails({ route }) {
               <Feather name="truck" size={18} color={AllColors.primary} />
               <Text style={[styles.featureText, { color: theme.textPrimary }]}>Fast Delivery</Text>
             </View>
-            {/* Show return chip only when return is allowed (returnDays > 0 or policy not set) */}
-            {returnDays !== 0 && (
-              <>
-                <View style={[styles.featureDivider, { backgroundColor: theme.divider }]} />
-                <View style={styles.featureItem}>
-                  <Ionicons name="refresh-outline" size={18} color={AllColors.primary} />
-                  <Text style={[styles.featureText, { color: theme.textPrimary }]}>
-                    {returnDays > 0 ? `${returnDays} Days Return` : 'Easy Return'}
-                  </Text>
-                </View>
-              </>
-            )}
+            <View style={[styles.featureDivider, { backgroundColor: theme.divider }]} />
+            <TouchableOpacity
+              style={styles.featureItem}
+              activeOpacity={0.7}
+              onPress={() => {
+                Linking.openURL('https://deebazar.com/return-policy.php').catch((err) => {
+                  console.log("Couldn't open return policy link:", err);
+                });
+              }}
+            >
+              <Ionicons
+                name={returnDays === 0 ? 'close-circle-outline' : 'refresh-outline'}
+                size={18}
+                color={returnDays === 0 ? '#EF4444' : AllColors.primary}
+              />
+              <Text
+                style={[
+                  styles.featureText,
+                  { color: returnDays === 0 ? (isDarkMode ? '#FCA5A5' : '#DC2626') : theme.textPrimary },
+                ]}
+              >
+                {returnDays === 0
+                  ? 'No Return'
+                  : returnDays > 0
+                  ? `${returnDays} ${returnDays === 1 ? 'Day' : 'Days'} Return`
+                  : (sellerPolicy?.title || 'Easy Return')}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>

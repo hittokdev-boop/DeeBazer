@@ -44,9 +44,16 @@
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.DEFAULT" />
             <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https" android:host="deebazar.com" android:pathPrefix="/product" />
-            <data android:scheme="http" android:host="deebazar.com" android:pathPrefix="/product" />
-            <data android:scheme="deebazar" android:host="product" />
+            <data android:scheme="https" android:host="deebazar.com" />
+            <data android:scheme="https" android:host="www.deebazar.com" />
+            <data android:scheme="http" android:host="deebazar.com" />
+            <data android:scheme="http" android:host="www.deebazar.com" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="deebazar" />
         </intent-filter>
       </activity>
     </application>

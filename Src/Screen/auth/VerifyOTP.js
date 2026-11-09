@@ -13,10 +13,13 @@ import {
   Animated,
   Easing,
   ScrollView,
+  ToastAndroid,
+  DeviceEventEmitter,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import OtpVerify from '@pushpendersingh/react-native-otp-verify';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import AllColors from '../../Constants/Color';
 import { STATUSBAR_HEIGHT } from '../../Constants/ScreenUtils';
@@ -30,7 +33,10 @@ import {
   setToken,
   setuserId,
   getDeviceId,
+  addToCartApi,
+  addToWishlistApi,
 } from '../../Api/Api';
+import { saveActiveCartSeller } from '../../Common/sellerUtils';
 import { getFcmToken } from '../../Services/NotificationService';
 
 export default function VerifyOTP() {
@@ -185,7 +191,7 @@ export default function VerifyOTP() {
       const data = response.data || {};
 
       const tokenVal = data.token || data.access_token || data.data?.token || data.user?.token;
-      const userIdVal = data.user?.id || data.user_id || data.data?.id;
+      const userIdVal = data.user?.id || data.user_id || data.data?.id || data.data?.user?.id || data.data?.user_id;
 
       if ((response.ok || data.status === 200 || data.status === '200') && tokenVal) {
         await setToken(tokenVal);
@@ -195,10 +201,99 @@ export default function VerifyOTP() {
         if (mobileRef.current) {
           await setMobile(mobileRef.current);
         }
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'AppTab' }],
-        });
+
+        // Check for pending action passed via route params or AsyncStorage
+        let pending = route?.params?.postLoginAction;
+        let returnScr = route?.params?.returnScreen;
+        let returnPrm = route?.params?.returnParams;
+
+        if (!pending) {
+          try {
+            const savedStr = await AsyncStorage.getItem('PENDING_POST_LOGIN_ACTION');
+            if (savedStr) {
+              const parsed = JSON.parse(savedStr);
+              if (parsed) {
+                pending = parsed.postLoginAction || parsed;
+                returnScr = returnScr || parsed.returnScreen;
+                returnPrm = returnPrm || parsed.returnParams;
+              }
+              await AsyncStorage.removeItem('PENDING_POST_LOGIN_ACTION');
+            }
+          } catch (storageErr) {
+            console.log('Error reading PENDING_POST_LOGIN_ACTION:', storageErr);
+          }
+        } else {
+          AsyncStorage.removeItem('PENDING_POST_LOGIN_ACTION').catch(() => {});
+        }
+
+        // Execute post-login action
+        if (pending) {
+          const { type, product_sku_id, seller_sku_id, product, qty = 1 } = pending;
+
+          if (type === 'ADD_TO_CART' || type === 'BUY_NOW') {
+            try {
+              if (product_sku_id) {
+                await addToCartApi(
+                  product_sku_id,
+                  qty,
+                  seller_sku_id ? { seller_sku_id } : {},
+                  'add'
+                );
+              }
+              if (product) {
+                await saveActiveCartSeller(product);
+              }
+              DeviceEventEmitter.emit('CART_UPDATED');
+              if (Platform.OS === 'android') {
+                ToastAndroid.show('Product added to cart!', ToastAndroid.SHORT);
+              }
+            } catch (cartErr) {
+              console.log('Post-login addToCart error:', cartErr);
+            }
+
+            if (type === 'BUY_NOW') {
+              DeviceEventEmitter.emit('LOGIN_SUCCESS');
+              navigation.reset({
+                index: 0,
+                routes: [
+                  {
+                    name: 'AppTab',
+                    params: { screen: 'CartPage' },
+                  },
+                ],
+              });
+              return;
+            }
+          } else if (type === 'TOGGLE_WISHLIST') {
+            try {
+              if (product_sku_id) {
+                await addToWishlistApi(product_sku_id, seller_sku_id);
+              }
+              DeviceEventEmitter.emit('WISHLIST_UPDATED');
+              if (Platform.OS === 'android') {
+                ToastAndroid.show('Added to Wishlist!', ToastAndroid.SHORT);
+              }
+            } catch (wishlistErr) {
+              console.log('Post-login wishlist error:', wishlistErr);
+            }
+          }
+        }
+
+        DeviceEventEmitter.emit('LOGIN_SUCCESS');
+
+        if (returnScr === 'ProductDetails') {
+          navigation.navigate('ProductDetails', {
+            ...(returnPrm || {}),
+            justLoggedIn: true,
+          });
+        } else if (returnScr) {
+          navigation.navigate(returnScr, returnPrm || {});
+        } else {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'AppTab' }],
+          });
+        }
       } else {
         setAlertMessage(data.message || 'Invalid OTP. Please check and try again.');
         setShowAlert(true);

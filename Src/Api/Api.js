@@ -424,6 +424,22 @@ export const getSubCategoriesApi = async (categoryId) => {
 };
 
 /**
+ * Get Child Categories for a category and sub-category
+ * POST /api/child-category
+ */
+export const getChildCategoriesApi = async (categoryId, subCategoryId) => {
+  const formData = new FormData();
+  if (categoryId) formData.append("category_id", String(categoryId));
+  if (subCategoryId) formData.append("sub_category_id", String(subCategoryId));
+
+  return await requestApi("child-category", {
+    method: "POST",
+    body: formData,
+    requiresAuth: false,
+  });
+};
+
+/**
  * Get Active Banners
  * GET /api/banners (with fallback to POST /api/banner)
  */
@@ -500,8 +516,9 @@ export const getSkuListApi = async (params = {}) => {
       headers,
       body: formData,
     });
+    const data = await response.json();
+    return data;
 
-    return await response.json();
   } catch (error) {
     console.log("getSkuListApi error:", error);
     throw error;
@@ -542,10 +559,12 @@ export const getSkuDetailsApi = async (skuIdOrParams, optionalSellerId) => {
       headers,
       body: formData,
     });
+    const data = await response.json();
+    console.log(data, 'nehal')
 
-    return await response.json();
+    return data;
   } catch (error) {
-    console.log("getSkuDetailsApi error:", error);
+    console.log("getSkuDetailsApi error1:", error);
     throw error;
   }
 };
@@ -730,7 +749,11 @@ export const removeFromCartApi = async (productSkuId, sellerSkuId = null, userId
 export const getCartViewApi = async (addressId = null, selections = null) => {
   try {
     const token = await getToken();
+    const userId = await getuserId();
     const payload = {};
+    if (userId) {
+      payload.user_id = isNaN(userId) ? userId : Number(userId);
+    }
     if (addressId && !isNaN(addressId) && Number(addressId) > 0) {
       payload.address_id = Number(addressId);
     }
@@ -738,17 +761,47 @@ export const getCartViewApi = async (addressId = null, selections = null) => {
       payload.selections = selections;
     }
 
+    const headers = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
     const response = await fetch(`${BASE_URL}cart-view`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+      headers,
       body: JSON.stringify(payload),
     });
 
-    return await response.json();
+    let result = await response.json().catch(() => null);
+
+    // Fallback: If JSON response has no data, try FormData (original backend format)
+    if (!result || (!result.data && !result.cart && result.status !== 200)) {
+      const formData = new FormData();
+      if (userId) formData.append("user_id", String(userId));
+      if (addressId && !isNaN(addressId) && Number(addressId) > 0) {
+        formData.append("address_id", String(addressId));
+      }
+      if (selections && typeof selections === "object" && Object.keys(selections).length > 0) {
+        formData.append("selections", JSON.stringify(selections));
+      }
+
+      const formHeaders = { Accept: "application/json" };
+      if (token) formHeaders.Authorization = `Bearer ${token}`;
+
+      const formRes = await fetch(`${BASE_URL}cart-view`, {
+        method: "POST",
+        headers: formHeaders,
+        body: formData,
+      });
+
+      const formResult = await formRes.json().catch(() => null);
+      if (formResult && (formResult.data || formResult.status === 200)) {
+        return formResult;
+      }
+    }
+
+    return result;
   } catch (error) {
     console.log("getCartViewApi error:", error);
     throw error;
@@ -1074,6 +1127,36 @@ export const createOrderApi = async (addressId, paymentMethod = "cod", selection
   } catch (error) {
     console.log("createOrderApi error:", error);
     throw error;
+  }
+};
+
+/**
+ * Check Payment Status
+ * GET /api/payments/{txnid}/status
+ */
+export const checkPaymentStatusApi = async (txnid) => {
+  try {
+    const token = await getToken();
+    const cleanTxnid = encodeURIComponent(String(txnid || '').trim());
+    const response = await fetch(`${BASE_URL}payments/${cleanTxnid}/status`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    let result;
+    try {
+      result = await response.json();
+    } catch (parseErr) {
+      console.log("checkPaymentStatusApi JSON parse error:", parseErr);
+      result = { status: response.status, message: "Server returned unexpected response" };
+    }
+    return result;
+  } catch (error) {
+    console.log("checkPaymentStatusApi error:", error);
+    return { status: 500, error: error?.message };
   }
 };
 /**

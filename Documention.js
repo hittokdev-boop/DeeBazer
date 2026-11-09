@@ -2178,13 +2178,13 @@
 
 // **Parameters:**
 // - `address_id` (required, integer): Saved address ID
-// - `payment_method` (required, string): "cod" | "cashfree"
+// - `payment_method` (required, string): "cod" | "payu"
 // - `selections` (required, object): Object mapping seller_id string (`"1"` -> seller id) to selection details:
 //   - Store Pickup: `{ "mode": "pickup" }`
 //   - Home Delivery: `{ "mode": "delivery", "option": "seller" }`
 // - `coupon_code` (optional, string): Discount coupon code
-
-// **Response (200):**
+//
+// **Response (COD - 200):**
 // ```json
 // {
 //     "status": 200,
@@ -2192,6 +2192,54 @@
 //     "order_ids": [
 //         841440
 //     ]
+// }
+// ```
+//
+// **Response (PayU Online Payment - 200):**
+// ```json
+// {
+//     "status": 200,
+//     "message": "Payment pending. Complete the payment to place your order.",
+//     "payment_status": "pending",
+//     "txnid": "DBZ261102120515MTQ0",
+//     "payment_url": "https://deebazar.com/admin/payu/pay/2EfQ8BwhdkSE2F0QCTGbdPSj35UOfGVZ8Zky0ZAI"
+// }
+// ```
+//
+// ---
+//
+// ### Check Payment Status
+// Check status of online payment transaction.
+//
+// **Endpoint:** `GET /api/payments/{txnid}/status`
+//
+// **Headers:**
+// - `Authorization: Bearer {token}`
+// - `Accept: application/json`
+//
+// **Response (Refund Pending / Order Failed - 200):**
+// ```json
+// {
+//     "status": 200,
+//     "state": "refund_pending",
+//     "message": "Payment received, but the order could not be placed. Your money will be refunded.",
+//     "payment_status": "order_failed",
+//     "txnid": "DBZ261102121331V5PJ",
+//     "amount": "3536.46",
+//     "order_ids": []
+// }
+// ```
+//
+// **Response (Payment Success - 200):**
+// ```json
+// {
+//     "status": 200,
+//     "state": "success",
+//     "message": "Payment successful",
+//     "payment_status": "paid",
+//     "txnid": "DBZ261102121331V5PJ",
+//     "amount": "3536.46",
+//     "order_ids": [841440]
 // }
 // ```
 
@@ -2452,20 +2500,30 @@
 
 // **Request Parameters:**
 // - `address_id` (required, integer): ID of the saved address to use for shipping
-// - `payment_method` (required, string): Payment method - "cashfree" for online payment, "cod" for cash on delivery
+// - `payment_method` (required, string): Payment method - "payu" for online payment, "cod" for cash on delivery
 // - `selections` (required, object): Object mapping seller_id string (`"1"` -> seller id) to mode & option:
 //   - Pickup: `{ "mode": "pickup" }`
 //   - Delivery: `{ "mode": "delivery", "option": "seller" }`
 // - `coupon_code` (optional, string): Discount coupon code to apply
 
-// **Response:**
+// **Response (COD):**
 // ```json
 // {
 //   "status": 200,
 //   "message": "Order created successfully",
 //   "order_id": 123,
-//   "order_ids": [841440],
-//   "payment_url": "https://payments.cashfree.com/..."
+//   "order_ids": [841440]
+// }
+// ```
+
+// **Response (PayU):**
+// ```json
+// {
+//   "status": 200,
+//   "message": "Payment pending. Complete the payment to place your order.",
+//   "payment_status": "pending",
+//   "txnid": "DBZ261102120515MTQ0",
+//   "payment_url": "https://deebazar.com/admin/payu/pay/2EfQ8BwhdkSE2F0QCTGbdPSj35UOfGVZ8Zky0ZAI"
 // }
 // ```
 
@@ -2474,7 +2532,7 @@
 // - Uses the provided address_id for shipping
 // - Uses selections for seller fulfillment mode (pickup or delivery) and delivery option
 // - Calculates totals including discounts and delivery charges
-// - For Cashfree payment, returns a payment_url for redirecting to payment gateway
+// - For PayU payment, returns a payment_url for redirecting to PayU gateway and a txnid
 // - For COD, processes order directly without payment redirect
 
 // ### Get Order List

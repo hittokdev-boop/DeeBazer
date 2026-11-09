@@ -264,40 +264,33 @@ export default function ProductReviewModal({
     };
 
     try {
-      // 1. Attempt backend submission if endpoint is supported
-      try {
-        const userId = await getuserId();
+      const userId = await getuserId();
 
-        await submitReviewApi({
-          order_id: cleanOrderId,
-          product_id: productId,
-          rating,
-          comment: comment.trim(),
-          photos,
-          user_id: userId,
-        });
-      } catch (apiErr) {
-        // Backend might not have review endpoint yet, continue gracefully
-        console.log('Backend review submission note:', apiErr?.message);
-      }
+      const res = await submitReviewApi({
+        order_id: cleanOrderId,
+        product_id: productId,
+        rating,
+        comment: comment.trim(),
+        photos,
+        user_id: userId,
+      });
 
-      // 2. Save persistently to local AsyncStorage
-      await saveStoredReview(reviewKey, reviewPayload);
-
-      if (Platform.OS === 'android') {
-        ToastAndroid.show('Thank you! Review submitted successfully.', ToastAndroid.LONG);
+      if (res && (res.status === 200 || res.status === '200' || res.success)) {
+        if (Platform.OS === 'android') {
+          ToastAndroid.show('Thank you! Review submitted successfully.', ToastAndroid.LONG);
+        } else {
+          Alert.alert('Review Submitted', 'Thank you for your valuable feedback!');
+        }
+        if (onReviewSubmitted) {
+          onReviewSubmitted(reviewPayload);
+        }
+        onClose();
       } else {
-        Alert.alert('Review Submitted', 'Thank you for your valuable feedback!');
+        Alert.alert('Review Notice', res?.message || 'Review service is currently unavailable.');
       }
-
-      if (onReviewSubmitted) {
-        onReviewSubmitted(reviewPayload);
-      }
-
-      onClose();
     } catch (e) {
       console.log('Review submit error:', e);
-      Alert.alert('Error', 'Unable to submit review. Please try again.');
+      Alert.alert('Error', 'Unable to submit review to server. Please try again.');
     } finally {
       setSubmitting(false);
     }

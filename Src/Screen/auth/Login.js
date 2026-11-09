@@ -26,7 +26,7 @@ import LottieView from 'lottie-react-native';
 import { useNavigation } from "@react-navigation/native";
 import { useTheme } from '../../Context/ThemeContext';
 
-const CommonLoginModal = () => {
+const CommonLoginModal = ({ route }) => {
   const { theme, isDarkMode } = useTheme();
 
   const [mobile, setMobileState] = useState('');
@@ -35,6 +35,7 @@ const CommonLoginModal = () => {
   const [alertMessage, setAlertMessage] = useState('');
 
   const Navigation = useNavigation();
+  const { postLoginAction, returnScreen, returnParams } = route?.params || {};
 
   const handleSendOtp = async () => {
     const cleanMobile = mobile.trim();
@@ -66,6 +67,9 @@ const CommonLoginModal = () => {
         Navigation.navigate('VerifyOTP', {
           mobile: cleanMobile,
           device_id: deviceId,
+          postLoginAction,
+          returnScreen,
+          returnParams,
         });
       } else {
         const errorMsg = data.message || 'Failed to send OTP. Please check your mobile number.';
@@ -142,7 +146,7 @@ const CommonLoginModal = () => {
             <Text style={[styles.footerText, { color: theme.textSecondary }]}>
               By continuing, you agree to our{" "}
               <Text
-                onPress={() => Navigation.navigate('TermsCondition')}
+                onPress={() => Linking.openURL('https://deebazar.com/terms-and-conditions.php')}
                 style={styles.linkText}
               >
                 Terms & Conditions

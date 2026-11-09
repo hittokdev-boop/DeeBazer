@@ -422,8 +422,9 @@ export default function SaveAddress() {
         payload.latitude = Number(Number(finalLat).toFixed(6));
         payload.longitude = Number(Number(finalLng).toFixed(6));
       } else {
-        payload.latitude = 22.5726;
-        payload.longitude = 88.3639;
+        setSaving(false);
+        Alert.alert('Location Required', 'Please select a valid location on the map to set your address coordinates.');
+        return;
       }
 
       const getApiErrorMessage = (res, fallback) => {

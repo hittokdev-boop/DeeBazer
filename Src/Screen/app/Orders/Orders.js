@@ -13,6 +13,7 @@ import {
   Platform,
   ScrollView,
   Alert,
+  Linking,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import Feather from 'react-native-vector-icons/Feather';
@@ -115,6 +116,7 @@ export default function Orders() {
     } catch (error) {
       console.log('Fetch Orders Error:', error);
       setOrders([]);
+      Alert.alert('Error', 'Unable to load orders from server. Please check your internet connection.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -351,7 +353,7 @@ export default function Orders() {
                   : [];
             const dateText = formatDate(item.created_at || item.created_date || item.order_date || item.date || item.createdAt);
 
-            const itemPolicy = item.seller_policy || item.return_policy || item.policy || (rawItemsList && rawItemsList[0] ? (rawItemsList[0].seller_policy || rawItemsList[0].return_policy || rawItemsList[0].policy) : null) || null;
+            const itemPolicy = item.store_policy || item.seller_policy || item.return_policy || item.policy || (rawItemsList && rawItemsList[0] ? (rawItemsList[0].store_policy || rawItemsList[0].seller_policy || rawItemsList[0].return_policy || rawItemsList[0].policy) : null) || null;
             const itemReturnDays = itemPolicy?.return_days !== undefined && itemPolicy?.return_days !== null ? Number(itemPolicy.return_days) : (item.return_days !== undefined && item.return_days !== null ? Number(item.return_days) : null);
             const itemPolicyLabel = itemPolicy?.title || (itemReturnDays !== null ? (itemReturnDays > 0 ? `${itemReturnDays} Days Easy Return` : 'Non-Returnable Item') : 'Seller Return Policy Applicable');
 
@@ -390,11 +392,17 @@ export default function Orders() {
                 {itemsList.length > 0 ? (
                   itemsList.map((prod, idx) => (
                     <View key={prod.id || prod.product_id || idx} style={styles.productRow}>
-                      <Image
-                        source={{ uri: prod.img || prod.image || prod.product_image || prod.thumbnail || 'https://via.placeholder.com/100' }}
-                        style={[styles.productThumb, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}
-                        resizeMode="cover"
-                      />
+                      {prod.img || prod.image || prod.product_image || prod.thumbnail ? (
+                        <Image
+                          source={{ uri: prod.img || prod.image || prod.product_image || prod.thumbnail }}
+                          style={[styles.productThumb, { backgroundColor: isDarkMode ? '#0F172A' : AllColors.screenBg }]}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={[styles.productThumb, { backgroundColor: isDarkMode ? '#1E293B' : AllColors.screenBg, justifyContent: 'center', alignItems: 'center' }]}>
+                          <Feather name="package" size={24} color={isDarkMode ? '#64748B' : '#94A3B8'} />
+                        </View>
+                      )}
                       <View style={styles.productDetailsContainer}>
                         <Text style={[styles.productTitleText, { color: theme.textPrimary }]} numberOfLines={2}>
                           {prod.name || prod.product_name || prod.title || 'Item'}
@@ -547,7 +555,7 @@ export default function Orders() {
                   <View style={styles.customerActionRow}>
                     <TouchableOpacity
                       style={[styles.helpBtn, { backgroundColor: isDarkMode ? '#334155' : '#F1F5F9' }]}
-                      onPress={() => navigation.navigate('HelpCenter')}
+                      onPress={() => Linking.openURL('https://deebazar.com/help-and-support.php')}
                       activeOpacity={0.8}>
                       <Feather name="headphones" size={13} color={isDarkMode ? '#CBD5E1' : AllColors.slateMuted} style={styles.iconMarginRight} />
                       <Text style={[styles.helpBtnText, { color: isDarkMode ? '#CBD5E1' : '#475569' }]}>Help</Text>

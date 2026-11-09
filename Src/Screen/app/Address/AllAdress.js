@@ -170,6 +170,7 @@ export default function AllAddress() {
     } catch (error) {
       console.log('Fetch address list error:', error);
       setAddressList([]);
+      Alert.alert('Error', 'Unable to fetch address list from server. Please check your internet connection.');
     } finally {
       setLoading(false);
       setRefreshing(false);
